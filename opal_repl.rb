@@ -258,12 +258,13 @@ Document.ready? do
 
       # print header
       repl.print [
-        "# Opal v#{OPAL_VERSION} REPL",
-        "# <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
-        "#",
-        "# help() for features and tips.",
-        " "
-      ].join("\n")
+                  "# Opal v#{OPAL_VERSION} REPL",
+                  "# <a href=\"https://github.com/fkchang/opal-repl\" target=\"_blank\">https://github.com/fkchang/opal-repl</a>",
+                  "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
+                  "#",
+                  "# help() for features and tips.",
+                  " "
+                 ].join("\n")
 
     end
 
