@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Online OPAL Interactive Console (REPL)</title>
+    <meta charset='utf-8' />
+    <meta name="description" content="An Opal interactive console (REPL) as a webpage." />
+
+    <style>
+
+      a {
+        color: #fff;
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      pre {
+        margin: 0;
+        padding: 0;
+        font: inherit;
+      }
+
+      body {
+        background-color: #222;
+        color: #fff;
+        font-size: 14px;
+        font-family: DejaVu Sans Mono, monospace;
+      }
+
+      #container {
+        width: 100%;
+        height: 100%;
+        font: inherit;
+      }
+
+      #output {
+        word-wrap: break-word;
+      }
+
+      #inputdiv {
+        width: 100%;
+      }
+
+      #inputl {
+        display: inline;
+        float: left;
+      }
+
+      #inputr {
+        display: inline;
+        float: left;
+      }
+
+      #input {
+        border: none;
+        outline: none;
+        background-color: #222;
+        color: #fff;
+        font: inherit;
+        margin: 0;
+        padding: 0;
+        resize: none;
+        position: absolute;
+        overflow: hidden;
+      }
+
+      #inputcopy {
+        display: none;
+        white-space: pre-wrap;
+        min-height: 2em;
+        padding: 0;
+        margin: 0;
+        word-wrap: break-word;
+      }
+
+      .s_special { color: #4ff }
+
+      .s_number { color: #ff4 }
+
+      .s_boolean { color: #ff4 }
+
+      .s_undefined { color: #999 }
+
+      .s_null { font-weight: bold }
+
+      .s_string { color: #4f4 }
+
+      .s_date { color: #f4f }
+
+      .s_regexp { color: #f44 }
+
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="outputdiv">
+        <pre id="output"></pre>
+      </div>
+      <div id="inputdiv">
+        <div id="inputl">
+          <pre id="prompt">opal&gt;&nbsp;</pre>
+        </div>
+        <div id="inputr">
+          <textarea id="input" spellcheck="false"></textarea>
+          <div id="inputcopy"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" ></script>
+    <script src="build/opal.js"></script>
+    <script src="build/opal-jquery.js"></script>
+    <script src="build/opal-parser.js"></script>
+    <script src="build/opal_repl.rb.js"></script>
+  </body>
+</html>
