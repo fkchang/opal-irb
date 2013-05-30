@@ -204,14 +204,14 @@ Document.ready? do
         @multiline = ! @multiline
         setPrompt()
 
-      when 38, 80               # up arrow, ctl-p
+      when 38               # up arrow
         e.prevent_default
 
         if @historyi < @history.length-1
           @historyi += 1
           @input.value =  @history[@historyi]
         end
-      when 40, 78               # down arrow, ctl-n
+      when 40               # down arrow
         e.prevent_default
 
         if @historyi > 0
