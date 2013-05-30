@@ -174,12 +174,12 @@ Document.ready? do
     def handleKeypress(e)
       log e.which
       case e.which
-      when 13
+      when 13                   # return
         e.prevent_default()
         input = @input.value()
         @input.value = ''
 
-        print `#@prompt.html()` + escapeHTML(input)
+        print @prompt.html + escapeHTML(input)
 
         if input
           addToSaved input
@@ -187,8 +187,8 @@ Document.ready? do
             processSaved()
           end
         end
-      when 27
-        `e.preventDefault()`
+      when 27                   # escape
+        e.prevent_default
         `input = #@input.val()`
 
         if input and @multiline and @saved
@@ -204,19 +204,19 @@ Document.ready? do
         @multiline = ! @multiline
         setPrompt()
 
-      when 38
-        `e.preventDefault()`
+      when 38                   # up arrow
+        e.prevent_default
 
         if @historyi < @history.length-1
           @historyi += 1
-          `#@input.val( #@history[#@historyi])`
+          @input.value =  @history[@historyi]
         end
-      when 40
-        `e.preventDefault()`
+      when 40                   # down arrow
+        e.prevent_default
 
         if @historyi > 0
           @historyi += -1
-          @input.val @history[@historyi]
+          @input.value =  @history[@historyi]
         end
       end
     end
@@ -243,7 +243,7 @@ Document.ready? do
 
       Element.find('html').on :click do |e|
         # if e.clientY > $input[0].offsetTop
-        #   $input.focus()
+        $input.focus()
         # end
       end
 
