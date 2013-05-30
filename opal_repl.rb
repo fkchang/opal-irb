@@ -90,8 +90,9 @@ Document.ready? do
 
       def setPrompt
         s = @multiline ? '------' : 'opal'
-        `#@prompt.html( "#{s}&gt;&nbsp;")`
+        @prompt.html = "#{s}&gt;&nbsp;"
       end
+
       def addToHistory(s)
         @history.unshift s
         @historyi = -1
@@ -110,22 +111,25 @@ Document.ready? do
 
       def processSaved
         begin
-          compiled = `Opal.Opal.Parser.$new().$parse(  #@saved )`
-          #compiled = compiled[14...-17]
+          compiled = Opal::Parser.new.parse @saved
+          # doesn't work w/th opal 0.3.27 compiled = compiled[14..-7] # strip off anonymous function so variables will persist
+          # compiled = compiled.split("\n")[2..-2].join("\n")
+          # compiled = compiled.gsub("return", "")
           # value = eval.call window, compiled
+          log compiled
           value = `eval(compiled)`
           # window[@settings.lastVariable] = value
           # output = nodeutil.inspect value, @settings.showHidden, @settings.maxDepth, @settings.colorize
           output = value
         rescue Exception => e
-          if e.stack
-            output = e.stack
+          if e.backtrace
+            output = "FOR:\n#{compiled}\n============\n" + e.backtrace.join("\n")
 
             # FF doesn't have Error.toString() as the first line of Error.stack
             # while Chrome does.
-            if output.split("\n")[0] != `e.toString()`
-              ouput = "#{`e.toString()`}\n#{`e.stack`}"
-            end
+            # if output.split("\n")[0] != `e.toString()`
+            #   output = "#{`e.toString()`}\n#{`e.stack`}"
+            # end
           else
             output = `e.toString()`
           end
@@ -134,8 +138,41 @@ Document.ready? do
         print output
       end
 
+      # help
+      def help
+        text = [
+          " ",
+          "<strong>Features</strong>",
+          "<strong>========</strong>",
+          "+ <strong>Esc</strong> toggles multiline mode.",
+          "+ <strong>Up/Down arrow</strong> flips through line history.",
+          "+ <strong>#{repl.settings.lastVariable}</strong> stores the last returned value.",
+          "+ Access the internals of this console through <strong>$$</strong>.",
+          "+ <strong>$$.clear()</strong> clears this console.",
+          " ",
+          "<strong>Settings</strong>",
+          "<strong>========</strong>",
+          "You can modify the behavior of this REPL by altering <strong>$$.settings</strong>:",
+          " ",
+          "+ <strong>lastVariable</strong> (#{repl.settings.lastVariable}): variable name in which last returned value is stored",
+          "+ <strong>maxLines</strong> (#{repl.settings.maxLines}): max line count of this console",
+          "+ <strong>maxDepth</strong> (#{repl.settings.maxDepth}): max depth in which to inspect outputted object",
+          "+ <strong>showHidden</strong> (#{repl.settings.showHidden}): flag to output hidden (not enumerable) properties of objects",
+          "+ <strong>colorize</strong> (#{repl.settings.colorize}): flag to colorize output (set to false if REPL is slow)",
+          " ",
+          "<strong>$$.saveSettings()</strong> will save settings to localStorage.",
+          "<strong>$$.resetSettings()</strong> will reset settings to default.",
+          " "
+        ].join("\n")
+        print text
+      end
+
+      def log thing
+        `console.log(#{thing})`
+      end
 
     def handleKeypress(e)
+      log e.which
       case e.which
       when 13
         e.prevent_default()
@@ -155,8 +192,8 @@ Document.ready? do
         `input = #@input.val()`
 
         if input and @multiline and @saved
-          input = @input.val()
-          @input.val ''
+          input = @input.value
+          @input.value ''
 
           print @prompt.html() + escapeHTML(input)
           addToSaved input
@@ -221,40 +258,12 @@ Document.ready? do
       # end
 
       # expose repl as $$
-      # window.repl = repl
+      $repl = repl
 
       # initialize window
       resizeInput()
       $input.focus()
 
-      # help
-      # def window.help
-      #   text = [
-      #     " ",
-      #     "<strong>Features</strong>",
-      #     "<strong>========</strong>",
-      #     "+ <strong>Esc</strong> toggles multiline mode.",
-      #     "+ <strong>Up/Down arrow</strong> flips through line history.",
-      #     "+ <strong>#{repl.settings.lastVariable}</strong> stores the last returned value.",
-      #     "+ Access the internals of this console through <strong>$$</strong>.",
-      #     "+ <strong>$$.clear()</strong> clears this console.",
-      #     " ",
-      #     "<strong>Settings</strong>",
-      #     "<strong>========</strong>",
-      #     "You can modify the behavior of this REPL by altering <strong>$$.settings</strong>:",
-      #     " ",
-      #     "+ <strong>lastVariable</strong> (#{repl.settings.lastVariable}): variable name in which last returned value is stored",
-      #     "+ <strong>maxLines</strong> (#{repl.settings.maxLines}): max line count of this console",
-      #     "+ <strong>maxDepth</strong> (#{repl.settings.maxDepth}): max depth in which to inspect outputted object",
-      #     "+ <strong>showHidden</strong> (#{repl.settings.showHidden}): flag to output hidden (not enumerable) properties of objects",
-      #     "+ <strong>colorize</strong> (#{repl.settings.colorize}): flag to colorize output (set to false if REPL is slow)",
-      #     " ",
-      #     "<strong>$$.saveSettings()</strong> will save settings to localStorage.",
-      #     "<strong>$$.resetSettings()</strong> will reset settings to default.",
-      #     " "
-      #   ].join("\n")
-      #   repl.print text
-      # end
 
       # print header
       repl.print [
