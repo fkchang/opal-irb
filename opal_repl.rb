@@ -10,11 +10,11 @@ Document.ready? do
   $inputcopy = Element.find('#inputcopy')
 
 
-    def resetSettings
+    def reset_settings
       `localStorage.clear()`
     end
 
-    def saveSettings
+    def save_settings
       `localStorage.settings = JSON.stringify( #{@settings.map})`
     end
 
@@ -22,7 +22,7 @@ Document.ready? do
 
 
 
-    def resizeInput(e)
+    def resize_input(e)
       width = $inputdiv.width() - $inputl.width()
       content = $input.value()
       # content.gsub /\n/, '<br/>'
@@ -33,7 +33,7 @@ Document.ready? do
       $input.height $inputcopy.height() + 2
     end
 
-    def scrollToBottom
+    def scroll_to_bottom
       `window.scrollTo( 0, #$prompt[0].offsetTop)`
     end
 
@@ -47,7 +47,7 @@ Document.ready? do
         colorize: true,
       }
 
-      def escapeHTML(s)
+      def escape_html(s)
         s.gsub(/&/,'&amp;').gsub(/</,'&lt;').gsub(/>/,'&gt;');
       end
 
@@ -68,7 +68,7 @@ Document.ready? do
         #   end
         myself = self
         @input.on :keydown do |evt|
-          myself.handleKeypress(evt)
+          myself.handle_keypress(evt)
         end
 
 
@@ -95,20 +95,20 @@ Document.ready? do
         }.inspect
       end
 
-      def setPrompt
+      def set_prompt
         s = @multiline ? '------' : 'opal'
         @prompt.html = "#{s}&gt;&nbsp;"
       end
 
-      def addToHistory(s)
+      def add_to_history(s)
         @history.unshift s
         @historyi = -1
       end
 
-      def addToSaved(s)
+      def add_to_saved(s)
         @saved +=  s[0...-1] == '\\' ? s[0...-1] : s
         @saved += "\n"
-        addToHistory s
+        add_to_history s
       end
 
       def clear
@@ -116,7 +116,7 @@ Document.ready? do
         nil
       end
 
-      def processSaved
+      def process_saved
         begin
           compiled = Opal::Parser.new.parse @saved
           # doesn't work w/th opal 0.3.27 compiled = compiled[14..-7] # strip off anonymous function so variables will persist
@@ -168,7 +168,7 @@ Document.ready? do
           "+ <strong>colorize</strong> (#{repl.settings.colorize}): flag to colorize output (set to false if REPL is slow)",
           " ",
           "<strong>$$.saveSettings()</strong> will save settings to localStorage.",
-          "<strong>$$.resetSettings()</strong> will reset settings to default.",
+          "<strong>$$.reset_settings()</strong> will reset settings to default.",
           " "
         ].join("\n")
         print text
@@ -178,7 +178,7 @@ Document.ready? do
         `console.log(#{thing})`
       end
 
-    def handleKeypress(e)
+    def handle_keypress(e)
       log e.which
       case e.which
       when 13                   # return
@@ -186,12 +186,12 @@ Document.ready? do
         input = @input.value()
         @input.value = ''
 
-        print @prompt.html + escapeHTML(input)
+        print @prompt.html + escape_html(input)
 
         if input
-          addToSaved input
+          add_to_saved input
           if input[0...-1] != '\\' and not @multiline
-            processSaved()
+            process_saved()
           end
         end
       when 27                   # escape
@@ -202,14 +202,14 @@ Document.ready? do
           input = @input.value
           @input.value ''
 
-          print @prompt.html() + escapeHTML(input)
-          addToSaved input
-          processSaved()
+          print @prompt.html() + escape_html(input)
+          add_to_saved input
+          process_saved()
         elsif @multiline and @saved
-          processSaved()
+          process_saved()
         end
         @multiline = ! @multiline
-        setPrompt()
+        set_prompt()
 
       when 38               # up arrow
         e.prevent_default
@@ -235,17 +235,17 @@ Document.ready? do
     def init
       # bind other handlers
       $input.on :keydown do
-        scrollToBottom
+        scroll_to_bottom
       end
       Element.find(`window`).on :resize do |e|
-        resizeInput e
+        resize_input e
       end
 
       $input.on :keyup do |e|
-        resizeInput e
+        resize_input e
       end
       $input.on :change do |e|
-        resizeInput e
+        resize_input e
       end
 
       Element.find('html').on :click do |e|
@@ -268,7 +268,7 @@ Document.ready? do
       $repl = repl
 
       # initialize window
-      resizeInput()
+      resize_input()
       $input.focus()
 
 
