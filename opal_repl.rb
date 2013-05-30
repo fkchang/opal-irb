@@ -154,6 +154,7 @@ Document.ready? do
               # "+ <strong>#{@settings[:lastVariable]}</strong> stores the last returned value.",
               "+ Access the internals of this console through <strong>$repl</strong>.",
               "+ <strong>clear</strong> clears this console.",
+              "+ <strong>history</strong> shows line history.",
               " ",
               "<strong>@Settings</strong>",
               "<strong>========</strong>",
@@ -174,6 +175,12 @@ Document.ready? do
 
     def log thing
       `console.log(#{thing})`
+    end
+
+    def history
+     @history.reverse.each_with_index {|line, i|
+        print "#{i}: #{line}"
+      }
     end
 
     def handle_keypress(e)
@@ -286,6 +293,11 @@ Document.ready? do
 
   def clear
     $repl.clear
+  end
+
+  def history
+    $repl.history
+
   end
 
   OpalREPL.init()
