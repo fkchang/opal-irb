@@ -9,38 +9,33 @@ Document.ready? do
   $inputr    = Element.find('#inputr')
   $inputcopy = Element.find('#inputcopy')
 
-
-  def reset_settings
-    `localStorage.clear()`
-  end
-
-  def save_settings
-    `localStorage.settings = JSON.stringify( #{@settings.map})`
-  end
-
-
-
-
-
-  def resize_input(e)
-    width = $inputdiv.width() - $inputl.width()
-    content = $input.value()
-    # content.gsub /\n/, '<br/>'
-    $inputcopy.html content
-
-    $inputcopy.width width
-    $input.width width
-    $input.height $inputcopy.height() + 2
-  end
-
-  def scroll_to_bottom
-    `window.scrollTo( 0, #$prompt[0].offsetTop)`
-  end
-
-
   class OpalREPL
+
+    def self.reset_settings
+      `localStorage.clear()`
+    end
+
+    def self.save_settings
+      `localStorage.settings = JSON.stringify( #{@settings.map})`
+    end
+
+    def self.resize_input(e)
+      width = $inputdiv.width() - $inputl.width()
+      content = $input.value()
+      # content.gsub /\n/, '<br/>'
+      $inputcopy.html content
+
+      $inputcopy.width width
+      $input.width width
+      $input.height $inputcopy.height() + 2
+    end
+
+    def self.scroll_to_bottom
+      `window.scrollTo( 0, #$prompt[0].offsetTop)`
+    end
+
     DEFAULT_SETTINGS = {
-      lastVariable: '$_',
+      # lastVariable: '$_',
       maxLines: 500,
       maxDepth: 2,
       showHidden: false,
@@ -50,6 +45,8 @@ Document.ready? do
     def escape_html(s)
       s.gsub(/&/,'&amp;').gsub(/</,'&lt;').gsub(/>/,'&gt;');
     end
+
+    attr_reader :settings
 
     def initialize (output, input, prompt, settings={})
       @output, @input, @prompt = output, input, prompt
@@ -112,7 +109,7 @@ Document.ready? do
     end
 
     def clear
-      `#{@output[0]}.innerHTML = ''`
+      @output.html = ""
       nil
     end
 
@@ -126,6 +123,7 @@ Document.ready? do
         log compiled
         value = `eval(compiled)`
         # window[@settings.lastVariable] = value
+        $_ = value
         # output = nodeutil.inspect value, @settings.showHidden, @settings.maxDepth, @settings.colorize
         output = value
       rescue Exception => e
@@ -153,22 +151,22 @@ Document.ready? do
               "<strong>========</strong>",
               "+ <strong>Esc</strong> toggles multiline mode.",
               "+ <strong>Up/Down arrow</strong> flips through line history.",
-              "+ <strong>#{repl.settings.lastVariable}</strong> stores the last returned value.",
-              "+ Access the internals of this console through <strong>$$</strong>.",
-              "+ <strong>$$.clear()</strong> clears this console.",
+              # "+ <strong>#{@settings[:lastVariable]}</strong> stores the last returned value.",
+              "+ Access the internals of this console through <strong>$repl</strong>.",
+              "+ <strong>clear</strong> clears this console.",
               " ",
-              "<strong>Settings</strong>",
+              "<strong>@Settings</strong>",
               "<strong>========</strong>",
-              "You can modify the behavior of this REPL by altering <strong>$$.settings</strong>:",
+              "You can modify the behavior of this REPL by altering <strong>$repl.@settings</strong>:",
               " ",
-              "+ <strong>lastVariable</strong> (#{repl.settings.lastVariable}): variable name in which last returned value is stored",
-              "+ <strong>maxLines</strong> (#{repl.settings.maxLines}): max line count of this console",
-              "+ <strong>maxDepth</strong> (#{repl.settings.maxDepth}): max depth in which to inspect outputted object",
-              "+ <strong>showHidden</strong> (#{repl.settings.showHidden}): flag to output hidden (not enumerable) properties of objects",
-              "+ <strong>colorize</strong> (#{repl.settings.colorize}): flag to colorize output (set to false if REPL is slow)",
+              # "+ <strong>lastVariable</strong> (#{@settings[:lastVariable]}): variable name in which last returned value is stored",
+              "+ <strong>maxLines</strong> (#{@settings[:maxLines]}): max line count of this console",
+              "+ <strong>maxDepth</strong> (#{@settings[:maxDepth]}): max depth in which to inspect outputted object",
+              "+ <strong>showHidden</strong> (#{@settings[:showHidden]}): flag to output hidden (not enumerable) properties of objects",
+              "+ <strong>colorize</strong> (#{@settings[:colorize]}): flag to colorize output (set to false if REPL is slow)",
               " ",
-              "<strong>$$.saveSettings()</strong> will save settings to localStorage.",
-              "<strong>$$.reset_settings()</strong> will reset settings to default.",
+              "<strong>$repl.save_settings()</strong> will save settings to localStorage.",
+              "<strong>$repl.reset_settings()</strong> will reset settings to default.",
               " "
              ].join("\n")
       print text
@@ -228,61 +226,67 @@ Document.ready? do
       end
     end
 
+    def self.init
+      # bind other handlers
+      $input.on :keydown do
+        scroll_to_bottom
+      end
+      Element.find(`window`).on :resize do |e|
+        resize_input e
+      end
 
-  end
+      $input.on :keyup do |e|
+        resize_input e
+      end
+      $input.on :change do |e|
+        resize_input e
+      end
 
+      Element.find('html').on :click do |e|
+        # if e.clientY > $input[0].offsetTop
+        $input.focus()
+        # end
+      end
 
-  def init
-    # bind other handlers
-    $input.on :keydown do
-      scroll_to_bottom
-    end
-    Element.find(`window`).on :resize do |e|
-      resize_input e
-    end
+      # instantiate our REPL
+      repl =  OpalREPL.new( $output, $input, $prompt)
 
-    $input.on :keyup do |e|
-      resize_input e
-    end
-    $input.on :change do |e|
-      resize_input e
-    end
+      # replace console.log
 
-    Element.find('html').on :click do |e|
-      # if e.clientY > $input[0].offsetTop
-      $input.focus()
+      # def console.log(*args)
+      #   SAVED_CONSOLE_LOG.apply console, args
+      #   repl.print *args
       # end
+
+      # expose repl as $repl
+      $repl = repl
+
+      # initialize window
+      resize_input()
+      $input.focus()
+
+
+      # print header
+      repl.print [
+                  "# Opal v#{OPAL_VERSION} REPL",
+                  "# <a href=\"https://github.com/fkchang/opal-repl\" target=\"_blank\">https://github.com/fkchang/opal-repl</a>",
+                  "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
+                  "#",
+                  "# <strong>help</strong> for features and tips.",
+                  " "
+                 ].join("\n")
+
     end
 
-    # instantiate our REPL
-    repl =  OpalREPL.new( $output, $input, $prompt)
-
-    # replace console.log
-
-    # def console.log(*args)
-    #   SAVED_CONSOLE_LOG.apply console, args
-    #   repl.print *args
-    # end
-
-    # expose repl as $$
-    $repl = repl
-
-    # initialize window
-    resize_input()
-    $input.focus()
-
-
-    # print header
-    repl.print [
-                "# Opal v#{OPAL_VERSION} REPL",
-                "# <a href=\"https://github.com/fkchang/opal-repl\" target=\"_blank\">https://github.com/fkchang/opal-repl</a>",
-                "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
-                "#",
-                "# help() for features and tips.",
-                " "
-               ].join("\n")
-
+  end
+  # make this global so you can type help
+  def help
+    $repl.help
   end
 
-  init()
+  def clear
+    $repl.clear
+  end
+
+  OpalREPL.init()
 end
