@@ -87,6 +87,13 @@ Document.ready? do
         nil
       end
 
+      def to_s
+        {
+          history: @history,
+          multiline: @multiline,
+          settings: @settings
+        }.inspect
+      end
 
       def setPrompt
         s = @multiline ? '------' : 'opal'
