@@ -124,8 +124,8 @@ Document.ready? do
         value = `eval(compiled)`
         # window[@settings.lastVariable] = value
         $_ = value
-        # output = nodeutil.inspect value, @settings.showHidden, @settings.maxDepth, @settings.colorize
-        output = value
+        output = `nodeutil.inspect( value, #{@settings[:showHidden]}, #{@settings[:maxDepth]}, #{@settings[:colorize]})`
+        # output = value
       rescue Exception => e
         if e.backtrace
           output = "FOR:\n#{compiled}\n============\n" + e.backtrace.join("\n")
