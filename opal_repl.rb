@@ -35,10 +35,10 @@ Document.ready? do
     end
 
     DEFAULT_SETTINGS = {
-      # lastVariable: '$_',
-      maxLines: 500,
-      maxDepth: 2,
-      showHidden: false,
+      # last_variable: '$_',
+      max_lines 500,
+      max_depth 2,
+      show_hidden false,
       colorize: true,
     }
 
@@ -122,7 +122,7 @@ Document.ready? do
         # value = eval.call window, compiled
         log compiled
         value = `eval(compiled)`
-        # window[@settings.lastVariable] = value
+        # window[@settings.last_variable] = value
         $_ = value
         output = `nodeutil.inspect( value, #{@settings[:showHidden]}, #{@settings[:maxDepth]}, #{@settings[:colorize]})`
         # output = value
@@ -151,7 +151,7 @@ Document.ready? do
               "<strong>========</strong>",
               "+ <strong>Esc</strong> toggles multiline mode.",
               "+ <strong>Up/Down arrow</strong> flips through line history.",
-              # "+ <strong>#{@settings[:lastVariable]}</strong> stores the last returned value.",
+              # "+ <strong>#{@settings[:last_variable]}</strong> stores the last returned value.",
               "+ Access the internals of this console through <strong>$repl</strong>.",
               "+ <strong>clear</strong> clears this console.",
               "+ <strong>history</strong> shows line history.",
@@ -160,7 +160,7 @@ Document.ready? do
               "<strong>========</strong>",
               "You can modify the behavior of this REPL by altering <strong>$repl.@settings</strong>:",
               " ",
-              # "+ <strong>lastVariable</strong> (#{@settings[:lastVariable]}): variable name in which last returned value is stored",
+              # "+ <strong>last_variable</strong> (#{@settings[:last_variable]}): variable name in which last returned value is stored",
               "+ <strong>maxLines</strong> (#{@settings[:maxLines]}): max line count of this console",
               "+ <strong>maxDepth</strong> (#{@settings[:maxDepth]}): max depth in which to inspect outputted object",
               "+ <strong>showHidden</strong> (#{@settings[:showHidden]}): flag to output hidden (not enumerable) properties of objects",
