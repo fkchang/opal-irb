@@ -9,4 +9,12 @@ Opal::RakeTask.new do |t|
   # t.dependencies = ['opal-jquery']
 end
 
-task :default => [:opal]
+desc "Copy build js files to js - for development"
+task :copy_js do
+  Dir["build/*.js"].each {|js_file|
+    cp js_file, "js"
+  }
+
+end
+
+task :default => [:opal, :copy_js]
