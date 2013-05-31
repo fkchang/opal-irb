@@ -3,9 +3,6 @@ require "opal-jquery"
 require "opal-parser"
 
 class OpalIRB
-  SAVED_CONSOLE_LOG = `console.log`
-
-
 
   def reset_settings
     `localStorage.clear()`
@@ -72,11 +69,9 @@ class OpalIRB
 
 
   def print(args)
-    # s = args.join(' ') or ' '
     s = args
     o = @output.html + s + "\n"
     # @output[0].innerHTML = o.split("\n")[-@settings.max_lines...].join("\n")
-    # `#{@output[0]}.innerHTML = #{o.split("\n")[-@settings.max_lines].join("\n")}`
     # @output.html = o.split("\n")[-@settings[:max_lines]].join("\n")
     @output.html = o
 
@@ -200,7 +195,7 @@ class OpalIRB
       end
     when 27                   # escape
       e.prevent_default
-      `input = #@input.val()`
+      input = @input.value
 
       if input and @multiline and @saved
         input = @input.value
@@ -233,7 +228,6 @@ class OpalIRB
   end
 
   def initialize_window
-    # initialize window
     resize_input()
     @input.focus()
   end
@@ -245,12 +239,12 @@ class OpalIRB
            "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
            "#",
            "# <strong>help</strong> for features and tips.",
-           "I got this 4!",
+           #"I got this 1!",
            " "
           ].join("\n")
   end
 
-  def self.init
+  def self.create
 
     output    = Element.find('#output')
     input     = Element.find('#input')
@@ -260,19 +254,23 @@ class OpalIRB
     inputr    = Element.find('#inputr')
     inputcopy = Element.find('#inputcopy')
 
+    # instantiate our IRB and expose irb as $irb
+    irb =  OpalIRB.new( output, input, prompt, inputdiv, inputl, inputr,
+                        inputcopy)
+
     # bind other handlers
     input.on :keydown do
-      $irb.scroll_to_bottom
+      irb.scroll_to_bottom
     end
     Element.find(`window`).on :resize do |e|
-      $irb.resize_input e
+      irb.resize_input e
     end
 
     input.on :keyup do |e|
-      $irb.resize_input e
+      irb.resize_input e
     end
     input.on :change do |e|
-      $irb.resize_input e
+      irb.resize_input e
     end
 
     Element.find('html').on :click do |e|
@@ -281,11 +279,8 @@ class OpalIRB
       # end
     end
 
-    # instantiate our IRB and expose irb as $irb
-    irb =  OpalIRB.new( output, input, prompt, inputdiv, inputl, inputr,
-                        inputcopy)
     # replace console.log
-
+    # SAVED_CONSOLE_LOG = `console.log`
     # def console.log(*args)
     #   SAVED_CONSOLE_LOG.apply console, args
     #   irb.print *args
