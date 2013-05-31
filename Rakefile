@@ -1,12 +1,14 @@
 require 'bundler/setup'
-require 'opal/rake_task'
+# require 'opal/rake_task'
+require 'opal'
+require 'opal-jquery'
 
-Opal::RakeTask.new do |t|
-  t.name = 'opal_irb.rb'
-  t.parser = true
-
-  t.files = '.'
-  # t.dependencies = ['opal-jquery']
+task :build do
+  File.open("js/opal_irb.rb.js", "w+") do |out|
+    env = Opal::Environment.new
+    env.append_path "lib"
+    out << env["opal_irb"].to_s
+  end
 end
 
 desc "Copy build js files to js - for development"
@@ -17,4 +19,4 @@ task :copy_js do
 
 end
 
-task :default => [:opal, :copy_js]
+task :default => :build
