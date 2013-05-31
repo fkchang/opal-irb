@@ -4,6 +4,17 @@ require "opal-parser"
 
 
 class OpalIRB
+  SAVED_CONSOLE_LOG = `console.log`
+
+  $output    = Element.find('#output')
+  $input     = Element.find('#input')
+  $prompt    = Element.find('#prompt')
+  $inputdiv  = Element.find('#inputdiv')
+  $inputl    = Element.find('#inputl')
+  $inputr    = Element.find('#inputr')
+  $inputcopy = Element.find('#inputcopy')
+  # make this global so you can type help, these all return nil else last thing evaluated is returned - js function
+
 
   def self.reset_settings
     `localStorage.clear()`
@@ -70,9 +81,9 @@ class OpalIRB
     # s = args.join(' ') or ' '
     s = args
     o = @output.html + s + "\n"
-    # @output[0].innerHTML = o.split("\n")[-@settings.maxLines...].join("\n")
-    # `#{@output[0]}.innerHTML = #{o.split("\n")[-@settings.maxLines].join("\n")}`
-    # @output.html = o.split("\n")[-@settings[:maxLines]].join("\n")
+    # @output[0].innerHTML = o.split("\n")[-@settings.max_lines...].join("\n")
+    # `#{@output[0]}.innerHTML = #{o.split("\n")[-@settings.max_lines].join("\n")}`
+    # @output.html = o.split("\n")[-@settings[:max_lines]].join("\n")
     @output.html = o
 
     nil
@@ -118,7 +129,7 @@ class OpalIRB
       value = `eval(compiled)`
       # window[@settings.last_variable] = value
       $_ = value
-      output = `nodeutil.inspect( value, #{@settings[:showHidden]}, #{@settings[:maxDepth]}, #{@settings[:colorize]})`
+      output = `nodeutil.inspect( value, #{@settings[:show_hidden]}, #{@settings[:max_depth]}, #{@settings[:colorize]})`
       # output = value
     rescue Exception => e
       if e.backtrace
@@ -155,9 +166,9 @@ class OpalIRB
             "You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:",
             " ",
             # "+ <strong>last_variable</strong> (#{@settings[:last_variable]}): variable name in which last returned value is stored",
-            "+ <strong>maxLines</strong> (#{@settings[:maxLines]}): max line count of this console",
-            "+ <strong>maxDepth</strong> (#{@settings[:maxDepth]}): max depth in which to inspect outputted object",
-            "+ <strong>showHidden</strong> (#{@settings[:showHidden]}): flag to output hidden (not enumerable) properties of objects",
+            "+ <strong>max_lines</strong> (#{@settings[:max_lines]}): max line count of this console",
+            "+ <strong>max_depth</strong> (#{@settings[:max_depth]}): max_depth in which to inspect outputted object",
+            "+ <strong>show_hidden</strong> (#{@settings[:show_hidden]}): flag to output hidden (not enumerable) properties of objects",
             "+ <strong>colorize</strong> (#{@settings[:colorize]}): flag to colorize output (set to false if IRB is slow)",
             " ",
             # "<strong>$irb.save_settings()</strong> will save settings to localStorage.",
