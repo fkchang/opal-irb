@@ -11,12 +11,4 @@ task :build do
   end
 end
 
-desc "Copy build js files to js - for development"
-task :copy_js do
-  Dir["build/*.js"].each {|js_file|
-    cp js_file, "js"
-  }
-
-end
-
 task :default => :build
