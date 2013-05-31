@@ -4,10 +4,10 @@ require 'opal'
 require 'opal-jquery'
 
 task :build do
-  File.open("js/opal_irb.rb.js", "w+") do |out|
+  File.open("js/application.js", "w+") do |out|
     env = Opal::Environment.new
     env.append_path "lib"
-    out << env["opal_irb"].to_s
+    out << env["application"].to_s
   end
 end
 

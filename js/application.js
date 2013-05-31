@@ -16391,7 +16391,268 @@ Opal.eval = function(str) {
   return eval(js);
 };
 (function(__opal) {
-  var TMP_1, $a, $b, $c, self = __opal.top, __scope = __opal, nil = __opal.nil, $mm = __opal.mm, __breaker = __opal.breaker, __slice = __opal.slice, __gvars = __opal.gvars, __klass = __opal.klass, __hash2 = __opal.hash2, __range = __opal.range;
+  var self = __opal.top, __scope = __opal, nil = __opal.nil, $mm = __opal.mm, __breaker = __opal.breaker, __slice = __opal.slice, __klass = __opal.klass, __gvars = __opal.gvars, __hash2 = __opal.hash2, __range = __opal.range;
+  return (function(__base, __super){
+    function OpalIRB() {};
+    OpalIRB = __klass(__base, __super, "OpalIRB", OpalIRB);
+
+    var def = OpalIRB.prototype, __scope = OpalIRB._scope;
+    def.settings = def.input = def.output = def.history = def.multiline = def.prompt = def.saved = def.historyi = nil;
+
+    __opal.defs(OpalIRB, '$reset_settings', function() {
+      
+      return localStorage.clear();
+    });
+
+    __opal.defs(OpalIRB, '$save_settings', function() {
+      var $a;
+      if (this.settings == null) this.settings = nil;
+
+      return localStorage.settings = JSON.stringify( (($a = this.settings).$map || $mm('map')).call($a));
+    });
+
+    __opal.defs(OpalIRB, '$resize_input', function(e) {
+      var width = nil, content = nil, $a, $b, $c, $d, $e, $f, $g, $h, $i, $j;
+      width = ($a = (($c = __gvars["inputdiv"]).$width || $mm('width')).call($c), $b = (($d = __gvars["inputl"]).$width || $mm('width')).call($d), typeof($a) === 'number' ? $a - $b : $a['$-']($b));
+      content = (($a = __gvars["input"]).$value || $mm('value')).call($a);
+      (($b = __gvars["inputcopy"]).$html || $mm('html')).call($b, content);
+      (($e = __gvars["inputcopy"]).$width || $mm('width')).call($e, width);
+      (($f = __gvars["input"]).$width || $mm('width')).call($f, width);
+      return (($g = __gvars["input"]).$height || $mm('height')).call($g, ($h = (($j = __gvars["inputcopy"]).$height || $mm('height')).call($j), $i = 2, typeof($h) === 'number' ? $h + $i : $h['$+']($i)));
+    });
+
+    __opal.defs(OpalIRB, '$scroll_to_bottom', function() {
+      
+      return window.scrollTo( 0, __gvars["prompt"][0].offsetTop);
+    });
+
+    __scope.DEFAULT_SETTINGS = __hash2(["max_lines", "max_depth", "show_hidden", "colorize"], {"max_lines": 500, "max_depth": 2, "show_hidden": false, "colorize": true});
+
+    def.$escape_html = function(s) {
+      var $a, $b, $c;
+      return (($a = (($b = (($c = s).$gsub || $mm('gsub')).call($c, /&/, "&amp;")).$gsub || $mm('gsub')).call($b, /</, "&lt;")).$gsub || $mm('gsub')).call($a, />/, "&gt;");
+    };
+
+    def.$settings = function() {
+      
+      return this.settings
+    }, nil;
+
+    def.$initialize = function(output, input, prompt, settings) {
+      var myself = nil, $a, $b, TMP_1, $c;if (settings == null) {
+        settings = __hash2([], {})
+      }
+      $a = [output, input, prompt], this.output = $a[0], this.input = $a[1], this.prompt = $a[2];
+      this.history = [];
+      this.historyi = -1;
+      this.saved = "";
+      this.multiline = false;
+      this.settings = (($a = (($b = __scope.DEFAULT_SETTINGS) == null ? __opal.cm("DEFAULT_SETTINGS") : $b)).$clone || $mm('clone')).call($a);
+      myself = this;
+      return ($b = (($c = this.input).$on || $mm('on')), $b._p = (TMP_1 = function(evt) {
+
+        var self = TMP_1._s || this, $a;
+        if (evt == null) evt = nil;
+
+        return (($a = myself).$handle_keypress || $mm('handle_keypress')).call($a, evt)
+      }, TMP_1._s = this, TMP_1), $b).call($c, "keydown");
+    };
+
+    def.$print = function(args) {
+      var s = nil, o = nil, $a, $b, $c, $d, $e;
+      s = args;
+      o = ($a = ($c = (($e = this.output).$html || $mm('html')).call($e), $d = s, typeof($c) === 'number' ? $c + $d : $c['$+']($d)), $b = "\n", typeof($a) === 'number' ? $a + $b : $a['$+']($b));
+      (($a = this.output)['$html='] || $mm('html=')).call($a, o);
+      return nil;
+    };
+
+    def.$to_s = function() {
+      var $a;
+      return (($a = __hash2(["history", "multiline", "settings"], {"history": this.history, "multiline": this.multiline, "settings": this.settings})).$inspect || $mm('inspect')).call($a);
+    };
+
+    def.$set_prompt = function() {
+      var s = nil, $a;
+      s = (function() { if (($a = this.multiline) !== false && $a !== nil) {
+        return "------"
+        } else {
+        return "opal"
+      }; return nil; }).call(this);
+      return (($a = this.prompt)['$html='] || $mm('html=')).call($a, "" + (s) + "&gt;&nbsp;");
+    };
+
+    def.$add_to_history = function(s) {
+      var $a;
+      (($a = this.history).$unshift || $mm('unshift')).call($a, s);
+      return this.historyi = -1;
+    };
+
+    def.$add_to_saved = function(s) {
+      var $a, $b, $c, $d, $e, $f;
+      this.saved = (($a = this.saved)['$+'] || $mm('+')).call($a, (function() { if ((($b = (($c = s)['$[]'] || $mm('[]')).call($c, __range(0, -1, true)))['$=='] || $mm('==')).call($b, "\\")) {
+        return (($d = s)['$[]'] || $mm('[]')).call($d, __range(0, -1, true))
+        } else {
+        return s
+      }; return nil; }).call(this));
+      this.saved = (($e = this.saved)['$+'] || $mm('+')).call($e, "\n");
+      return (($f = this).$add_to_history || $mm('add_to_history')).call($f, s);
+    };
+
+    def.$clear = function() {
+      var $a;
+      (($a = this.output)['$html='] || $mm('html=')).call($a, "");
+      return nil;
+    };
+
+    def.$process_saved = function() {
+      var compiled = nil, value = nil, output = nil, e = nil, $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k;
+      try {
+        compiled = (($a = (($b = (($c = ((($d = __scope.Opal) == null ? __opal.cm("Opal") : $d))._scope).Parser == null ? $c.cm("Parser") : $c.Parser)).$new || $mm('new')).call($b)).$parse || $mm('parse')).call($a, this.saved);
+        (($c = this).$log || $mm('log')).call($c, compiled);
+        value = eval(compiled);
+        __gvars["_"] = value;
+        output = nodeutil.inspect( value, (($d = this.settings)['$[]'] || $mm('[]')).call($d, "showHidden"), (($e = this.settings)['$[]'] || $mm('[]')).call($e, "maxDepth"), (($f = this.settings)['$[]'] || $mm('[]')).call($f, "colorize"));
+      } catch ($err) {
+      if ((($g = (($i = __scope.Exception) == null ? __opal.cm("Exception") : $i))['$==='] || $mm('===')).call($g, $err)) {
+        e = $err;if (($g = (($h = e).$backtrace || $mm('backtrace')).call($h)) !== false && $g !== nil) {
+          output = ($g = "FOR:\n" + (compiled) + "\n============\n", $i = (($j = (($k = e).$backtrace || $mm('backtrace')).call($k)).$join || $mm('join')).call($j, "\n"), typeof($g) === 'number' ? $g + $i : $g['$+']($i))
+          } else {
+          output = e.toString()
+        }}
+      else { throw $err; }
+      };
+      this.saved = "";
+      return (($i = this).$print || $mm('print')).call($i, output);
+    };
+
+    def.$help = function() {
+      var text = nil, $a, $b, $c, $d, $e, $f;
+      text = (($a = [" ", "<strong>Features</strong>", "<strong>========</strong>", "+ <strong>Esc</strong> toggles multiline mode.", "+ <strong>Up/Down arrow</strong> flips through line history.", "+ Access the internals of this console through <strong>$irb</strong>.", "+ <strong>clear</strong> clears this console.", "+ <strong>history</strong> shows line history.", " ", "<strong>@Settings</strong>", "<strong>========</strong>", "You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:", " ", "+ <strong>maxLines</strong> (" + ((($b = this.settings)['$[]'] || $mm('[]')).call($b, "maxLines")) + "): max line count of this console", "+ <strong>maxDepth</strong> (" + ((($c = this.settings)['$[]'] || $mm('[]')).call($c, "maxDepth")) + "): max depth in which to inspect outputted object", "+ <strong>showHidden</strong> (" + ((($d = this.settings)['$[]'] || $mm('[]')).call($d, "showHidden")) + "): flag to output hidden (not enumerable) properties of objects", "+ <strong>colorize</strong> (" + ((($e = this.settings)['$[]'] || $mm('[]')).call($e, "colorize")) + "): flag to colorize output (set to false if IRB is slow)", " ", " "]).$join || $mm('join')).call($a, "\n");
+      return (($f = this).$print || $mm('print')).call($f, text);
+    };
+
+    def.$log = function(thing) {
+      
+      return console.log(thing);
+    };
+
+    def.$history = function() {
+      var TMP_2, $a, $b, $c;
+      return ($a = (($b = (($c = this.history).$reverse || $mm('reverse')).call($c)).$each_with_index || $mm('each_with_index')), $a._p = (TMP_2 = function(line, i) {
+
+        var self = TMP_2._s || this, $a;
+        if (line == null) line = nil;
+if (i == null) i = nil;
+
+        return (($a = self).$print || $mm('print')).call($a, "" + (i) + ": " + (line))
+      }, TMP_2._s = this, TMP_2), $a).call($b);
+    };
+
+    def.$handle_keypress = function(e) {
+      var $case = nil, input = nil, $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k, $l, $m, $n, $o, $p, $q, $r, $s, $t, $u, $v, $w, $x, $y, $z, $aa, $ab, $ac, $ad, $ae, $af, $ag, $ah, $ai, $aj, $ak, $al;
+      (($a = this).$log || $mm('log')).call($a, (($b = e).$which || $mm('which')).call($b));
+      return (function() { $case = (($c = e).$which || $mm('which')).call($c);if ((($l = (13))['$==='] || $mm('===')).call($l, $case)) {
+      (($d = e).$prevent_default || $mm('prevent_default')).call($d);
+      input = (($e = this.input).$value || $mm('value')).call($e);
+      (($f = this.input)['$value='] || $mm('value=')).call($f, "");
+      (($g = this).$print || $mm('print')).call($g, ($h = (($j = this.prompt).$html || $mm('html')).call($j), $i = (($k = this).$escape_html || $mm('escape_html')).call($k, input), typeof($h) === 'number' ? $h + $i : $h['$+']($i)));
+      if (input !== false && input !== nil) {
+        (($h = this).$add_to_saved || $mm('add_to_saved')).call($h, input);
+        if (($i = ($l = ($l = (($m = (($n = input)['$[]'] || $mm('[]')).call($n, __range(0, -1, true)))['$=='] || $mm('==')).call($m, "\\"), ($l === nil || $l === false)), $l !== false && $l !== nil ? ($l = this.multiline, ($l === nil || $l === false)) : $l)) !== false && $i !== nil) {
+          return (($i = this).$process_saved || $mm('process_saved')).call($i)
+          } else {
+          return nil
+        };
+        } else {
+        return nil
+      };
+      }
+      else if ((($y = (27))['$==='] || $mm('===')).call($y, $case)) {
+      (($o = e).$prevent_default || $mm('prevent_default')).call($o);
+      input = this.input.val();
+      if (($p = ($q = (($q = input !== false && input !== nil) ? this.multiline : $q), $q !== false && $q !== nil ? this.saved : $q)) !== false && $p !== nil) {
+        input = (($p = this.input).$value || $mm('value')).call($p);
+        (($q = this.input).$value || $mm('value')).call($q, "");
+        (($r = this).$print || $mm('print')).call($r, ($s = (($u = this.prompt).$html || $mm('html')).call($u), $t = (($v = this).$escape_html || $mm('escape_html')).call($v, input), typeof($s) === 'number' ? $s + $t : $s['$+']($t)));
+        (($s = this).$add_to_saved || $mm('add_to_saved')).call($s, input);
+        (($t = this).$process_saved || $mm('process_saved')).call($t);
+        } else {
+        if (($w = ($x = this.multiline, $x !== false && $x !== nil ? this.saved : $x)) !== false && $w !== nil) {
+          (($w = this).$process_saved || $mm('process_saved')).call($w)
+        }
+      };
+      this.multiline = ($x = this.multiline, ($x === nil || $x === false));
+      return (($x = this).$set_prompt || $mm('set_prompt')).call($x);
+      }
+      else if ((($af = (38))['$==='] || $mm('===')).call($af, $case)) {
+      (($z = e).$prevent_default || $mm('prevent_default')).call($z);
+      if ((($aa = this.historyi)['$<'] || $mm('<')).call($aa, ($ab = (($ad = this.history).$length || $mm('length')).call($ad), $ac = 1, typeof($ab) === 'number' ? $ab - $ac : $ab['$-']($ac)))) {
+        this.historyi = (($ab = this.historyi)['$+'] || $mm('+')).call($ab, 1);
+        return (($ac = this.input)['$value='] || $mm('value=')).call($ac, (($ae = this.history)['$[]'] || $mm('[]')).call($ae, this.historyi));
+        } else {
+        return nil
+      };
+      }
+      else if ((($al = (40))['$==='] || $mm('===')).call($al, $case)) {
+      (($ag = e).$prevent_default || $mm('prevent_default')).call($ag);
+      if ((($ah = this.historyi)['$>'] || $mm('>')).call($ah, 0)) {
+        this.historyi = (($ai = this.historyi)['$+'] || $mm('+')).call($ai, -1);
+        return (($aj = this.input)['$value='] || $mm('value=')).call($aj, (($ak = this.history)['$[]'] || $mm('[]')).call($ak, this.historyi));
+        } else {
+        return nil
+      };
+      }
+      else {return nil} }).call(this);
+    };
+
+    __opal.defs(OpalIRB, '$init', function() {
+      var irb = nil, TMP_3, $a, $b, TMP_4, $c, $d, $e, TMP_5, TMP_6, $f, TMP_7, $g, $h, $i, $j, $k, $l;
+      ($a = (($b = __gvars["input"]).$on || $mm('on')), $a._p = (TMP_3 = function() {
+
+        var self = TMP_3._s || this, $a;
+        
+        return (($a = self).$scroll_to_bottom || $mm('scroll_to_bottom')).call($a)
+      }, TMP_3._s = this, TMP_3), $a).call($b, "keydown");
+      ($a = (($c = (($d = (($e = __scope.Element) == null ? __opal.cm("Element") : $e)).$find || $mm('find')).call($d, window)).$on || $mm('on')), $a._p = (TMP_4 = function(e) {
+
+        var self = TMP_4._s || this, $a;
+        if (e == null) e = nil;
+
+        return (($a = self).$resize_input || $mm('resize_input')).call($a, e)
+      }, TMP_4._s = this, TMP_4), $a).call($c, "resize");
+      ($a = (($e = __gvars["input"]).$on || $mm('on')), $a._p = (TMP_5 = function(e) {
+
+        var self = TMP_5._s || this, $a;
+        if (e == null) e = nil;
+
+        return (($a = self).$resize_input || $mm('resize_input')).call($a, e)
+      }, TMP_5._s = this, TMP_5), $a).call($e, "keyup");
+      ($a = (($f = __gvars["input"]).$on || $mm('on')), $a._p = (TMP_6 = function(e) {
+
+        var self = TMP_6._s || this, $a;
+        if (e == null) e = nil;
+
+        return (($a = self).$resize_input || $mm('resize_input')).call($a, e)
+      }, TMP_6._s = this, TMP_6), $a).call($f, "change");
+      ($a = (($g = (($h = (($i = __scope.Element) == null ? __opal.cm("Element") : $i)).$find || $mm('find')).call($h, "html")).$on || $mm('on')), $a._p = (TMP_7 = function(e) {
+
+        var self = TMP_7._s || this, $a;
+        if (e == null) e = nil;
+
+        return (($a = __gvars["input"]).$focus || $mm('focus')).call($a)
+      }, TMP_7._s = this, TMP_7), $a).call($g, "click");
+      irb = (($a = (($i = __scope.OpalIRB) == null ? __opal.cm("OpalIRB") : $i)).$new || $mm('new')).call($a, __gvars["output"], __gvars["input"], __gvars["prompt"]);
+      __gvars["irb"] = irb;
+      (($i = this).$resize_input || $mm('resize_input')).call($i);
+      (($j = __gvars["input"]).$focus || $mm('focus')).call($j);
+      return (($k = irb).$print || $mm('print')).call($k, (($l = ["# Opal IRB", "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>", "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>", "#", "# <strong>help</strong> for features and tips.", " "]).$join || $mm('join')).call($l, "\n"));
+    });
+
+    return nil;
+  })(self, null);
+})(Opal);
+(function(__opal) {
+  var TMP_1, $a, $b, $c, self = __opal.top, __scope = __opal, nil = __opal.nil, $mm = __opal.mm, __breaker = __opal.breaker, __slice = __opal.slice, __gvars = __opal.gvars;
   return ($a = (($b = (($c = __scope.Document) == null ? __opal.cm("Document") : $c))['$ready?'] || $mm('ready?')), $a._p = (TMP_1 = function() {
 
     var self = TMP_1._s || this, $a, $b, $c, $d, $e, $f, $g, $h, $i, def = ((typeof(self) === 'function') ? self.prototype : self);
@@ -16404,264 +16665,6 @@ Opal.eval = function(str) {
     __gvars["inputl"] = (($e = (($f = __scope.Element) == null ? __opal.cm("Element") : $f)).$find || $mm('find')).call($e, "#inputl");
     __gvars["inputr"] = (($f = (($g = __scope.Element) == null ? __opal.cm("Element") : $g)).$find || $mm('find')).call($f, "#inputr");
     __gvars["inputcopy"] = (($g = (($h = __scope.Element) == null ? __opal.cm("Element") : $h)).$find || $mm('find')).call($g, "#inputcopy");
-    (function(__base, __super){
-      function OpalIRB() {};
-      OpalIRB = __klass(__base, __super, "OpalIRB", OpalIRB);
-
-      var def = OpalIRB.prototype, __scope = OpalIRB._scope;
-      def.settings = def.input = def.output = def.history = def.multiline = def.prompt = def.saved = def.historyi = nil;
-
-      __opal.defs(OpalIRB, '$reset_settings', function() {
-        
-        return localStorage.clear();
-      });
-
-      __opal.defs(OpalIRB, '$save_settings', function() {
-        var $a;
-        if (this.settings == null) this.settings = nil;
-
-        return localStorage.settings = JSON.stringify( (($a = this.settings).$map || $mm('map')).call($a));
-      });
-
-      __opal.defs(OpalIRB, '$resize_input', function(e) {
-        var width = nil, content = nil, $a, $b, $c, $d, $e, $f, $g, $h, $i, $j;
-        width = ($a = (($c = __gvars["inputdiv"]).$width || $mm('width')).call($c), $b = (($d = __gvars["inputl"]).$width || $mm('width')).call($d), typeof($a) === 'number' ? $a - $b : $a['$-']($b));
-        content = (($a = __gvars["input"]).$value || $mm('value')).call($a);
-        (($b = __gvars["inputcopy"]).$html || $mm('html')).call($b, content);
-        (($e = __gvars["inputcopy"]).$width || $mm('width')).call($e, width);
-        (($f = __gvars["input"]).$width || $mm('width')).call($f, width);
-        return (($g = __gvars["input"]).$height || $mm('height')).call($g, ($h = (($j = __gvars["inputcopy"]).$height || $mm('height')).call($j), $i = 2, typeof($h) === 'number' ? $h + $i : $h['$+']($i)));
-      });
-
-      __opal.defs(OpalIRB, '$scroll_to_bottom', function() {
-        
-        return window.scrollTo( 0, __gvars["prompt"][0].offsetTop);
-      });
-
-      __scope.DEFAULT_SETTINGS = __hash2(["max_lines", "max_depth", "show_hidden", "colorize"], {"max_lines": 500, "max_depth": 2, "show_hidden": false, "colorize": true});
-
-      def.$escape_html = function(s) {
-        var $a, $b, $c;
-        return (($a = (($b = (($c = s).$gsub || $mm('gsub')).call($c, /&/, "&amp;")).$gsub || $mm('gsub')).call($b, /</, "&lt;")).$gsub || $mm('gsub')).call($a, />/, "&gt;");
-      };
-
-      def.$settings = function() {
-        
-        return this.settings
-      }, nil;
-
-      def.$initialize = function(output, input, prompt, settings) {
-        var myself = nil, $a, $b, TMP_2, $c;if (settings == null) {
-          settings = __hash2([], {})
-        }
-        $a = [output, input, prompt], this.output = $a[0], this.input = $a[1], this.prompt = $a[2];
-        this.history = [];
-        this.historyi = -1;
-        this.saved = "";
-        this.multiline = false;
-        this.settings = (($a = (($b = __scope.DEFAULT_SETTINGS) == null ? __opal.cm("DEFAULT_SETTINGS") : $b)).$clone || $mm('clone')).call($a);
-        myself = this;
-        return ($b = (($c = this.input).$on || $mm('on')), $b._p = (TMP_2 = function(evt) {
-
-          var self = TMP_2._s || this, $a;
-          if (evt == null) evt = nil;
-
-          return (($a = myself).$handle_keypress || $mm('handle_keypress')).call($a, evt)
-        }, TMP_2._s = this, TMP_2), $b).call($c, "keydown");
-      };
-
-      def.$print = function(args) {
-        var s = nil, o = nil, $a, $b, $c, $d, $e;
-        s = args;
-        o = ($a = ($c = (($e = this.output).$html || $mm('html')).call($e), $d = s, typeof($c) === 'number' ? $c + $d : $c['$+']($d)), $b = "\n", typeof($a) === 'number' ? $a + $b : $a['$+']($b));
-        (($a = this.output)['$html='] || $mm('html=')).call($a, o);
-        return nil;
-      };
-
-      def.$to_s = function() {
-        var $a;
-        return (($a = __hash2(["history", "multiline", "settings"], {"history": this.history, "multiline": this.multiline, "settings": this.settings})).$inspect || $mm('inspect')).call($a);
-      };
-
-      def.$set_prompt = function() {
-        var s = nil, $a;
-        s = (function() { if (($a = this.multiline) !== false && $a !== nil) {
-          return "------"
-          } else {
-          return "opal"
-        }; return nil; }).call(this);
-        return (($a = this.prompt)['$html='] || $mm('html=')).call($a, "" + (s) + "&gt;&nbsp;");
-      };
-
-      def.$add_to_history = function(s) {
-        var $a;
-        (($a = this.history).$unshift || $mm('unshift')).call($a, s);
-        return this.historyi = -1;
-      };
-
-      def.$add_to_saved = function(s) {
-        var $a, $b, $c, $d, $e, $f;
-        this.saved = (($a = this.saved)['$+'] || $mm('+')).call($a, (function() { if ((($b = (($c = s)['$[]'] || $mm('[]')).call($c, __range(0, -1, true)))['$=='] || $mm('==')).call($b, "\\")) {
-          return (($d = s)['$[]'] || $mm('[]')).call($d, __range(0, -1, true))
-          } else {
-          return s
-        }; return nil; }).call(this));
-        this.saved = (($e = this.saved)['$+'] || $mm('+')).call($e, "\n");
-        return (($f = this).$add_to_history || $mm('add_to_history')).call($f, s);
-      };
-
-      def.$clear = function() {
-        var $a;
-        (($a = this.output)['$html='] || $mm('html=')).call($a, "");
-        return nil;
-      };
-
-      def.$process_saved = function() {
-        var compiled = nil, value = nil, output = nil, e = nil, $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k;
-        try {
-          compiled = (($a = (($b = (($c = ((($d = __scope.Opal) == null ? __opal.cm("Opal") : $d))._scope).Parser == null ? $c.cm("Parser") : $c.Parser)).$new || $mm('new')).call($b)).$parse || $mm('parse')).call($a, this.saved);
-          (($c = this).$log || $mm('log')).call($c, compiled);
-          value = eval(compiled);
-          __gvars["_"] = value;
-          output = nodeutil.inspect( value, (($d = this.settings)['$[]'] || $mm('[]')).call($d, "showHidden"), (($e = this.settings)['$[]'] || $mm('[]')).call($e, "maxDepth"), (($f = this.settings)['$[]'] || $mm('[]')).call($f, "colorize"));
-        } catch ($err) {
-        if ((($g = (($i = __scope.Exception) == null ? __opal.cm("Exception") : $i))['$==='] || $mm('===')).call($g, $err)) {
-          e = $err;if (($g = (($h = e).$backtrace || $mm('backtrace')).call($h)) !== false && $g !== nil) {
-            output = ($g = "FOR:\n" + (compiled) + "\n============\n", $i = (($j = (($k = e).$backtrace || $mm('backtrace')).call($k)).$join || $mm('join')).call($j, "\n"), typeof($g) === 'number' ? $g + $i : $g['$+']($i))
-            } else {
-            output = e.toString()
-          }}
-        else { throw $err; }
-        };
-        this.saved = "";
-        return (($i = this).$print || $mm('print')).call($i, output);
-      };
-
-      def.$help = function() {
-        var text = nil, $a, $b, $c, $d, $e, $f;
-        text = (($a = [" ", "<strong>Features</strong>", "<strong>========</strong>", "+ <strong>Esc</strong> toggles multiline mode.", "+ <strong>Up/Down arrow</strong> flips through line history.", "+ Access the internals of this console through <strong>$irb</strong>.", "+ <strong>clear</strong> clears this console.", "+ <strong>history</strong> shows line history.", " ", "<strong>@Settings</strong>", "<strong>========</strong>", "You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:", " ", "+ <strong>maxLines</strong> (" + ((($b = this.settings)['$[]'] || $mm('[]')).call($b, "maxLines")) + "): max line count of this console", "+ <strong>maxDepth</strong> (" + ((($c = this.settings)['$[]'] || $mm('[]')).call($c, "maxDepth")) + "): max depth in which to inspect outputted object", "+ <strong>showHidden</strong> (" + ((($d = this.settings)['$[]'] || $mm('[]')).call($d, "showHidden")) + "): flag to output hidden (not enumerable) properties of objects", "+ <strong>colorize</strong> (" + ((($e = this.settings)['$[]'] || $mm('[]')).call($e, "colorize")) + "): flag to colorize output (set to false if IRB is slow)", " ", " "]).$join || $mm('join')).call($a, "\n");
-        return (($f = this).$print || $mm('print')).call($f, text);
-      };
-
-      def.$log = function(thing) {
-        
-        return console.log(thing);
-      };
-
-      def.$history = function() {
-        var TMP_3, $a, $b, $c;
-        return ($a = (($b = (($c = this.history).$reverse || $mm('reverse')).call($c)).$each_with_index || $mm('each_with_index')), $a._p = (TMP_3 = function(line, i) {
-
-          var self = TMP_3._s || this, $a;
-          if (line == null) line = nil;
-if (i == null) i = nil;
-
-          return (($a = self).$print || $mm('print')).call($a, "" + (i) + ": " + (line))
-        }, TMP_3._s = this, TMP_3), $a).call($b);
-      };
-
-      def.$handle_keypress = function(e) {
-        var $case = nil, input = nil, $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k, $l, $m, $n, $o, $p, $q, $r, $s, $t, $u, $v, $w, $x, $y, $z, $aa, $ab, $ac, $ad, $ae, $af, $ag, $ah, $ai, $aj, $ak, $al;
-        (($a = this).$log || $mm('log')).call($a, (($b = e).$which || $mm('which')).call($b));
-        return (function() { $case = (($c = e).$which || $mm('which')).call($c);if ((($l = (13))['$==='] || $mm('===')).call($l, $case)) {
-        (($d = e).$prevent_default || $mm('prevent_default')).call($d);
-        input = (($e = this.input).$value || $mm('value')).call($e);
-        (($f = this.input)['$value='] || $mm('value=')).call($f, "");
-        (($g = this).$print || $mm('print')).call($g, ($h = (($j = this.prompt).$html || $mm('html')).call($j), $i = (($k = this).$escape_html || $mm('escape_html')).call($k, input), typeof($h) === 'number' ? $h + $i : $h['$+']($i)));
-        if (input !== false && input !== nil) {
-          (($h = this).$add_to_saved || $mm('add_to_saved')).call($h, input);
-          if (($i = ($l = ($l = (($m = (($n = input)['$[]'] || $mm('[]')).call($n, __range(0, -1, true)))['$=='] || $mm('==')).call($m, "\\"), ($l === nil || $l === false)), $l !== false && $l !== nil ? ($l = this.multiline, ($l === nil || $l === false)) : $l)) !== false && $i !== nil) {
-            return (($i = this).$process_saved || $mm('process_saved')).call($i)
-            } else {
-            return nil
-          };
-          } else {
-          return nil
-        };
-        }
-        else if ((($y = (27))['$==='] || $mm('===')).call($y, $case)) {
-        (($o = e).$prevent_default || $mm('prevent_default')).call($o);
-        input = this.input.val();
-        if (($p = ($q = (($q = input !== false && input !== nil) ? this.multiline : $q), $q !== false && $q !== nil ? this.saved : $q)) !== false && $p !== nil) {
-          input = (($p = this.input).$value || $mm('value')).call($p);
-          (($q = this.input).$value || $mm('value')).call($q, "");
-          (($r = this).$print || $mm('print')).call($r, ($s = (($u = this.prompt).$html || $mm('html')).call($u), $t = (($v = this).$escape_html || $mm('escape_html')).call($v, input), typeof($s) === 'number' ? $s + $t : $s['$+']($t)));
-          (($s = this).$add_to_saved || $mm('add_to_saved')).call($s, input);
-          (($t = this).$process_saved || $mm('process_saved')).call($t);
-          } else {
-          if (($w = ($x = this.multiline, $x !== false && $x !== nil ? this.saved : $x)) !== false && $w !== nil) {
-            (($w = this).$process_saved || $mm('process_saved')).call($w)
-          }
-        };
-        this.multiline = ($x = this.multiline, ($x === nil || $x === false));
-        return (($x = this).$set_prompt || $mm('set_prompt')).call($x);
-        }
-        else if ((($af = (38))['$==='] || $mm('===')).call($af, $case)) {
-        (($z = e).$prevent_default || $mm('prevent_default')).call($z);
-        if ((($aa = this.historyi)['$<'] || $mm('<')).call($aa, ($ab = (($ad = this.history).$length || $mm('length')).call($ad), $ac = 1, typeof($ab) === 'number' ? $ab - $ac : $ab['$-']($ac)))) {
-          this.historyi = (($ab = this.historyi)['$+'] || $mm('+')).call($ab, 1);
-          return (($ac = this.input)['$value='] || $mm('value=')).call($ac, (($ae = this.history)['$[]'] || $mm('[]')).call($ae, this.historyi));
-          } else {
-          return nil
-        };
-        }
-        else if ((($al = (40))['$==='] || $mm('===')).call($al, $case)) {
-        (($ag = e).$prevent_default || $mm('prevent_default')).call($ag);
-        if ((($ah = this.historyi)['$>'] || $mm('>')).call($ah, 0)) {
-          this.historyi = (($ai = this.historyi)['$+'] || $mm('+')).call($ai, -1);
-          return (($aj = this.input)['$value='] || $mm('value=')).call($aj, (($ak = this.history)['$[]'] || $mm('[]')).call($ak, this.historyi));
-          } else {
-          return nil
-        };
-        }
-        else {return nil} }).call(this);
-      };
-
-      __opal.defs(OpalIRB, '$init', function() {
-        var irb = nil, TMP_4, $a, $b, TMP_5, $c, $d, $e, TMP_6, TMP_7, $f, TMP_8, $g, $h, $i, $j, $k, $l;
-        ($a = (($b = __gvars["input"]).$on || $mm('on')), $a._p = (TMP_4 = function() {
-
-          var self = TMP_4._s || this, $a;
-          
-          return (($a = self).$scroll_to_bottom || $mm('scroll_to_bottom')).call($a)
-        }, TMP_4._s = this, TMP_4), $a).call($b, "keydown");
-        ($a = (($c = (($d = (($e = __scope.Element) == null ? __opal.cm("Element") : $e)).$find || $mm('find')).call($d, window)).$on || $mm('on')), $a._p = (TMP_5 = function(e) {
-
-          var self = TMP_5._s || this, $a;
-          if (e == null) e = nil;
-
-          return (($a = self).$resize_input || $mm('resize_input')).call($a, e)
-        }, TMP_5._s = this, TMP_5), $a).call($c, "resize");
-        ($a = (($e = __gvars["input"]).$on || $mm('on')), $a._p = (TMP_6 = function(e) {
-
-          var self = TMP_6._s || this, $a;
-          if (e == null) e = nil;
-
-          return (($a = self).$resize_input || $mm('resize_input')).call($a, e)
-        }, TMP_6._s = this, TMP_6), $a).call($e, "keyup");
-        ($a = (($f = __gvars["input"]).$on || $mm('on')), $a._p = (TMP_7 = function(e) {
-
-          var self = TMP_7._s || this, $a;
-          if (e == null) e = nil;
-
-          return (($a = self).$resize_input || $mm('resize_input')).call($a, e)
-        }, TMP_7._s = this, TMP_7), $a).call($f, "change");
-        ($a = (($g = (($h = (($i = __scope.Element) == null ? __opal.cm("Element") : $i)).$find || $mm('find')).call($h, "html")).$on || $mm('on')), $a._p = (TMP_8 = function(e) {
-
-          var self = TMP_8._s || this, $a;
-          if (e == null) e = nil;
-
-          return (($a = __gvars["input"]).$focus || $mm('focus')).call($a)
-        }, TMP_8._s = this, TMP_8), $a).call($g, "click");
-        irb = (($a = (($i = __scope.OpalIRB) == null ? __opal.cm("OpalIRB") : $i)).$new || $mm('new')).call($a, __gvars["output"], __gvars["input"], __gvars["prompt"]);
-        __gvars["irb"] = irb;
-        (($i = this).$resize_input || $mm('resize_input')).call($i);
-        (($j = __gvars["input"]).$focus || $mm('focus')).call($j);
-        return (($k = irb).$print || $mm('print')).call($k, (($l = ["# Opal IRB", "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>", "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>", "#", "# <strong>help</strong> for features and tips.", " "]).$join || $mm('join')).call($l, "\n"));
-      });
-
-      return nil;
-    })(self, null);
     def.$help = function() {
       var $a;
       (($a = __gvars["irb"]).$help || $mm('help')).call($a);

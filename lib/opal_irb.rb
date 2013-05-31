@@ -1,13 +1,7 @@
-Document.ready? do
-  SAVED_CONSOLE_LOG = `console.log`
+require 'opal'
+require "opal-jquery"
+require "opal-parser"
 
-  $output    = Element.find('#output')
-  $input     = Element.find('#input')
-  $prompt    = Element.find('#prompt')
-  $inputdiv  = Element.find('#inputdiv')
-  $inputl    = Element.find('#inputl')
-  $inputr    = Element.find('#inputr')
-  $inputcopy = Element.find('#inputcopy')
 
   class OpalIRB
 
@@ -275,7 +269,7 @@ Document.ready? do
 
       # print header
       irb.print [
-                  "# Opal v#{OPAL_VERSION} IRB",
+                 "# Opal IRB", #"# Opal v#{OPAL_VERSION} IRB",
                   "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>",
                   "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
                   "#",
@@ -286,21 +280,3 @@ Document.ready? do
     end
 
   end
-  # make this global so you can type help, these all return nil else last thing evaluated is returned - js function
-  def help
-    $irb.help
-    `null`
-  end
-
-  def clear
-    $irb.clear
-    `null`
-  end
-
-  def history
-    $irb.history
-    `null`
-  end
-
-  OpalIRB.init()
-end
