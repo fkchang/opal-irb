@@ -16396,8 +16396,24 @@ Opal.eval = function(str) {
     function OpalIRB() {};
     OpalIRB = __klass(__base, __super, "OpalIRB", OpalIRB);
 
-    var def = OpalIRB.prototype, __scope = OpalIRB._scope;
+    var def = OpalIRB.prototype, __scope = OpalIRB._scope, $a, $b, $c, $d, $e, $f, $g, $h;
     def.settings = def.input = def.output = def.history = def.multiline = def.prompt = def.saved = def.historyi = nil;
+
+    __scope.SAVED_CONSOLE_LOG = console.log;
+
+    __gvars["output"] = (($a = (($b = __scope.Element) == null ? __opal.cm("Element") : $b)).$find || $mm('find')).call($a, "#output");
+
+    __gvars["input"] = (($b = (($c = __scope.Element) == null ? __opal.cm("Element") : $c)).$find || $mm('find')).call($b, "#input");
+
+    __gvars["prompt"] = (($c = (($d = __scope.Element) == null ? __opal.cm("Element") : $d)).$find || $mm('find')).call($c, "#prompt");
+
+    __gvars["inputdiv"] = (($d = (($e = __scope.Element) == null ? __opal.cm("Element") : $e)).$find || $mm('find')).call($d, "#inputdiv");
+
+    __gvars["inputl"] = (($e = (($f = __scope.Element) == null ? __opal.cm("Element") : $f)).$find || $mm('find')).call($e, "#inputl");
+
+    __gvars["inputr"] = (($f = (($g = __scope.Element) == null ? __opal.cm("Element") : $g)).$find || $mm('find')).call($f, "#inputr");
+
+    __gvars["inputcopy"] = (($g = (($h = __scope.Element) == null ? __opal.cm("Element") : $h)).$find || $mm('find')).call($g, "#inputcopy");
 
     __opal.defs(OpalIRB, '$reset_settings', function() {
       
@@ -16511,7 +16527,7 @@ Opal.eval = function(str) {
         (($c = this).$log || $mm('log')).call($c, compiled);
         value = eval(compiled);
         __gvars["_"] = value;
-        output = nodeutil.inspect( value, (($d = this.settings)['$[]'] || $mm('[]')).call($d, "showHidden"), (($e = this.settings)['$[]'] || $mm('[]')).call($e, "maxDepth"), (($f = this.settings)['$[]'] || $mm('[]')).call($f, "colorize"));
+        output = nodeutil.inspect( value, (($d = this.settings)['$[]'] || $mm('[]')).call($d, "show_hidden"), (($e = this.settings)['$[]'] || $mm('[]')).call($e, "max_depth"), (($f = this.settings)['$[]'] || $mm('[]')).call($f, "colorize"));
       } catch ($err) {
       if ((($g = (($i = __scope.Exception) == null ? __opal.cm("Exception") : $i))['$==='] || $mm('===')).call($g, $err)) {
         e = $err;if (($g = (($h = e).$backtrace || $mm('backtrace')).call($h)) !== false && $g !== nil) {
@@ -16527,7 +16543,7 @@ Opal.eval = function(str) {
 
     def.$help = function() {
       var text = nil, $a, $b, $c, $d, $e, $f;
-      text = (($a = [" ", "<strong>Features</strong>", "<strong>========</strong>", "+ <strong>Esc</strong> toggles multiline mode.", "+ <strong>Up/Down arrow</strong> flips through line history.", "+ Access the internals of this console through <strong>$irb</strong>.", "+ <strong>clear</strong> clears this console.", "+ <strong>history</strong> shows line history.", " ", "<strong>@Settings</strong>", "<strong>========</strong>", "You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:", " ", "+ <strong>maxLines</strong> (" + ((($b = this.settings)['$[]'] || $mm('[]')).call($b, "maxLines")) + "): max line count of this console", "+ <strong>maxDepth</strong> (" + ((($c = this.settings)['$[]'] || $mm('[]')).call($c, "maxDepth")) + "): max depth in which to inspect outputted object", "+ <strong>showHidden</strong> (" + ((($d = this.settings)['$[]'] || $mm('[]')).call($d, "showHidden")) + "): flag to output hidden (not enumerable) properties of objects", "+ <strong>colorize</strong> (" + ((($e = this.settings)['$[]'] || $mm('[]')).call($e, "colorize")) + "): flag to colorize output (set to false if IRB is slow)", " ", " "]).$join || $mm('join')).call($a, "\n");
+      text = (($a = [" ", "<strong>Features</strong>", "<strong>========</strong>", "+ <strong>Esc</strong> toggles multiline mode.", "+ <strong>Up/Down arrow</strong> flips through line history.", "+ Access the internals of this console through <strong>$irb</strong>.", "+ <strong>clear</strong> clears this console.", "+ <strong>history</strong> shows line history.", " ", "<strong>@Settings</strong>", "<strong>========</strong>", "You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:", " ", "+ <strong>max_lines</strong> (" + ((($b = this.settings)['$[]'] || $mm('[]')).call($b, "max_lines")) + "): max line count of this console", "+ <strong>max_depth</strong> (" + ((($c = this.settings)['$[]'] || $mm('[]')).call($c, "max_depth")) + "): max_depth in which to inspect outputted object", "+ <strong>show_hidden</strong> (" + ((($d = this.settings)['$[]'] || $mm('[]')).call($d, "show_hidden")) + "): flag to output hidden (not enumerable) properties of objects", "+ <strong>colorize</strong> (" + ((($e = this.settings)['$[]'] || $mm('[]')).call($e, "colorize")) + "): flag to colorize output (set to false if IRB is slow)", " ", " "]).$join || $mm('join')).call($a, "\n");
       return (($f = this).$print || $mm('print')).call($f, text);
     };
 
@@ -16655,16 +16671,8 @@ if (i == null) i = nil;
   var TMP_1, $a, $b, $c, self = __opal.top, __scope = __opal, nil = __opal.nil, $mm = __opal.mm, __breaker = __opal.breaker, __slice = __opal.slice, __gvars = __opal.gvars;
   return ($a = (($b = (($c = __scope.Document) == null ? __opal.cm("Document") : $c))['$ready?'] || $mm('ready?')), $a._p = (TMP_1 = function() {
 
-    var self = TMP_1._s || this, $a, $b, $c, $d, $e, $f, $g, $h, $i, def = ((typeof(self) === 'function') ? self.prototype : self);
+    var self = TMP_1._s || this, $a, $b, def = ((typeof(self) === 'function') ? self.prototype : self);
     
-    __scope.SAVED_CONSOLE_LOG = console.log;
-    __gvars["output"] = (($a = (($b = __scope.Element) == null ? __opal.cm("Element") : $b)).$find || $mm('find')).call($a, "#output");
-    __gvars["input"] = (($b = (($c = __scope.Element) == null ? __opal.cm("Element") : $c)).$find || $mm('find')).call($b, "#input");
-    __gvars["prompt"] = (($c = (($d = __scope.Element) == null ? __opal.cm("Element") : $d)).$find || $mm('find')).call($c, "#prompt");
-    __gvars["inputdiv"] = (($d = (($e = __scope.Element) == null ? __opal.cm("Element") : $e)).$find || $mm('find')).call($d, "#inputdiv");
-    __gvars["inputl"] = (($e = (($f = __scope.Element) == null ? __opal.cm("Element") : $f)).$find || $mm('find')).call($e, "#inputl");
-    __gvars["inputr"] = (($f = (($g = __scope.Element) == null ? __opal.cm("Element") : $g)).$find || $mm('find')).call($f, "#inputr");
-    __gvars["inputcopy"] = (($g = (($h = __scope.Element) == null ? __opal.cm("Element") : $h)).$find || $mm('find')).call($g, "#inputcopy");
     def.$help = function() {
       var $a;
       (($a = __gvars["irb"]).$help || $mm('help')).call($a);
@@ -16680,6 +16688,6 @@ if (i == null) i = nil;
       (($a = __gvars["irb"]).$history || $mm('history')).call($a);
       return null;
     };
-    return (($h = (($i = __scope.OpalIRB) == null ? __opal.cm("OpalIRB") : $i)).$init || $mm('init')).call($h);
+    return (($a = (($b = __scope.OpalIRB) == null ? __opal.cm("OpalIRB") : $b)).$init || $mm('init')).call($a);
   }, TMP_1._s = self, TMP_1), $a).call($b);
 })(Opal);
