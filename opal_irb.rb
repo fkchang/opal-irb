@@ -9,7 +9,7 @@ Document.ready? do
   $inputr    = Element.find('#inputr')
   $inputcopy = Element.find('#inputcopy')
 
-  class OpalREPL
+  class OpalIRB
 
     def self.reset_settings
       `localStorage.clear()`
@@ -36,9 +36,9 @@ Document.ready? do
 
     DEFAULT_SETTINGS = {
       # last_variable: '$_',
-      max_lines 500,
-      max_depth 2,
-      show_hidden false,
+      max_lines: 500,
+      max_depth: 2,
+      show_hidden: false,
       colorize: true,
     }
 
@@ -152,22 +152,22 @@ Document.ready? do
               "+ <strong>Esc</strong> toggles multiline mode.",
               "+ <strong>Up/Down arrow</strong> flips through line history.",
               # "+ <strong>#{@settings[:last_variable]}</strong> stores the last returned value.",
-              "+ Access the internals of this console through <strong>$repl</strong>.",
+              "+ Access the internals of this console through <strong>$irb</strong>.",
               "+ <strong>clear</strong> clears this console.",
               "+ <strong>history</strong> shows line history.",
               " ",
               "<strong>@Settings</strong>",
               "<strong>========</strong>",
-              "You can modify the behavior of this REPL by altering <strong>$repl.@settings</strong>:",
+              "You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:",
               " ",
               # "+ <strong>last_variable</strong> (#{@settings[:last_variable]}): variable name in which last returned value is stored",
               "+ <strong>maxLines</strong> (#{@settings[:maxLines]}): max line count of this console",
               "+ <strong>maxDepth</strong> (#{@settings[:maxDepth]}): max depth in which to inspect outputted object",
               "+ <strong>showHidden</strong> (#{@settings[:showHidden]}): flag to output hidden (not enumerable) properties of objects",
-              "+ <strong>colorize</strong> (#{@settings[:colorize]}): flag to colorize output (set to false if REPL is slow)",
+              "+ <strong>colorize</strong> (#{@settings[:colorize]}): flag to colorize output (set to false if IRB is slow)",
               " ",
-              "<strong>$repl.save_settings()</strong> will save settings to localStorage.",
-              "<strong>$repl.reset_settings()</strong> will reset settings to default.",
+              # "<strong>$irb.save_settings()</strong> will save settings to localStorage.",
+              # "<strong>$irb.reset_settings()</strong> will reset settings to default.",
               " "
              ].join("\n")
       print text
@@ -255,18 +255,18 @@ Document.ready? do
         # end
       end
 
-      # instantiate our REPL
-      repl =  OpalREPL.new( $output, $input, $prompt)
+      # instantiate our IRB
+      irb =  OpalIRB.new( $output, $input, $prompt)
 
       # replace console.log
 
       # def console.log(*args)
       #   SAVED_CONSOLE_LOG.apply console, args
-      #   repl.print *args
+      #   irb.print *args
       # end
 
-      # expose repl as $repl
-      $repl = repl
+      # expose irb as $irb
+      $irb = irb
 
       # initialize window
       resize_input()
@@ -274,9 +274,9 @@ Document.ready? do
 
 
       # print header
-      repl.print [
-                  "# Opal v#{OPAL_VERSION} REPL",
-                  "# <a href=\"https://github.com/fkchang/opal-repl\" target=\"_blank\">https://github.com/fkchang/opal-repl</a>",
+      irb.print [
+                  "# Opal v#{OPAL_VERSION} IRB",
+                  "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>",
                   "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
                   "#",
                   "# <strong>help</strong> for features and tips.",
@@ -286,19 +286,21 @@ Document.ready? do
     end
 
   end
-  # make this global so you can type help
+  # make this global so you can type help, these all return nil else last thing evaluated is returned - js function
   def help
-    $repl.help
+    $irb.help
+    `null`
   end
 
   def clear
-    $repl.clear
+    $irb.clear
+    `null`
   end
 
   def history
-    $repl.history
-
+    $irb.history
+    `null`
   end
 
-  OpalREPL.init()
+  OpalIRB.init()
 end

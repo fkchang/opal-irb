@@ -1,9 +1,10 @@
-opal-repl
+opal-irb
 =========
 
-A Opal (Ruby running on javascript) interactive console (REPL) as a
-webpage. Good for testing Opal interactively without having to install anything.
-Intended to be an interactive development too for Opal
+irb (interactive ruby) for Opal (Ruby running on javascript).  This is
+interactive console (REPL) on a webpage. Good for testing Opal/ruby
+interactively without having to install anything.  Intended to be part
+of a browser based interactive development tool for Opal
 
 Try it here: http://fkchang.github.com/opal-repl/
 
@@ -12,7 +13,7 @@ Initially based on https://github.com/larryng/coffeescript-repl
 
 Features
 --------
-* Opal REPL in your browser
+* Opal irb in your browser
 * Command history
 * Multiline support
 * Colorized output
