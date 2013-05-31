@@ -2,41 +2,32 @@ require 'opal'
 require "opal-jquery"
 require "opal-parser"
 
-
 class OpalIRB
   SAVED_CONSOLE_LOG = `console.log`
 
-  $output    = Element.find('#output')
-  $input     = Element.find('#input')
-  $prompt    = Element.find('#prompt')
-  $inputdiv  = Element.find('#inputdiv')
-  $inputl    = Element.find('#inputl')
-  $inputr    = Element.find('#inputr')
-  $inputcopy = Element.find('#inputcopy')
-  # make this global so you can type help, these all return nil else last thing evaluated is returned - js function
 
 
-  def self.reset_settings
+  def reset_settings
     `localStorage.clear()`
   end
 
-  def self.save_settings
+  def save_settings
     `localStorage.settings = JSON.stringify( #{@settings.map})`
   end
 
-  def self.resize_input(e)
-    width = $inputdiv.width() - $inputl.width()
-    content = $input.value()
+  def resize_input(e)
+    width = @inputdiv.width() - @inputl.width()
+    content = @input.value()
     # content.gsub /\n/, '<br/>'
-    $inputcopy.html content
+    @inputcopy.html content
 
-    $inputcopy.width width
-    $input.width width
-    $input.height $inputcopy.height() + 2
+    @inputcopy.width width
+    @input.width width
+    @input.height @inputcopy.height() + 2
   end
 
-  def self.scroll_to_bottom
-    `window.scrollTo( 0, #$prompt[0].offsetTop)`
+  def scroll_to_bottom
+    `window.scrollTo( 0, #@prompt[0].offsetTop)`
   end
 
   DEFAULT_SETTINGS = {
@@ -53,8 +44,9 @@ class OpalIRB
 
   attr_reader :settings
 
-  def initialize (output, input, prompt, settings={})
-    @output, @input, @prompt = output, input, prompt
+  def initialize (output, input, prompt, inputdiv, inputl, inputr, inputcopy, settings={})
+    @output, @input, @prompt, @inputdiv, @inputl, @inputr, @inputcopy =
+      output, input, prompt, inputdiv, inputl, inputr, inputcopy
     @history = []
     @historyi = -1
     @saved = ''
@@ -73,6 +65,8 @@ class OpalIRB
       myself.handle_keypress(evt)
     end
 
+    initialize_window
+    print_header
 
   end
 
@@ -238,31 +232,58 @@ class OpalIRB
     end
   end
 
+  def initialize_window
+    # initialize window
+    resize_input()
+    @input.focus()
+  end
+
+  def print_header
+    print [
+           "# Opal IRB", #"# Opal v#{OPAL_VERSION} IRB",
+           "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>",
+           "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
+           "#",
+           "# <strong>help</strong> for features and tips.",
+           "I got this 4!",
+           " "
+          ].join("\n")
+  end
+
   def self.init
+
+    output    = Element.find('#output')
+    input     = Element.find('#input')
+    prompt    = Element.find('#prompt')
+    inputdiv  = Element.find('#inputdiv')
+    inputl    = Element.find('#inputl')
+    inputr    = Element.find('#inputr')
+    inputcopy = Element.find('#inputcopy')
+
     # bind other handlers
-    $input.on :keydown do
-      scroll_to_bottom
+    input.on :keydown do
+      $irb.scroll_to_bottom
     end
     Element.find(`window`).on :resize do |e|
-      resize_input e
+      $irb.resize_input e
     end
 
-    $input.on :keyup do |e|
-      resize_input e
+    input.on :keyup do |e|
+      $irb.resize_input e
     end
-    $input.on :change do |e|
-      resize_input e
+    input.on :change do |e|
+      $irb.resize_input e
     end
 
     Element.find('html').on :click do |e|
-      # if e.clientY > $input[0].offsetTop
-      $input.focus()
+      # if e.clientY > input[0].offsetTop
+      input.focus()
       # end
     end
 
-    # instantiate our IRB
-    irb =  OpalIRB.new( $output, $input, $prompt)
-
+    # instantiate our IRB and expose irb as $irb
+    irb =  OpalIRB.new( output, input, prompt, inputdiv, inputl, inputr,
+                        inputcopy)
     # replace console.log
 
     # def console.log(*args)
@@ -270,23 +291,9 @@ class OpalIRB
     #   irb.print *args
     # end
 
-    # expose irb as $irb
     $irb = irb
 
-    # initialize window
-    resize_input()
-    $input.focus()
 
-
-    # print header
-    irb.print [
-               "# Opal IRB", #"# Opal v#{OPAL_VERSION} IRB",
-               "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>",
-               "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
-               "#",
-               "# <strong>help</strong> for features and tips.",
-               " "
-              ].join("\n")
 
   end
 
