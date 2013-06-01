@@ -239,13 +239,30 @@ class OpalIRB
            "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
            "#",
            "# <strong>help</strong> for features and tips.",
-           #"I got this 1!",
            " "
           ].join("\n")
   end
 
-  def self.create
+  def self.create_html(parent_container_id)
+    parent = Element.find(parent_container_id)
+    parent.html =  '      <div id="outputdiv">
+        <pre id="output"></pre>
+      </div>
+      <div id="inputdiv">
+        <div id="inputl">
+          <pre id="prompt">opal&gt;&nbsp;</pre>
+        </div>
+        <div id="inputr">
+          <textarea id="input" spellcheck="false"></textarea>
+          <div id="inputcopy"></div>
+        </div>
+'
+    puts parent.html
 
+  end
+
+  def self.create(container_id)
+    create_html(container_id)
     output    = Element.find('#output')
     input     = Element.find('#input')
     prompt    = Element.find('#prompt')

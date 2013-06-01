@@ -18,5 +18,5 @@ Document.ready? do
     `null`
   end
 
-  OpalIRB.create()
+  OpalIRB.create("#container")
 end
