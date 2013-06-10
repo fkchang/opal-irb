@@ -7,7 +7,7 @@ GIT
 
 GIT
   remote: git://github.com/opal/opal.git
-  revision: 873e2dd4deebe783deb669b3b8370ca0f69d4586
+  revision: a0a1931d976e82dce823fcccf856e07c7f4669cd
   specs:
     opal (0.3.44)
       racc
