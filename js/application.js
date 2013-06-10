@@ -16829,60 +16829,74 @@ Opal.eval = function(str) {
       /*:242*/return /*:242*/((($b = /*:242*/self.input) == null ? $b = $nil : $b).$focus || $mm('focus')).call(/*:242*//*:242*/$b);
     };
 
-    /*:245*/def.$print_header = function(/*:245*/) {
-      var self = this; if (self === $nil) { self = null }      var $a, $b;
-      /*:255*//*:255*//*:247*/return /*:247*/((($a = /*:247*/self) == null ? $a = $nil : $a).$print || $mm('print')).call(/*:247*//*:247*/$a, /*:247*/((($b = /*:247*/[/*:247*/"# Opal IRB", /*:248*/"# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>", /*:249*/"# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>", /*:250*/"#", /*:251*/"# <strong>help</strong> for features and tips.", /*:252*/" "]) == null ? $b = $nil : $b).$join || $mm('join')).call(/*:254*//*:252*/$b, /*:254*/"\n"));
+    /*:245*/__scope.CMD_LINE_METHOD_DEFINITIONS = /*:249*/[/*:249*/"def help\n                                   $irb.help\n                                   nil\n                                 end", /*:254*/"def clear\n                                   $irb.clear\n                                   nil\n                                 end", /*:259*/"def history\n                                   $irb.history\n                                   nil\n                                 end"];
+
+    /*:261*/def.$setup_cmd_line_methods = function(/*:261*/) {
+      var self = this; if (self === $nil) { self = null }      var TMP_3, $a, $b, $c;
+      /*:268*//*:268*//*:262*/return /*:262*//*:262*/($a = ((($b = /*:262*/(($c = __scope.CMD_LINE_METHOD_DEFINITIONS) === undefined ? __opal.cm("CMD_LINE_METHOD_DEFINITIONS") : $c)) == null ? $b = $nil : $b).$each || $mm('each')), $a._p = (TMP_3 = function(method_defn) {
+
+        var self = (TMP_3.hasOwnProperty('_s') ? TMP_3._s : this), $a, compiled;
+        
+        /*:263*//*:263*/compiled = /*:263*/((($a = /*:263*/self.parser) == null ? $a = $nil : $a).$parse || $mm('parse')).call(/*:264*//*:263*/$a, /*:264*/method_defn);
+        /*:264*/return eval(compiled);
+      }, TMP_3._s = self, TMP_3), $a).call(/*:262*//*:262*/$b);
     };
 
-    /*:257*/__opal.defs(OpalIRB, '$create_html', function(/*:257*/parent_container_id) {
+    /*:270*/def.$print_header = function(/*:270*/) {
+      var self = this; if (self === $nil) { self = null }      var $a, $b;
+      /*:280*//*:280*//*:272*/return /*:272*/((($a = /*:272*/self) == null ? $a = $nil : $a).$print || $mm('print')).call(/*:272*//*:272*/$a, /*:272*/((($b = /*:272*/[/*:272*/"# Opal IRB", /*:273*/"# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>", /*:274*/"# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>", /*:275*/"#", /*:276*/"# <strong>help</strong> for features and tips.", /*:277*/" "]) == null ? $b = $nil : $b).$join || $mm('join')).call(/*:279*//*:277*/$b, /*:279*/"\n"));
+    };
+
+    /*:282*/__opal.defs(OpalIRB, '$create_html', function(/*:282*/parent_container_id) {
       var self = this; if (self === $nil) { self = null }      var $a, $b, $c, $d, parent;
-      /*:258*//*:258*//*:258*/parent = /*:258*/((($a = /*:258*/(($b = __scope.Element) === undefined ? __opal.cm("Element") : $b)) == null ? $a = $nil : $a).$find || $mm('find')).call(/*:258*//*:258*/$a, /*:258*/parent_container_id);
-      /*:259*//*:259*/((($b = /*:259*/parent) == null ? $b = $nil : $b)['$html='] || $mm('html=')).call(/*:259*//*:259*/$b, /*:270*/"      <div id=\"outputdiv\">\n        <pre id=\"output\"></pre>\n      </div>\n      <div id=\"inputdiv\">\n        <div id=\"inputl\">\n          <pre id=\"prompt\">opal&gt;&nbsp;</pre>\n        </div>\n        <div id=\"inputr\">\n          <textarea id=\"input\" spellcheck=\"false\"></textarea>\n          <div id=\"inputcopy\"></div>\n        </div>\n");
-      /*:271*/return /*:271*/((($c = /*:271*/self) == null ? $c = $nil : $c).$puts || $mm('puts')).call(/*:271*//*:271*/$c, /*:271*/((($d = /*:271*/parent) == null ? $d = $nil : $d).$html || $mm('html')).call(/*:271*//*:271*/$d));
+      /*:283*//*:283*//*:283*/parent = /*:283*/((($a = /*:283*/(($b = __scope.Element) === undefined ? __opal.cm("Element") : $b)) == null ? $a = $nil : $a).$find || $mm('find')).call(/*:283*//*:283*/$a, /*:283*/parent_container_id);
+      /*:284*//*:284*/((($b = /*:284*/parent) == null ? $b = $nil : $b)['$html='] || $mm('html=')).call(/*:284*//*:284*/$b, /*:295*/"      <div id=\"outputdiv\">\n        <pre id=\"output\"></pre>\n      </div>\n      <div id=\"inputdiv\">\n        <div id=\"inputl\">\n          <pre id=\"prompt\">opal&gt;&nbsp;</pre>\n        </div>\n        <div id=\"inputr\">\n          <textarea id=\"input\" spellcheck=\"false\"></textarea>\n          <div id=\"inputcopy\"></div>\n        </div>\n");
+      /*:296*/return /*:296*/((($c = /*:296*/self) == null ? $c = $nil : $c).$puts || $mm('puts')).call(/*:296*//*:296*/$c, /*:296*/((($d = /*:296*/parent) == null ? $d = $nil : $d).$html || $mm('html')).call(/*:296*//*:296*/$d));
     });
 
-    /*:275*/__opal.defs(OpalIRB, '$create', function(/*:275*/container_id) {
-      var self = this; if (self === $nil) { self = null }      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, TMP_3, $k, TMP_4, $l, $m, $n, TMP_5, TMP_6, $o, TMP_7, $p, $q, $r, output, input, prompt, inputdiv, inputl, inputr, inputcopy, irb;
-      /*:276*//*:276*//*:276*/((($a = /*:276*/self) == null ? $a = $nil : $a).$create_html || $mm('create_html')).call(/*:276*//*:276*/$a, /*:276*/container_id);
-      /*:277*/output = /*:277*/((($b = /*:277*/(($c = __scope.Element) === undefined ? __opal.cm("Element") : $c)) == null ? $b = $nil : $b).$find || $mm('find')).call(/*:277*//*:277*/$b, /*:277*/"#output");
-      /*:278*/input = /*:278*/((($c = /*:278*/(($d = __scope.Element) === undefined ? __opal.cm("Element") : $d)) == null ? $c = $nil : $c).$find || $mm('find')).call(/*:278*//*:278*/$c, /*:278*/"#input");
-      /*:279*/prompt = /*:279*/((($d = /*:279*/(($e = __scope.Element) === undefined ? __opal.cm("Element") : $e)) == null ? $d = $nil : $d).$find || $mm('find')).call(/*:279*//*:279*/$d, /*:279*/"#prompt");
-      /*:280*/inputdiv = /*:280*/((($e = /*:280*/(($f = __scope.Element) === undefined ? __opal.cm("Element") : $f)) == null ? $e = $nil : $e).$find || $mm('find')).call(/*:280*//*:280*/$e, /*:280*/"#inputdiv");
-      /*:281*/inputl = /*:281*/((($f = /*:281*/(($g = __scope.Element) === undefined ? __opal.cm("Element") : $g)) == null ? $f = $nil : $f).$find || $mm('find')).call(/*:281*//*:281*/$f, /*:281*/"#inputl");
-      /*:282*/inputr = /*:282*/((($g = /*:282*/(($h = __scope.Element) === undefined ? __opal.cm("Element") : $h)) == null ? $g = $nil : $g).$find || $mm('find')).call(/*:282*//*:282*/$g, /*:282*/"#inputr");
-      /*:283*/inputcopy = /*:283*/((($h = /*:283*/(($i = __scope.Element) === undefined ? __opal.cm("Element") : $i)) == null ? $h = $nil : $h).$find || $mm('find')).call(/*:283*//*:283*/$h, /*:283*/"#inputcopy");
-      /*:286*/irb = /*:286*/((($i = /*:286*/(($j = __scope.OpalIRB) === undefined ? __opal.cm("OpalIRB") : $j)) == null ? $i = $nil : $i).$new || $mm('new')).call(/*:286*//*:286*/$i, /*:286*/output, /*:286*/input, /*:286*/prompt, /*:286*/inputdiv, /*:286*/inputl, /*:286*/inputr, /*:287*/inputcopy);
-      /*:290*//*:290*/($j = ((($k = /*:290*/input) == null ? $k = $nil : $k).$on || $mm('on')), $j._p = (TMP_3 = function() {
-
-        var self = (TMP_3.hasOwnProperty('_s') ? TMP_3._s : this), $a;
-        
-        /*:291*/return /*:291*/((($a = /*:291*/irb) == null ? $a = $nil : $a).$scroll_to_bottom || $mm('scroll_to_bottom')).call(/*:291*//*:291*/$a)
-      }, TMP_3._s = self, TMP_3), $j).call(/*:290*//*:290*/$k, /*:290*/"keydown");
-      /*:293*//*:293*/($j = ((($l = /*:293*/((($m = /*:293*/(($n = __scope.Element) === undefined ? __opal.cm("Element") : $n)) == null ? $m = $nil : $m).$find || $mm('find')).call(/*:293*//*:293*/$m, /*:293*/window)) == null ? $l = $nil : $l).$on || $mm('on')), $j._p = (TMP_4 = function(e) {
+    /*:300*/__opal.defs(OpalIRB, '$create', function(/*:300*/container_id) {
+      var self = this; if (self === $nil) { self = null }      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, TMP_4, $k, $l, TMP_5, $m, $n, $o, TMP_6, TMP_7, $p, TMP_8, $q, $r, $s, output, input, prompt, inputdiv, inputl, inputr, inputcopy, irb;
+      /*:301*//*:301*//*:301*/((($a = /*:301*/self) == null ? $a = $nil : $a).$create_html || $mm('create_html')).call(/*:301*//*:301*/$a, /*:301*/container_id);
+      /*:302*/output = /*:302*/((($b = /*:302*/(($c = __scope.Element) === undefined ? __opal.cm("Element") : $c)) == null ? $b = $nil : $b).$find || $mm('find')).call(/*:302*//*:302*/$b, /*:302*/"#output");
+      /*:303*/input = /*:303*/((($c = /*:303*/(($d = __scope.Element) === undefined ? __opal.cm("Element") : $d)) == null ? $c = $nil : $c).$find || $mm('find')).call(/*:303*//*:303*/$c, /*:303*/"#input");
+      /*:304*/prompt = /*:304*/((($d = /*:304*/(($e = __scope.Element) === undefined ? __opal.cm("Element") : $e)) == null ? $d = $nil : $d).$find || $mm('find')).call(/*:304*//*:304*/$d, /*:304*/"#prompt");
+      /*:305*/inputdiv = /*:305*/((($e = /*:305*/(($f = __scope.Element) === undefined ? __opal.cm("Element") : $f)) == null ? $e = $nil : $e).$find || $mm('find')).call(/*:305*//*:305*/$e, /*:305*/"#inputdiv");
+      /*:306*/inputl = /*:306*/((($f = /*:306*/(($g = __scope.Element) === undefined ? __opal.cm("Element") : $g)) == null ? $f = $nil : $f).$find || $mm('find')).call(/*:306*//*:306*/$f, /*:306*/"#inputl");
+      /*:307*/inputr = /*:307*/((($g = /*:307*/(($h = __scope.Element) === undefined ? __opal.cm("Element") : $h)) == null ? $g = $nil : $g).$find || $mm('find')).call(/*:307*//*:307*/$g, /*:307*/"#inputr");
+      /*:308*/inputcopy = /*:308*/((($h = /*:308*/(($i = __scope.Element) === undefined ? __opal.cm("Element") : $i)) == null ? $h = $nil : $h).$find || $mm('find')).call(/*:308*//*:308*/$h, /*:308*/"#inputcopy");
+      /*:311*/irb = /*:311*/((($i = /*:311*/(($j = __scope.OpalIRB) === undefined ? __opal.cm("OpalIRB") : $j)) == null ? $i = $nil : $i).$new || $mm('new')).call(/*:311*//*:311*/$i, /*:311*/output, /*:311*/input, /*:311*/prompt, /*:311*/inputdiv, /*:311*/inputl, /*:311*/inputr, /*:312*/inputcopy);
+      /*:313*/((($j = /*:313*/irb) == null ? $j = $nil : $j).$setup_cmd_line_methods || $mm('setup_cmd_line_methods')).call(/*:313*//*:313*/$j);
+      /*:315*//*:315*/($k = ((($l = /*:315*/input) == null ? $l = $nil : $l).$on || $mm('on')), $k._p = (TMP_4 = function() {
 
         var self = (TMP_4.hasOwnProperty('_s') ? TMP_4._s : this), $a;
         
-        /*:294*/return /*:294*/((($a = /*:294*/irb) == null ? $a = $nil : $a).$resize_input || $mm('resize_input')).call(/*:295*//*:294*/$a, /*:295*/e)
-      }, TMP_4._s = self, TMP_4), $j).call(/*:293*//*:293*/$l, /*:293*/"resize");
-      /*:297*//*:297*/($j = ((($n = /*:297*/input) == null ? $n = $nil : $n).$on || $mm('on')), $j._p = (TMP_5 = function(e) {
+        /*:316*/return /*:316*/((($a = /*:316*/irb) == null ? $a = $nil : $a).$scroll_to_bottom || $mm('scroll_to_bottom')).call(/*:316*//*:316*/$a)
+      }, TMP_4._s = self, TMP_4), $k).call(/*:315*//*:315*/$l, /*:315*/"keydown");
+      /*:318*//*:318*/($k = ((($m = /*:318*/((($n = /*:318*/(($o = __scope.Element) === undefined ? __opal.cm("Element") : $o)) == null ? $n = $nil : $n).$find || $mm('find')).call(/*:318*//*:318*/$n, /*:318*/window)) == null ? $m = $nil : $m).$on || $mm('on')), $k._p = (TMP_5 = function(e) {
 
         var self = (TMP_5.hasOwnProperty('_s') ? TMP_5._s : this), $a;
         
-        /*:298*/return /*:298*/((($a = /*:298*/irb) == null ? $a = $nil : $a).$resize_input || $mm('resize_input')).call(/*:299*//*:298*/$a, /*:299*/e)
-      }, TMP_5._s = self, TMP_5), $j).call(/*:297*//*:297*/$n, /*:297*/"keyup");
-      /*:300*//*:300*/($j = ((($o = /*:300*/input) == null ? $o = $nil : $o).$on || $mm('on')), $j._p = (TMP_6 = function(e) {
+        /*:319*/return /*:319*/((($a = /*:319*/irb) == null ? $a = $nil : $a).$resize_input || $mm('resize_input')).call(/*:320*//*:319*/$a, /*:320*/e)
+      }, TMP_5._s = self, TMP_5), $k).call(/*:318*//*:318*/$m, /*:318*/"resize");
+      /*:322*//*:322*/($k = ((($o = /*:322*/input) == null ? $o = $nil : $o).$on || $mm('on')), $k._p = (TMP_6 = function(e) {
 
         var self = (TMP_6.hasOwnProperty('_s') ? TMP_6._s : this), $a;
         
-        /*:301*/return /*:301*/((($a = /*:301*/irb) == null ? $a = $nil : $a).$resize_input || $mm('resize_input')).call(/*:302*//*:301*/$a, /*:302*/e)
-      }, TMP_6._s = self, TMP_6), $j).call(/*:300*//*:300*/$o, /*:300*/"change");
-      /*:304*//*:304*/($j = ((($p = /*:304*/((($q = /*:304*/(($r = __scope.Element) === undefined ? __opal.cm("Element") : $r)) == null ? $q = $nil : $q).$find || $mm('find')).call(/*:304*//*:304*/$q, /*:304*/"html")) == null ? $p = $nil : $p).$on || $mm('on')), $j._p = (TMP_7 = function(e) {
+        /*:323*/return /*:323*/((($a = /*:323*/irb) == null ? $a = $nil : $a).$resize_input || $mm('resize_input')).call(/*:324*//*:323*/$a, /*:324*/e)
+      }, TMP_6._s = self, TMP_6), $k).call(/*:322*//*:322*/$o, /*:322*/"keyup");
+      /*:325*//*:325*/($k = ((($p = /*:325*/input) == null ? $p = $nil : $p).$on || $mm('on')), $k._p = (TMP_7 = function(e) {
 
         var self = (TMP_7.hasOwnProperty('_s') ? TMP_7._s : this), $a;
         
-        /*:306*/return /*:306*/((($a = /*:306*/input) == null ? $a = $nil : $a).$focus || $mm('focus')).call(/*:306*//*:306*/$a)
-      }, TMP_7._s = self, TMP_7), $j).call(/*:304*//*:304*/$p, /*:304*/"click");
-      /*:317*/return /*:317*/__gvars["irb"] = /*:321*/irb;
+        /*:326*/return /*:326*/((($a = /*:326*/irb) == null ? $a = $nil : $a).$resize_input || $mm('resize_input')).call(/*:327*//*:326*/$a, /*:327*/e)
+      }, TMP_7._s = self, TMP_7), $k).call(/*:325*//*:325*/$p, /*:325*/"change");
+      /*:329*//*:329*/($k = ((($q = /*:329*/((($r = /*:329*/(($s = __scope.Element) === undefined ? __opal.cm("Element") : $s)) == null ? $r = $nil : $r).$find || $mm('find')).call(/*:329*//*:329*/$r, /*:329*/"html")) == null ? $q = $nil : $q).$on || $mm('on')), $k._p = (TMP_8 = function(e) {
+
+        var self = (TMP_8.hasOwnProperty('_s') ? TMP_8._s : this), $a;
+        
+        /*:331*/return /*:331*/((($a = /*:331*/input) == null ? $a = $nil : $a).$focus || $mm('focus')).call(/*:331*//*:331*/$a)
+      }, TMP_8._s = self, TMP_8), $k).call(/*:329*//*:329*/$q, /*:329*/"click");
+      /*:342*/return /*:342*/__gvars["irb"] = /*:346*/irb;
     });
 
     /*:5*/return /*:5*/null;
@@ -16890,30 +16904,15 @@ Opal.eval = function(str) {
 })(Opal);
 /* Generated by Opal 0.3.44 */
 /*-file:/Users/fkchang/src/opal-irb/lib/application.rb-*/(function(__opal) {
-  var TMP_1, $a, $b, $c, self = __opal.top, __scope = __opal, $mm = __opal.mm, $nil = __opal.nil, __breaker = __opal.breaker, __slice = __opal.slice, __gvars = __opal.gvars;
+  var TMP_1, $a, $b, $c, self = __opal.top, __scope = __opal, $mm = __opal.mm, $nil = __opal.nil, __breaker = __opal.breaker, __slice = __opal.slice;
   /*:1*//*:1*//*:1*/;
   /*:2*/;
   /*:3*/;
   /*:4*/;
   /*:5*/return /*:5*//*:5*/($a = ((($b = /*:5*/(($c = __scope.Document) === undefined ? __opal.cm("Document") : $c)) == null ? $b = $nil : $b)['$ready?'] || $mm('ready?')), $a._p = (TMP_1 = function() {
 
-    var self = (TMP_1.hasOwnProperty('_s') ? TMP_1._s : this), $a, $b, def = ((typeof(self) === 'function') ? self.prototype : self);
+    var self = (TMP_1.hasOwnProperty('_s') ? TMP_1._s : this), $a, $b;
     
-    /*:6*//*:6*/def.$help = function(/*:6*/) {
-      var self = this; if (self === $nil) { self = null }      var $a;
-      /*:7*//*:7*//*:7*/((($a = /*:7*/__gvars["irb"]) == null ? $a = $nil : $a).$help || $mm('help')).call(/*:7*//*:7*/$a);
-      /*:8*/return null;
-    };
-    /*:11*/def.$clear = function(/*:11*/) {
-      var self = this; if (self === $nil) { self = null }      var $a;
-      /*:12*//*:12*//*:12*/((($a = /*:12*/__gvars["irb"]) == null ? $a = $nil : $a).$clear || $mm('clear')).call(/*:12*//*:12*/$a);
-      /*:13*/return null;
-    };
-    /*:16*/def.$history = function(/*:16*/) {
-      var self = this; if (self === $nil) { self = null }      var $a;
-      /*:17*//*:17*//*:17*/((($a = /*:17*/__gvars["irb"]) == null ? $a = $nil : $a).$history || $mm('history')).call(/*:17*//*:17*/$a);
-      /*:18*/return null;
-    };
-    /*:21*/return /*:21*/((($a = /*:21*/(($b = __scope.OpalIRB) === undefined ? __opal.cm("OpalIRB") : $b)) == null ? $a = $nil : $a).$create || $mm('create')).call(/*:21*//*:21*/$a, /*:21*/"#container");
+    /*:6*/return /*:6*/((($a = /*:6*/(($b = __scope.OpalIRB) === undefined ? __opal.cm("OpalIRB") : $b)) == null ? $a = $nil : $a).$create || $mm('create')).call(/*:6*//*:6*/$a, /*:6*/"#container")
   }, TMP_1._s = self, TMP_1), $a).call(/*:5*//*:5*/$b);
 })(Opal);

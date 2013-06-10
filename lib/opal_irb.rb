@@ -235,6 +235,31 @@ class OpalIRB
     @input.focus()
   end
 
+  CMD_LINE_METHOD_DEFINITIONS = [
+                                 'def help
+                                   $irb.help
+                                   nil
+                                 end',
+
+                                 'def clear
+                                   $irb.clear
+                                   nil
+                                 end',
+
+                                 'def history
+                                   $irb.history
+                                   nil
+                                 end'
+                                ]
+  def setup_cmd_line_methods
+    CMD_LINE_METHOD_DEFINITIONS.each {|method_defn|
+      compiled = @parser.parse method_defn
+      `eval(compiled)`
+    }
+
+
+  end
+
   def print_header
     print [
            "# Opal IRB", #"# Opal v#{OPAL_VERSION} IRB",
@@ -277,7 +302,7 @@ class OpalIRB
     # instantiate our IRB and expose irb as $irb
     irb =  OpalIRB.new( output, input, prompt, inputdiv, inputl, inputr,
                         inputcopy)
-
+    irb.setup_cmd_line_methods
     # bind other handlers
     input.on :keydown do
       irb.scroll_to_bottom
