@@ -50,6 +50,8 @@ class OpalIRB
     @multiline = false
     @settings = DEFAULT_SETTINGS.clone
 
+    @parser = Opal::Parser.new
+
     # if localStorage and localStorage.settings
     #   for k, v of JSON.parse(localStorage.settings)
     #     @settings[k] = v
@@ -109,7 +111,8 @@ class OpalIRB
 
   def process_saved
     begin
-      compiled = Opal::Parser.new.parse @saved
+      #compiled = Opal::Parser.new.parse @saved
+      compiled = @parser.parse @saved, :irb => true
       # doesn't work w/th opal 0.3.27 compiled = compiled[14..-7] # strip off anonymous function so variables will persist
       # compiled = compiled.split("\n")[2..-2].join("\n")
       # compiled = compiled.gsub("return", "")

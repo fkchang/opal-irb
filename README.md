@@ -21,14 +21,10 @@ Features
 * Customizable settings
 * 100% HTML and JavaScript
 
-Gotchas
--------
-* can't remember local variables, have to use globals (coz running opal parser puts everything in anonymous functions)
-
 
 Roadmap
 -------
-* Figure out how to keep variables
+* Figure out how to keep variables -- DONE 6/10/2013, thx @adambeynon
 * have it automatically know when a complete ruby expression is there instead of multi line mode like irb
 * Add more irb functionality
 * Make embeddable in any app

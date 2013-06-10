@@ -1,7 +1,7 @@
 source 'https://rubygems.org'
-gem 'opal'# ,  "0.3.27"
+gem 'opal', :git => "git://github.com/opal/opal.git"
 gem 'opal-spec'
-gem 'opal-jquery'
+gem 'opal-jquery', :git => "git://github.com/opal/opal-jquery.git"
 gem 'guard'
 gem 'guard-process'
 gem 'rake'
