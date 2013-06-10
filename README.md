@@ -25,6 +25,7 @@ Features
 Roadmap
 -------
 * Figure out how to keep variables -- DONE 6/10/2013, thx @adambeynon
+* Some demos to show how convenient it can be
 * have it automatically know when a complete ruby expression is there instead of multi line mode like irb
 * Add more irb functionality
 * Make embeddable in any app
