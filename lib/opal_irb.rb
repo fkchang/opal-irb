@@ -181,7 +181,7 @@ class OpalIRB
   end
 
   def handle_keypress(e)
-    log e.which
+    # log e.which
 
     case e.which
     when 13                   # return
