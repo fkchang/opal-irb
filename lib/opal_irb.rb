@@ -142,13 +142,12 @@ class OpalIRB
 
   # help
   def help
-    `debugger;`
     text = [
             " ",
             "<strong>Features</strong>",
             "<strong>========</strong>",
             "+ <strong>Esc</strong> toggles multiline mode.",
-            "+ <strong>Up/Down arrow</strong> flips through line history.",
+            "+ <strong>Up/Down arrow and ctrl-p/ctrl-n</strong> flips through line history.",
             # "+ <strong>#{@settings[:last_variable]}</strong> stores the last returned value.",
             "+ Access the internals of this console through <strong>$irb</strong>.",
             "+ <strong>clear</strong> clears this console.",
@@ -183,6 +182,7 @@ class OpalIRB
 
   def handle_keypress(e)
     log e.which
+
     case e.which
     when 13                   # return
       e.prevent_default()
@@ -216,18 +216,38 @@ class OpalIRB
 
     when 38               # up arrow
       e.prevent_default
-
-      if @historyi < @history.length-1
-        @historyi += 1
-        @input.value =  @history[@historyi]
-      end
+      show_previous_history
     when 40               # down arrow
       e.prevent_default
-
-      if @historyi > 0
-        @historyi += -1
-        @input.value =  @history[@historyi]
+      show_next_history
+    when 80                     # p
+      if e.ctrl_key
+        e.prevent_default
+        show_previous_history
       end
+
+    when 78                     # n
+      if e.ctrl_key
+        e.prevent_default
+        show_next_history
+      end
+
+    end
+
+  end
+
+  def show_previous_history
+    if @historyi < @history.length-1
+      @historyi += 1
+      @input.value =  @history[@historyi]
+    end
+
+  end
+
+  def show_next_history
+    if @historyi > 0
+      @historyi += -1
+      @input.value =  @history[@historyi]
     end
   end
 

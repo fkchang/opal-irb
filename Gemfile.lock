@@ -1,19 +1,19 @@
 GIT
-  remote: git://github.com/opal/opal-jquery.git
-  revision: 2f38015160832b62a70890519dc34ce9d1648630
-  specs:
-    opal-jquery (0.0.8)
-      opal (>= 0.3.43)
-
-GIT
   remote: git://github.com/opal/opal.git
-  revision: a0a1931d976e82dce823fcccf856e07c7f4669cd
+  revision: 4a33888d2ec71e0651b56f5a07456e32a8524269
   specs:
     opal (0.3.44)
       racc
       rake
       source_map
       sprockets
+
+GIT
+  remote: git@github.com:fkchang/opal-jquery.git
+  revision: 117a3966bd8a11598a1ae9382648ba6c2617aea4
+  specs:
+    opal-jquery (0.0.8)
+      opal (>= 0.3.43)
 
 GEM
   remote: https://rubygems.org/
@@ -33,7 +33,7 @@ GEM
       spoon (~> 0.0.1)
     hike (1.2.3)
     json (1.8.0)
-    listen (1.1.6)
+    listen (1.2.0)
       rb-fsevent (>= 0.9.3)
       rb-inotify (>= 0.9)
       rb-kqueue (>= 0.2)
