@@ -16843,8 +16843,8 @@ Opal.eval = function(str) {
     };
 
     /*:270*/def.$print_header = function(/*:270*/) {
-      var self = this; if (self === $nil) { self = null }      var $a, $b;
-      /*:280*//*:280*//*:272*/return /*:272*/((($a = /*:272*/self) == null ? $a = $nil : $a).$print || $mm('print')).call(/*:272*//*:272*/$a, /*:272*/((($b = /*:272*/[/*:272*/"# Opal IRB", /*:273*/"# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>", /*:274*/"# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>", /*:275*/"#", /*:276*/"# <strong>help</strong> for features and tips.", /*:277*/" "]) == null ? $b = $nil : $b).$join || $mm('join')).call(/*:279*//*:277*/$b, /*:279*/"\n"));
+      var self = this; if (self === $nil) { self = null }      var $a, $b, $c, $d, $e;
+      /*:280*//*:280*//*:272*/return /*:272*/((($a = /*:272*/self) == null ? $a = $nil : $a).$print || $mm('print')).call(/*:272*//*:272*/$a, /*:272*/((($b = /*:272*/[/*:272*/"# Opal v" + ($c = (/*:272*/(($d = (/*:272*/(($e = __scope.Opal) === undefined ? __opal.cm("Opal") : $e))._scope).VERSION == null ? $d.cm("VERSION") : $d.VERSION)), $c == null ? '' : $c) + " IRB", /*:273*/"# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>", /*:274*/"# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>", /*:275*/"#", /*:276*/"# <strong>help</strong> for features and tips.", /*:277*/" "]) == null ? $b = $nil : $b).$join || $mm('join')).call(/*:279*//*:277*/$b, /*:279*/"\n"));
     };
 
     /*:282*/__opal.defs(OpalIRB, '$create_html', function(/*:282*/parent_container_id) {

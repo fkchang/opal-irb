@@ -262,7 +262,7 @@ class OpalIRB
 
   def print_header
     print [
-           "# Opal IRB", #"# Opal v#{OPAL_VERSION} IRB",
+           "# Opal v#{Opal::VERSION} IRB", #"# Opal v#{OPAL_VERSION} IRB",
            "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>",
            "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
            "#",
