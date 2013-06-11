@@ -142,6 +142,7 @@ class OpalIRB
 
   # help
   def help
+    `debugger;`
     text = [
             " ",
             "<strong>Features</strong>",
@@ -171,7 +172,7 @@ class OpalIRB
   end
 
   def log thing
-    `console.log(#{thing})`
+    `console.orig_log(#{thing})`
   end
 
   def history
@@ -285,7 +286,7 @@ class OpalIRB
           <div id="inputcopy"></div>
         </div>
 '
-    puts parent.html
+    # puts parent.html
 
   end
 
@@ -331,6 +332,15 @@ class OpalIRB
     #   irb.print *args
     # end
 
+    %x|
+    console.orig_log = console.log
+    console.log = function() {
+      var args;
+      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      console.orig_log(args);
+      Opal.gvars["irb"].$print(args);
+    };
+    |
     $irb = irb
 
 
