@@ -142,7 +142,7 @@ class OpalIRB
             " ",
             "<strong>Features</strong>",
             "<strong>========</strong>",
-            "+ <strong>Esc</strong> toggles multiline mode.",
+            "+ <strong>Esc</strong> enters multiline mode.",
             "+ <strong>Up/Down arrow and ctrl-p/ctrl-n</strong> flips through line history.",
             # "+ <strong>#{@settings[:last_variable]}</strong> stores the last returned value.",
             "+ Access the internals of this console through <strong>$irb</strong>.",
