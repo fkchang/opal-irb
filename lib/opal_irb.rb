@@ -88,10 +88,6 @@ class OpalIRB
     }.inspect
   end
 
-  def set_prompt
-    s = @multiline ? '------' : 'opal'
-    @prompt.html = "#{s}&gt;&nbsp;"
-  end
 
   def add_to_history(s)
     @history.unshift s
@@ -170,6 +166,7 @@ class OpalIRB
     print text
   end
 
+  # only outputs to console log, use for debugging
   def log thing
     `console.orig_log(#{thing})`
   end
@@ -199,20 +196,6 @@ class OpalIRB
       end
     when 27                   # escape
       e.prevent_default
-      # input = @input.value
-
-      # if input and @multiline and @saved
-      #   input = @input.value
-      #   @input.value ''
-
-      #   print @prompt.html() + escape_html(input)
-      #   add_to_saved input
-      #   process_saved()
-      # elsif @multiline and @saved
-      #   process_saved()
-      # end
-      # @multiline = ! @multiline
-      # set_prompt()
       open_multiline_dialog
     when 38               # up arrow
       e.prevent_default
@@ -225,7 +208,6 @@ class OpalIRB
         e.prevent_default
         show_previous_history
       end
-
     when 78                     # n
       if e.ctrl_key
         e.prevent_default
@@ -345,13 +327,6 @@ class OpalIRB
       # end
     end
 
-    # replace console.log
-    # SAVED_CONSOLE_LOG = `console.log`
-    # def console.log(*args)
-    #   SAVED_CONSOLE_LOG.apply console, args
-    #   irb.print *args
-    # end
-
     %x|
     console.orig_log = console.log
     console.log = function() {
@@ -374,6 +349,8 @@ class OpalIRB
                             show: "blind",
                             hide: "explode",
                             modal: true,
+                            width: "500px",
+                            title: "Multi Line Edit",
                             buttons: {
                               "Run it":  function() {
                                 $( this ).dialog( "close" );
@@ -414,7 +391,6 @@ class OpalIRB
     add_to_saved multi_line_value
     print multi_line_value
     process_saved
-    # set_prompt
     @input.value = ""
   end
 
