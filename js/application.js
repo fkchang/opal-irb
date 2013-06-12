@@ -16614,7 +16614,7 @@ Opal.eval = function(str) {
     };
 
     /*:190*/def.$handle_keypress = function(/*:190*/e) {
-      var self = this; if (self === $nil) { self = null }      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k, $l, $m, $n, $o, $p, $q, $r, $s, $t, $u, $v, $w, $x, $y, $z, $aa, $ab, $ac, $ad, $ae, $af, $ag, $ah, $ai, $aj, $ak, $al, $case, input;
+      var self = this; if (self === $nil) { self = null }      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, $k, $l, $m, $n, $o, $p, $q, $r, $s, $t, $u, $v, $w, $x, $y, $z, $aa, $ab, $ac, $case, input;
       /*:244*//*:244*//*:193*/return /*:193*/(function() { $case = /*:193*/((($a = /*:193*/e) == null ? $a = $nil : $a).$which || $mm('which')).call(/*:193*//*:193*/$a);/*:195*/if (/*:193*/((($j = /*:194*/(13)) == null ? $j = $nil : $j)['$==='] || $mm('===')).call(/*:193*//*:194*/$j, /*:193*/$case)) {
       /*:195*//*:195*/((($b = /*:195*/e) == null ? $b = $nil : $b).$prevent_default || $mm('prevent_default')).call(/*:195*//*:195*/$b);
       /*:196*/input = /*:196*/((($c = /*:196*/self.input) == null ? $c = $nil : $c).$value || $mm('value')).call(/*:196*//*:196*/$c);
@@ -16631,43 +16631,30 @@ Opal.eval = function(str) {
         /*:193*/return /*:193*/null
       };
       }
-      else /*:208*/if (/*:222*/((($x = /*:207*/(27)) == null ? $x = $nil : $x)['$==='] || $mm('===')).call(/*:222*//*:207*/$x, /*:222*/$case)) {
+      else /*:208*/if (/*:224*/((($o = /*:207*/(27)) == null ? $o = $nil : $o)['$==='] || $mm('===')).call(/*:224*//*:207*/$o, /*:224*/$case)) {
       /*:208*//*:208*/((($m = /*:208*/e) == null ? $m = $nil : $m).$prevent_default || $mm('prevent_default')).call(/*:208*//*:208*/$m);
-      /*:209*/input = /*:209*/((($n = /*:209*/self.input) == null ? $n = $nil : $n).$value || $mm('value')).call(/*:209*//*:209*/$n);
-      /*:211*/if (($o = /*:211*/($p = /*:211*/(($p = /*:211*/input !== false && /*:211*/input != null) ? /*:211*/self.multiline : $p), $p !== false && $p != null ? /*:211*/self.saved : $p)) !== false && $o != null) {
-        /*:212*//*:212*/input = /*:212*/((($o = /*:212*/self.input) == null ? $o = $nil : $o).$value || $mm('value')).call(/*:212*//*:212*/$o);
-        /*:213*/((($p = /*:213*/self.input) == null ? $p = $nil : $p).$value || $mm('value')).call(/*:215*//*:213*/$p, /*:215*/"");
-        /*:216*/((($q = /*:216*/self) == null ? $q = $nil : $q).$print || $mm('print')).call(/*:216*//*:216*/$q, /*:216*/($r = /*:215*/((($t = /*:215*/self.prompt) == null ? $t = $nil : $t).$html || $mm('html')).call(/*:215*//*:215*/$t), $s = /*:215*/((($u = /*:215*/self) == null ? $u = $nil : $u).$escape_html || $mm('escape_html')).call(/*:215*//*:215*/$u, /*:215*/input), typeof($r) === 'number' ? $r + $s : $r['$+']($s)));
-        /*:217*/((($r = /*:217*/self) == null ? $r = $nil : $r).$add_to_saved || $mm('add_to_saved')).call(/*:217*//*:217*/$r, /*:217*/input);
-        /*:217*/((($s = /*:217*/self) == null ? $s = $nil : $s).$process_saved || $mm('process_saved')).call(/*:217*//*:217*/$s);
-        } else {
-        /*:218*/if (($v = /*:218*/($w = /*:218*/self.multiline, $w !== false && $w != null ? /*:218*/self.saved : $w)) !== false && $v != null) {
-          /*:219*/((($v = /*:219*/self) == null ? $v = $nil : $v).$process_saved || $mm('process_saved')).call(/*:219*//*:219*/$v)
-        }
-      };
-      /*:221*/self.multiline = /*:222*/($w = /*:221*/self.multiline, ($w === null || $w === false));
-      /*:222*/return /*:222*/((($w = /*:222*/self) == null ? $w = $nil : $w).$set_prompt || $mm('set_prompt')).call(/*:222*//*:222*/$w);
+      /*:224*/return /*:224*/((($n = /*:224*/self) == null ? $n = $nil : $n).$open_multiline_dialog || $mm('open_multiline_dialog')).call(/*:224*//*:224*/$n);
       }
-      else /*:225*/if (/*:227*/((($aa = /*:224*/(38)) == null ? $aa = $nil : $aa)['$==='] || $mm('===')).call(/*:227*//*:224*/$aa, /*:227*/$case)) {
-      /*:225*//*:225*/((($y = /*:225*/e) == null ? $y = $nil : $y).$prevent_default || $mm('prevent_default')).call(/*:225*//*:225*/$y);
-      /*:227*/return /*:227*/((($z = /*:227*/self) == null ? $z = $nil : $z).$show_previous_history || $mm('show_previous_history')).call(/*:227*//*:227*/$z);
+      else /*:225*/if (/*:227*/((($r = /*:224*/(38)) == null ? $r = $nil : $r)['$==='] || $mm('===')).call(/*:227*//*:224*/$r, /*:227*/$case)) {
+      /*:225*//*:225*/((($p = /*:225*/e) == null ? $p = $nil : $p).$prevent_default || $mm('prevent_default')).call(/*:225*//*:225*/$p);
+      /*:227*/return /*:227*/((($q = /*:227*/self) == null ? $q = $nil : $q).$show_previous_history || $mm('show_previous_history')).call(/*:227*//*:227*/$q);
       }
-      else /*:228*/if (/*:230*/((($ad = /*:227*/(40)) == null ? $ad = $nil : $ad)['$==='] || $mm('===')).call(/*:230*//*:227*/$ad, /*:230*/$case)) {
-      /*:228*//*:228*/((($ab = /*:228*/e) == null ? $ab = $nil : $ab).$prevent_default || $mm('prevent_default')).call(/*:228*//*:228*/$ab);
-      /*:230*/return /*:230*/((($ac = /*:230*/self) == null ? $ac = $nil : $ac).$show_next_history || $mm('show_next_history')).call(/*:230*//*:230*/$ac);
+      else /*:228*/if (/*:230*/((($u = /*:227*/(40)) == null ? $u = $nil : $u)['$==='] || $mm('===')).call(/*:230*//*:227*/$u, /*:230*/$case)) {
+      /*:228*//*:228*/((($s = /*:228*/e) == null ? $s = $nil : $s).$prevent_default || $mm('prevent_default')).call(/*:228*//*:228*/$s);
+      /*:230*/return /*:230*/((($t = /*:230*/self) == null ? $t = $nil : $t).$show_next_history || $mm('show_next_history')).call(/*:230*//*:230*/$t);
       }
-      else /*:231*/if (/*:230*/((($ah = /*:230*/(80)) == null ? $ah = $nil : $ah)['$==='] || $mm('===')).call(/*:230*//*:230*/$ah, /*:230*/$case)) {
-      /*:231*/if (($ae = /*:231*/((($af = /*:231*/e) == null ? $af = $nil : $af).$ctrl_key || $mm('ctrl_key')).call(/*:231*//*:231*/$af)) !== false && $ae != null) {
-        /*:232*//*:232*/((($ae = /*:232*/e) == null ? $ae = $nil : $ae).$prevent_default || $mm('prevent_default')).call(/*:232*//*:232*/$ae);
-        /*:234*/return /*:234*/((($ag = /*:234*/self) == null ? $ag = $nil : $ag).$show_previous_history || $mm('show_previous_history')).call(/*:234*//*:234*/$ag);
+      else /*:231*/if (/*:230*/((($y = /*:230*/(80)) == null ? $y = $nil : $y)['$==='] || $mm('===')).call(/*:230*//*:230*/$y, /*:230*/$case)) {
+      /*:231*/if (($v = /*:231*/((($w = /*:231*/e) == null ? $w = $nil : $w).$ctrl_key || $mm('ctrl_key')).call(/*:231*//*:231*/$w)) !== false && $v != null) {
+        /*:232*//*:232*/((($v = /*:232*/e) == null ? $v = $nil : $v).$prevent_default || $mm('prevent_default')).call(/*:232*//*:232*/$v);
+        /*:234*/return /*:234*/((($x = /*:234*/self) == null ? $x = $nil : $x).$show_previous_history || $mm('show_previous_history')).call(/*:234*//*:234*/$x);
         } else {
         /*:230*/return /*:230*/null
       }
       }
-      else /*:237*/if (/*:230*/((($al = /*:236*/(78)) == null ? $al = $nil : $al)['$==='] || $mm('===')).call(/*:230*//*:236*/$al, /*:230*/$case)) {
-      /*:237*/if (($ai = /*:237*/((($aj = /*:237*/e) == null ? $aj = $nil : $aj).$ctrl_key || $mm('ctrl_key')).call(/*:237*//*:237*/$aj)) !== false && $ai != null) {
-        /*:238*//*:238*/((($ai = /*:238*/e) == null ? $ai = $nil : $ai).$prevent_default || $mm('prevent_default')).call(/*:238*//*:238*/$ai);
-        /*:240*/return /*:240*/((($ak = /*:240*/self) == null ? $ak = $nil : $ak).$show_next_history || $mm('show_next_history')).call(/*:240*//*:240*/$ak);
+      else /*:237*/if (/*:230*/((($ac = /*:236*/(78)) == null ? $ac = $nil : $ac)['$==='] || $mm('===')).call(/*:230*//*:236*/$ac, /*:230*/$case)) {
+      /*:237*/if (($z = /*:237*/((($aa = /*:237*/e) == null ? $aa = $nil : $aa).$ctrl_key || $mm('ctrl_key')).call(/*:237*//*:237*/$aa)) !== false && $z != null) {
+        /*:238*//*:238*/((($z = /*:238*/e) == null ? $z = $nil : $z).$prevent_default || $mm('prevent_default')).call(/*:238*//*:238*/$z);
+        /*:240*/return /*:240*/((($ab = /*:240*/self) == null ? $ab = $nil : $ab).$show_next_history || $mm('show_next_history')).call(/*:240*//*:240*/$ab);
         } else {
         /*:230*/return /*:230*/null
       }
@@ -16776,8 +16763,60 @@ Opal.eval = function(str) {
       Opal.gvars["irb"].$print(args);
     };
     
-      /*:372*/return /*:372*/__gvars["irb"] = /*:376*/irb;
+      /*:372*/__gvars["irb"] = /*:374*/irb;
+      /*:374*/return /*:374*/((($k = /*:374*/irb) == null ? $k = $nil : $k).$setup_multi_line || $mm('setup_multi_line')).call(/*:374*//*:374*/$k);
     });
+
+    /*:378*/def.$setup_multi_line = function(/*:378*/) {
+      var self = this; if (self === $nil) { self = null }      
+      /*:388*//*:388*//*:388*/
+    $( ".dialog" ).dialog({
+                            autoOpen: false,
+                            show: "blind",
+                            hide: "explode",
+                            modal: true,
+                            buttons: {
+                              "Run it":  function() {
+                                $( this ).dialog( "close" );
+                                /*:388*/self.$process_multiline();
+                              },
+                              "Cancel":  function() {
+                                $( this ).dialog( "close" );
+                           },
+                        }
+          });
+
+      openOpalIrbMultiLineDialog = function() {
+          $( ".dialog" ).dialog( "open" );
+          setTimeout(function(){editor.refresh();}, 20);
+      }
+      
+      /*:401*/return /*:401*/self.editor = /*:409*/
+      editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
+              {mode: "ruby",
+                  lineNumbers: true,
+                  matchBrackets: true,
+                  theme: "default"
+              });
+
+   ;
+    };
+
+    /*:413*/def.$open_multiline_dialog = function(/*:413*/) {
+      var self = this; if (self === $nil) { self = null }      var $a, $b;
+      /*:414*//*:414*//*:414*/((($a = /*:414*/self.editor) == null ? $a = $nil : $a).$setValue || $mm('setValue')).call(/*:414*//*:414*/$a, /*:414*/((($b = /*:414*/self.input) == null ? $b = $nil : $b).$value || $mm('value')).call(/*:414*//*:414*/$b));
+      /*:415*/return openOpalIrbMultiLineDialog();
+    };
+
+    /*:419*/def.$process_multiline = function(/*:419*/) {
+      var self = this; if (self === $nil) { self = null }      var $a, $b, $c, $d, $e, $f, $g, multi_line_value;
+      /*:420*//*:420*//*:420*/multi_line_value = /*:420*/((($a = /*:420*/((($b = /*:420*/self.editor) == null ? $b = $nil : $b).$getValue || $mm('getValue')).call(/*:420*//*:420*/$b)) == null ? $a = $nil : $a).$sub || $mm('sub')).call(/*:420*//*:420*/$a, /*:420*//(\n)+$/, /*:420*/"");
+      /*:422*/((($c = /*:422*/self) == null ? $c = $nil : $c).$add_to_saved || $mm('add_to_saved')).call(/*:422*//*:422*/$c, /*:422*/multi_line_value);
+      /*:423*/((($d = /*:423*/self) == null ? $d = $nil : $d).$print || $mm('print')).call(/*:423*//*:423*/$d, /*:423*/multi_line_value);
+      /*:424*/((($e = /*:424*/self) == null ? $e = $nil : $e).$process_saved || $mm('process_saved')).call(/*:424*//*:424*/$e);
+      /*:425*/((($f = /*:425*/self) == null ? $f = $nil : $f).$set_prompt || $mm('set_prompt')).call(/*:425*//*:425*/$f);
+      /*:425*/return /*:425*//*:425*/((($g = /*:425*/self.input) == null ? $g = $nil : $g)['$value='] || $mm('value=')).call(/*:425*//*:425*/$g, /*:426*/"");
+    };
 
     /*:5*/return /*:5*/null;
   })(self, null);

@@ -92,13 +92,50 @@
       .s_regexp { color: #f44 }
 
     </style>
-  </head>
+   <link rel="stylesheet" href="http://codemirror.net/lib/codemirror.css"/>
   <body>
     <div id="container">
     </div>
+    <div id="dialog" class="dialog" style="display:none" >
+      <textarea name="multi_line_input" id="multi_line_input"></textarea>
+    </div>
 
+    <script src="http://codemirror.net/lib/codemirror.js"></script>
+    <script src="http://codemirror.net/mode/ruby/ruby.js"></script>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" ></script>
     <script src="js/nodeutil.js"></script>
     <script src="js/application.js"></script>
+    <link type="text/css" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.16/themes/base/jquery-ui.css" rel="stylesheet" />
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
   </body>
+  <script type="text/javascript">
+/*
+      $(function() {
+          $( ".dialog" ).dialog({
+              autoOpen: false,
+              show: "blind",
+              hide: "explode",
+              modal: true,
+              buttons: {
+                  "Run it":  function() {
+                      $( this ).dialog( "close" );
+                  },
+                  "Cancel":  function() {
+                      $( this ).dialog( "close" );
+                  },
+              }
+          });
+      });
+      var openDialog = function() {
+          $( ".dialog" ).dialog( "open" );
+          setTimeout(function(){editor.refresh();}, 20);
+      }
+      var editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
+              {mode: "ruby",
+                  lineNumbers: true,
+                  matchBrackets: true,
+                  theme: "default"
+              });
+*/
+  </script>
 </html>

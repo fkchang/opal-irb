@@ -199,21 +199,21 @@ class OpalIRB
       end
     when 27                   # escape
       e.prevent_default
-      input = @input.value
+      # input = @input.value
 
-      if input and @multiline and @saved
-        input = @input.value
-        @input.value ''
+      # if input and @multiline and @saved
+      #   input = @input.value
+      #   @input.value ''
 
-        print @prompt.html() + escape_html(input)
-        add_to_saved input
-        process_saved()
-      elsif @multiline and @saved
-        process_saved()
-      end
-      @multiline = ! @multiline
-      set_prompt()
-
+      #   print @prompt.html() + escape_html(input)
+      #   add_to_saved input
+      #   process_saved()
+      # elsif @multiline and @saved
+      #   process_saved()
+      # end
+      # @multiline = ! @multiline
+      # set_prompt()
+      open_multiline_dialog
     when 38               # up arrow
       e.prevent_default
       show_previous_history
@@ -363,8 +363,58 @@ class OpalIRB
     |
     $irb = irb
 
+    irb.setup_multi_line
+
+  end
+
+  def setup_multi_line
+     %x|
+    $( ".dialog" ).dialog({
+                            autoOpen: false,
+                            show: "blind",
+                            hide: "explode",
+                            modal: true,
+                            buttons: {
+                              "Run it":  function() {
+                                $( this ).dialog( "close" );
+                                #{self}.$process_multiline();
+                              },
+                              "Cancel":  function() {
+                                $( this ).dialog( "close" );
+                           },
+                        }
+          });
+
+      openOpalIrbMultiLineDialog = function() {
+          $( ".dialog" ).dialog( "open" );
+          setTimeout(function(){editor.refresh();}, 20);
+      }
+      |
+    @editor = %x|
+      editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
+              {mode: "ruby",
+                  lineNumbers: true,
+                  matchBrackets: true,
+                  theme: "default"
+              });
+
+   |
+
+  end
+
+  def open_multiline_dialog
+    @editor.setValue(@input.value)
+    `openOpalIrbMultiLineDialog()`
+  end
 
 
+  def process_multiline
+    multi_line_value = @editor.getValue.sub(/(\n)+$/, "")
+    add_to_saved multi_line_value
+    print multi_line_value
+    process_saved
+    set_prompt
+    @input.value = ""
   end
 
 end
