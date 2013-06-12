@@ -361,8 +361,9 @@ class OpalIRB
                            },
                         }
           });
+      |
 
-      openOpalIrbMultiLineDialog = function() {
+    @open_editor_dialog = %x|function() {
           $( ".dialog" ).dialog( "open" );
           setTimeout(function(){editor.refresh();}, 20);
       }
@@ -382,7 +383,8 @@ class OpalIRB
 
   def open_multiline_dialog
     @editor.setValue(@input.value)
-    `openOpalIrbMultiLineDialog()`
+    # `openOpalIrbMultiLineDialog()`
+    @open_editor_dialog.call
   end
 
 
