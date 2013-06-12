@@ -395,6 +395,7 @@ class OpalIRB
               {mode: "ruby",
                   lineNumbers: true,
                   matchBrackets: true,
+                  keyMap: "emacs",
                   theme: "default"
               });
 
@@ -413,7 +414,7 @@ class OpalIRB
     add_to_saved multi_line_value
     print multi_line_value
     process_saved
-    set_prompt
+    # set_prompt
     @input.value = ""
   end
 
