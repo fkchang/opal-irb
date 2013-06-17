@@ -2,9 +2,20 @@ require 'opal-parser'
 
 class OpalJqconsole
   def self.create
+    @console = OpalJqconsole.new
+  end
+
+  def initialize
+
     @parser = Opal::Parser.new
     setup_cmd_line_methods
-    @jqconsole = Element.find('#console').jqconsole('Welcome Opal\n', 'opal> ');
+    setup_jqconsole
+    handler()
+  end
+
+  attr_reader :jqconsole
+  def setup_jqconsole
+    @jqconsole = Element.find('#console').jqconsole("Welcome to Opal #{Opal::VERSION}\n", 'opal> ');
     @jqconsole.RegisterShortcut('Z', lambda { @jqconsole.AbortPrompt(); handler})
     @jqconsole.RegisterShortcut('A', lambda{ @jqconsole.MoveToStart(); handler})
     @jqconsole.RegisterShortcut('E', lambda{ @jqconsole.MoveToEnd(); handler})
@@ -13,27 +24,44 @@ class OpalJqconsole
     @jqconsole.RegisterShortcut('N', lambda{ @jqconsole._HistoryNext(); handler})
     @jqconsole.RegisterShortcut('P', lambda{ @jqconsole._HistoryPrevious(); handler})
     @jqconsole.RegisterShortcut('D', lambda{ @jqconsole._Delete(); handler})
-    handler()
+    @jqconsole.RegisterShortcut('K', lambda{ @jqconsole.Kill; handler})
   end
+
   CMD_LINE_METHOD_DEFINITIONS = [
                                  'def help
                                    OpalJqconsole.help
                                    nil
                                  end',
+                                 'def history
+                                   OpalJqconsole.history
+                                   nil
+                                 end',
+
+
 
                                  ]
-  def self.setup_cmd_line_methods
+  def setup_cmd_line_methods
     CMD_LINE_METHOD_DEFINITIONS.each {|method_definition|
       compiled = @parser.parse method_definition
       `eval(compiled)`
     }
   end
 
-  def self.handler(cmd)
+  def self.history
+    history = @console.jqconsole.GetHistory
+    lines = []
+    history.each_with_index {|history_line, i|
+      lines << "#{i+1}: #{history_line}"
+    }
+    @console.jqconsole.Write("#{lines.join("\n")}\n")
+
+  end
+
+
+  def handler(cmd)
     if cmd
       begin
         @jqconsole.Write( " => #{process(cmd).inspect} \n")
-
       rescue Exception => e
         @jqconsole.Write('Error: ' + e.message + "\n")
       end
@@ -41,12 +69,26 @@ class OpalJqconsole
     @jqconsole.Prompt(true, lambda {|c| handler(c) })
 
   end
-
-  def self.help
-    alert "help yourself"
+  def write *stuff
+    @jqconsole.Write *stuff
   end
 
-  def self.process(cmd)
+  def self.write *stuff
+    @console.write *stuff
+
+  end
+
+  def self.help
+    help = <<HELP
+help: this text
+history: shows history
+Up/Down Arrow and ctrl-p/ctrl-n: flips through history
+
+HELP
+    write help, "", false
+  end
+
+  def process(cmd)
     begin
       compiled = @parser.parse cmd, :irb => true
       puts compiled
