@@ -1,21 +1,20 @@
 require 'opal-parser'
 
 class OpalJqconsole
-  def self.create
-    @console = OpalJqconsole.new
+  def self.create(parent_element_id)
+    @console = OpalJqconsole.new(parent_element_id)
   end
 
-  def initialize
-
+  def initialize(parent_element_id)
     @parser = Opal::Parser.new
     setup_cmd_line_methods
-    setup_jqconsole
+    setup_jqconsole(parent_element_id)
     handler()
   end
 
   attr_reader :jqconsole
-  def setup_jqconsole
-    @jqconsole = Element.find('#console').jqconsole("Welcome to Opal #{Opal::VERSION}\n", 'opal> ');
+  def setup_jqconsole(parent_element_id)
+    @jqconsole = Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\n", 'opal> ');
     @jqconsole.RegisterShortcut('Z', lambda { @jqconsole.AbortPrompt(); handler})
     @jqconsole.RegisterShortcut('A', lambda{ @jqconsole.MoveToStart(); handler})
     @jqconsole.RegisterShortcut('E', lambda{ @jqconsole.MoveToEnd(); handler})
