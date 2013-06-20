@@ -1,6 +1,10 @@
 require 'opal-parser'
 
 class OpalJqconsole
+  def self.console
+    @console
+  end
+
   def self.create(parent_element_id)
     @console = OpalJqconsole.new(parent_element_id)
   end
@@ -9,12 +13,71 @@ class OpalJqconsole
     @parser = Opal::Parser.new
     setup_cmd_line_methods
     setup_jqconsole(parent_element_id)
+    create_multiline_editor
     handler()
   end
+
+  def create_multiline_editor
+    editor = <<EDITOR
+    <div id="multiline-editor-dialog" class="dialog" style="display:none" >
+      <textarea name="multi_line_input" id="multi_line_input"></textarea>
+    </div>
+EDITOR
+    Element.find("body") << editor
+         %x|
+    $( ".dialog" ).dialog({
+                            autoOpen: false,
+                            show: "blind",
+                            hide: "explode",
+                            modal: true,
+                            width: "500px",
+                            title: "Multi Line Edit",
+                            buttons: {
+                              "Run it":  function() {
+                                $( this ).dialog( "close" );
+                                #{self}.$process_multiline();
+                              },
+                              "Cancel":  function() {
+                                $( this ).dialog( "close" );
+                           },
+                        }
+          });
+      |
+
+    @open_editor_dialog_function = %x|function() {
+          $( ".dialog" ).dialog( "open" );
+          setTimeout(function(){editor.refresh();}, 20);
+      }
+      |
+    @editor = %x|
+      editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
+              {mode: "ruby",
+                  lineNumbers: true,
+                  matchBrackets: true,
+                  keyMap: "emacs",
+                  theme: "default"
+              });
+
+   |
+
+
+  end
+  def open_multiline_dialog
+    @editor.setValue(@jqconsole.GetPromptText)
+    @open_editor_dialog_function.call
+  end
+
+  def process_multiline
+    multi_line_value = @editor.getValue.sub(/(\n)+$/, "")
+    @jqconsole.SetPromptText multi_line_value
+    @jqconsole._HandleEnter
+  end
+
 
   attr_reader :jqconsole
   def setup_jqconsole(parent_element_id)
     @jqconsole = Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\n", 'opal> ');
+    @jqconsole.RegisterShortcut('M', lambda { open_multiline_dialog; handler})
     @jqconsole.RegisterShortcut('Z', lambda { @jqconsole.AbortPrompt(); handler})
     @jqconsole.RegisterShortcut('A', lambda{ @jqconsole.MoveToStart(); handler})
     @jqconsole.RegisterShortcut('E', lambda{ @jqconsole.MoveToEnd(); handler})
