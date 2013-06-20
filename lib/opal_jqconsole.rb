@@ -76,7 +76,7 @@ EDITOR
 
   attr_reader :jqconsole
   def setup_jqconsole(parent_element_id)
-    @jqconsole = Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\n", 'opal> ');
+    @jqconsole = Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\ntype help for assistance\n", 'opal> ');
     @jqconsole.RegisterShortcut('M', lambda { open_multiline_dialog; handler})
     @jqconsole.RegisterShortcut('Z', lambda { @jqconsole.AbortPrompt(); handler})
     @jqconsole.RegisterShortcut('A', lambda{ @jqconsole.MoveToStart(); handler})
@@ -121,7 +121,7 @@ EDITOR
 
 
   def handler(cmd)
-    if cmd
+    if cmd && `#{cmd } != undefined`
       begin
         @jqconsole.Write( " => #{process(cmd).inspect} \n")
       rescue Exception => e
@@ -135,29 +135,43 @@ EDITOR
     @jqconsole.Write *stuff
   end
 
+  def unescaped_write str
+    `#{@jqconsole}.Write(str, "unescaped", false)`
+  end
+
   def self.write *stuff
     @console.write *stuff
+
+  end
+  def self.unescaped_write *stuff
+    @console.unescaped_write *stuff
 
   end
 
   def self.help
     help = <<HELP
-help: this text
-history: shows history
-Up/Down Arrow and ctrl-p/ctrl-n: flips through history
-
+<b><i>help</i></b>:                            this text
+<b>history</b>:                         shows history
+<b>ctrl-m</b>:                          multi-line edit mode
+<b>Up/Down Arrow and ctrl-p/ctrl-n</b>: flips through history
 HELP
-    write help, "", false
+    unescaped_write help
   end
 
   def process(cmd)
     begin
-      compiled = @parser.parse cmd, :irb => true
-      puts compiled
-      value = `eval(compiled)`
-      $_ = value
+      puts "\n\n|#{cmd}|"
+      if cmd
+        compiled = @parser.parse cmd, :irb => true
+        puts compiled
+        value = `eval(compiled)`
+        $_ = value
+      end
     rescue Exception => e
-      alert e
+      alert e.backtrace.join("\n")
+      puts "\n\n"
+      puts `e.toString()`
+      puts e.backtrace
       if e.backtrace
         output = "FOR:\n#{compiled}\n============\n" + e.backtrace.join("\n")
 
