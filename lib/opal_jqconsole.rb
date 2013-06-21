@@ -79,6 +79,9 @@ EDITOR
     @jqconsole = Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\ntype help for assistance\n", 'opal> ');
     @jqconsole.RegisterShortcut('M', lambda { open_multiline_dialog; handler})
     @jqconsole.RegisterShortcut('Z', lambda { @jqconsole.AbortPrompt(); handler})
+
+    # These are the ubiquitous emacs commands that I have to implement now, my other
+    # solution I got them all for free in OSX
     @jqconsole.RegisterShortcut('A', lambda{ @jqconsole.MoveToStart(); handler})
     @jqconsole.RegisterShortcut('E', lambda{ @jqconsole.MoveToEnd(); handler})
     @jqconsole.RegisterShortcut('B', lambda{ @jqconsole._MoveLeft(); handler})
@@ -87,6 +90,18 @@ EDITOR
     @jqconsole.RegisterShortcut('P', lambda{ @jqconsole._HistoryPrevious(); handler})
     @jqconsole.RegisterShortcut('D', lambda{ @jqconsole._Delete(); handler})
     @jqconsole.RegisterShortcut('K', lambda{ @jqconsole.Kill; handler})
+    @jqconsole.RegisterAltShortcut('B', lambda{ @jqconsole._MoveLeft(true); handler})
+    @jqconsole.RegisterAltShortcut('F', lambda{ @jqconsole._MoveRight(true); handler})
+    @jqconsole.RegisterAltShortcut('D', lambda{ @jqconsole._Delete(true); handler})
+
+    # to implement in jq-console that you also get for free normally
+    # in all Cocoa text widgets
+    # alt-u upcase
+    # alt-l lowercase
+    # alt-c capitalize
+    # ctrl-t toggle character
+    # ctrl-y yanking the kill buffer - can I override the system here?
+
   end
 
   CMD_LINE_METHOD_DEFINITIONS = [

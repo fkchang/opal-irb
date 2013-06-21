@@ -301,6 +301,7 @@ Licensed under the MIT license
       this.history_new = '';
       this.history_active = false;
       this.shortcuts = {};
+      this.altShortcuts = {};
       this.$console = $('<pre class="jqconsole"/>').appendTo(this.container);
       this.$console.css({
         position: 'absolute',
@@ -430,6 +431,23 @@ Licensed under the MIT license
       return void 0;
     };
 
+    JQConsole.prototype.RegisterAltShortcut = function(key_code, callback) {
+      var addShortcut,
+        _this = this;
+      key_code = this._CheckKeyCode(key_code);
+      if (typeof callback !== 'function') {
+        throw new Error('Callback must be a function, not ' + callback + '.');
+      }
+      addShortcut = function(key) {
+        if (!(key in _this.altShortcuts)) {
+          _this.altShortcuts[key] = [];
+        }
+        return _this.altShortcuts[key].push(callback);
+      };
+      this._LetterCaseHelper(key_code, addShortcut);
+      return void 0;
+    };
+
     JQConsole.prototype.UnRegisterShortcut = function(key_code, handler) {
       var removeShortcut,
         _this = this;
@@ -444,6 +462,23 @@ Licensed under the MIT license
         }
       };
       this._LetterCaseHelper(key_code, removeShortcut);
+      return void 0;
+    };
+
+    JQConsole.prototype.UnRegisterShortcut = function(key_code, handler) {
+      var removeAltShortcut,
+        _this = this;
+      key_code = this._CheckKeyCode(key_code);
+      removeAltShortcut = function(key) {
+        if (key in _this.altShortcuts) {
+          if (handler) {
+            return _this.altShortcuts[key].splice(_this.altShortcuts[key].indexOf(handler), 1);
+          } else {
+            return delete _this.altShortcuts[key];
+          }
+        }
+      };
+      this._LetterCaseHelper(key_code, removeAltShortcut);
       return void 0;
     };
 
@@ -825,12 +860,7 @@ Licensed under the MIT license
         return false;
       }
       if ($.browser.mozilla) {
-        if (event.keyCode || event.altKey) {
-          return true;
-        }
-      }
-      if ($.browser.opera) {
-        if (event.altKey) {
+        if (event.keyCode) {
           return true;
         }
       }
@@ -847,7 +877,7 @@ Licensed under the MIT license
       key = event.keyCode || event.which;
       setTimeout($.proxy(this._CheckMatchings, this), 0);
       if (event.altKey) {
-        return true;
+        return this._HandleAltShortcut(key);
       } else if (event.ctrlKey || event.metaKey) {
         return this._HandleCtrlShortcut(key);
       } else if (event.shiftKey) {
@@ -864,7 +894,7 @@ Licensed under the MIT license
           case KEY_DOWN:
             this._MoveDown();
             break;
-          case KEY_PAGE_UP:
+          case KEY_PAGE(_UP):
             this._ScrollUp();
             break;
           case KEY_PAGE_DOWN:
@@ -959,6 +989,20 @@ Licensed under the MIT license
           }
       }
       return false;
+    };
+
+    JQConsole.prototype._HandleAltShortcut = function(key) {
+      var handler, _i, _len, _ref;
+      if (key in this.altShortcuts) {
+        _ref = this.altShortcuts[key];
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          handler = _ref[_i];
+          handler.call(this);
+        }
+        return false;
+      } else {
+        return true;
+      }
     };
 
     JQConsole.prototype._HandleEnter = function(shift) {
