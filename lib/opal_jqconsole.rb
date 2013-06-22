@@ -1,5 +1,4 @@
 require 'opal-parser'
-# at the moment Kernel.alert is returning undefined
 
 class OpalJqconsole
   def self.console
@@ -115,7 +114,7 @@ EDITOR
                                    OpalJqconsole.history
                                    nil
                                  end',
-                                 # Kernel.alert is now returning undefined in opal
+                                 # TODO Kernel.alert is now returning undefined in opal, rm when fixed
                                  'def alert stuff
                                     Kernel.alert stuff
                                     nil
@@ -144,7 +143,7 @@ EDITOR
   def handler(cmd)
     if cmd && `#{cmd } != undefined`
       begin
-        @jqconsole.Write( " => #{process(cmd).inspect} \n")
+        @jqconsole.Write( " => #{process(cmd)} \n")
       rescue Exception => e
         @jqconsole.Write('Error: ' + e.message + "\n")
       end
@@ -187,15 +186,14 @@ HELP
         puts compiled
         value = `eval(compiled)`
         $_ = value
+        $_.inspect
       end
     rescue Exception => e
-      alert e.backtrace.join("\n")
-      puts "\n\n"
-      puts `e.toString()`
-      puts e.backtrace
+      # alert e.backtrace.join("\n")
       if e.backtrace
         output = "FOR:\n#{compiled}\n============\n" + e.backtrace.join("\n")
-
+        # TODO remove return when bug is fixed in rescue block
+        return output
         # FF doesn't have Error.toString() as the first line of Error.stack
         # while Chrome does.
         # if output.split("\n")[0] != `e.toString()`
@@ -203,8 +201,10 @@ HELP
         # end
       else
         output = `e.toString()`
+        puts "\nReturning NO have backtrace |#{output}|"
+        # TODO remove return when bug is fixed in rescue block
+        return output
       end
-
     end
   end
 
