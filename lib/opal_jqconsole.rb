@@ -1,4 +1,5 @@
 require 'opal-parser'
+# at the moment Kernel.alert is returning undefined
 
 class OpalJqconsole
   def self.console
@@ -23,6 +24,7 @@ class OpalJqconsole
       <textarea name="multi_line_input" id="multi_line_input"></textarea>
     </div>
 EDITOR
+    myself = self               # self is now the div and not self anymore
     Element.find("body") << editor
          %x|
     $( ".dialog" ).dialog({
@@ -35,7 +37,7 @@ EDITOR
                             buttons: {
                               "Run it":  function() {
                                 $( this ).dialog( "close" );
-                                #{self}.$process_multiline();
+                                #{myself}.$process_multiline();
                               },
                               "Cancel":  function() {
                                 $( this ).dialog( "close" );
@@ -113,7 +115,11 @@ EDITOR
                                    OpalJqconsole.history
                                    nil
                                  end',
-
+                                 # Kernel.alert is now returning undefined in opal
+                                 'def alert stuff
+                                    Kernel.alert stuff
+                                    nil
+                                 end',
 
 
                                  ]
