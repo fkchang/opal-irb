@@ -6,7 +6,8 @@ interactive console (REPL) on a webpage. Good for testing Opal/ruby
 interactively without having to install anything.  Intended to be part
 of a browser based interactive development tool for Opal
 
-Try it here: http://fkchang.github.com/opal-irb/
+Try it here: http://fkchang.github.io/opal-irb/
+Experimental jq-console port http://fkchang.github.io/opal-irb/index-jq.html
 
 Initially based on https://github.com/larryng/coffeescript-repl
 

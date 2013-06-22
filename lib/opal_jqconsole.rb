@@ -148,9 +148,19 @@ EDITOR
         @jqconsole.Write('Error: ' + e.message + "\n")
       end
     end
-    @jqconsole.Prompt(true, lambda {|c| handler(c) })
+    @jqconsole.Prompt(true, lambda {|c| handler(c) }, lambda {|c| check_is_incomplete(c)})
 
   end
+
+  def check_is_incomplete(cmd)
+    begin
+      @parser.parse cmd, :irb => true
+      false
+    rescue
+      0
+    end
+  end
+
   def write *stuff
     @jqconsole.Write *stuff
   end
