@@ -27,11 +27,11 @@ Features
 Roadmap
 -------
 * Figure out how to keep variables -- DONE 6/10/2013, thx @adambeynon
+* have it automatically know when a complete ruby expression is there instead of multi line mode like irb -- CLOSE ENOUGH 6/21/2013 via jqconsole
+* Make a gem
 * Some demos to show how convenient it can be
-* have it automatically know when a complete ruby expression is there instead of multi line mode like irb
 * Add more irb functionality
 * Make embeddable in any app
 * print out inspect in ruby format
-* Make a gem
 * Rails plugin
 * Hook into smalltalk style object browser for opal that I plan to write

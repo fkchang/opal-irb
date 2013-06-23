@@ -16,7 +16,7 @@ task :build do
 
   File.open("js/app-jqconsole.js", "w+") do |out|
     env = Opal::Environment.new
-    env.append_path "lib"
+    env.append_path "opal"
     out << env["app-jqconsole"].to_s
   end
   # system "terminal-notifier -title 'opal-irb build' -message 'js file built'"
