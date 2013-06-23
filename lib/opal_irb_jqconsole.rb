@@ -1,12 +1,12 @@
 require 'opal-parser'
 
-class OpalJqconsole
+class OpalIrbJqconsole
   def self.console
     @console
   end
 
   def self.create(parent_element_id)
-    @console = OpalJqconsole.new(parent_element_id)
+    @console = OpalIrbJqconsole.new(parent_element_id)
   end
 
   def initialize(parent_element_id)
@@ -30,7 +30,7 @@ class OpalJqconsole
       var args;
       args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
       console.orig_log(args);
-      Opal.OpalJqconsole.$puts(args);
+      Opal.OpalIrbJqconsole.$puts(args);
     };
     |
 
@@ -126,11 +126,11 @@ EDITOR
 
   CMD_LINE_METHOD_DEFINITIONS = [
                                  'def help
-                                   OpalJqconsole.help
+                                   OpalIrbJqconsole.help
                                    nil
                                  end',
                                  'def history
-                                   OpalJqconsole.history
+                                   OpalIrbJqconsole.history
                                    nil
                                  end',
                                  # TODO Kernel.alert is now returning undefined in opal, rm when fixed
