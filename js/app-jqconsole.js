@@ -17549,20 +17549,39 @@ Opal.eval = function(str) {
     }/*:8*/)/*:8*/;/*:4*/
 
     /*:12*/def.$initialize = /*:12*/function(/*:12*/parent_element_id/*:12*/) {
-/*:12*/      var $a, $b, $c, $d, $e;/*:13*/
+/*:12*/      var $a, $b, $c, $d, $e, $f;/*:13*/
       /*:13*/this.parser/*:13*/ = /*:13*/(($a = /*:13*/(($b = (/*:13*/(($c = __scope.Opal) == null ? __opal.cm("Opal") : $c)/*:13*/)._scope)./*:13*/Parser == null ? $b.cm("Parser") : $b.Parser)/*:13*/).$new || $mm('new'))/*:13*/.call(/*:13*/$a/*:13*/)/*:13*/;/*:13*/
       /*:15*/(($b = /*:15*/this/*:15*/).$setup_cmd_line_methods || $mm('setup_cmd_line_methods'))/*:15*/.call(/*:15*/$b/*:15*/)/*:15*/;/*:13*/
       /*:15*/(($c = /*:15*/this/*:15*/).$setup_jqconsole || $mm('setup_jqconsole'))/*:15*/.call(/*:15*/$c/*:15*/, /*:15*/parent_element_id/*:15*/)/*:15*/;/*:13*/
       /*:17*/(($d = /*:17*/this/*:17*/).$create_multiline_editor || $mm('create_multiline_editor'))/*:17*/.call(/*:17*/$d/*:17*/)/*:17*/;/*:13*/
-      /*:17*/return /*:17*/(($e = /*:17*/this/*:17*/).$handler || $mm('handler'))/*:17*/.call(/*:17*/$e/*:17*/)/*:17*/;/*:12*/
+      /*:18*/(($e = /*:18*/this/*:18*/).$redirect_console_dot_log || $mm('redirect_console_dot_log'))/*:18*/.call(/*:18*/$e/*:18*/)/*:18*/;/*:13*/
+      /*:18*/return /*:18*/(($f = /*:18*/this/*:18*/).$handler || $mm('handler'))/*:18*/.call(/*:18*/$f/*:18*/)/*:18*/;/*:12*/
     }/*:12*/;/*:4*/
 
-    /*:20*/def.$create_multiline_editor = /*:20*/function(/*:20*//*:20*/) {
-/*:20*/      var $a, $b, $c, editor = nil, myself = nil;/*:21*/
-      /*:21*/editor/*:21*/ = /*:24*/"    <div id=\"multiline-editor-dialog\" class=\"dialog\" style=\"display:none\" >\n      <textarea name=\"multi_line_input\" id=\"multi_line_input\"></textarea>\n    </div>\n"/*:21*/;/*:21*/
-      /*:25*/myself/*:25*/ = /*:25*/this/*:25*/;/*:21*/
-      /*:26*/(($a = /*:26*/(($b = /*:26*/(($c = __scope.Element) == null ? __opal.cm("Element") : $c)/*:26*/).$find || $mm('find'))/*:26*/.call(/*:26*/$b/*:26*/, /*:26*/"body"/*:26*/)/*:26*/)['$<<'] || $mm('<<'))/*:26*/.call(/*:26*/$a/*:27*/, /*:27*/editor/*:26*/)/*:26*/;/*:21*/
-      /*:38*/
+    /*:21*/def.$log = /*:21*/function(/*:21*/thing/*:21*/) {
+/*:21*/      /*:23*/
+      /*:22*/return console.orig_log(/*:22*/thing/*:22*/)/*:22*/;/*:21*/
+    }/*:21*/;/*:4*/
+
+    /*:26*/def.$redirect_console_dot_log = /*:26*/function(/*:26*//*:26*/) {
+/*:26*/      /*:37*/
+      /*:35*/
+    console.orig_log = console.log
+    console.log = function() {
+      var args;
+      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      console.orig_log(args);
+      Opal.OpalJqconsole.$puts(args);
+    };
+    /*:26*/
+    }/*:26*/;/*:4*/
+
+    /*:39*/def.$create_multiline_editor = /*:39*/function(/*:39*//*:39*/) {
+/*:39*/      var $a, $b, $c, editor = nil, myself = nil;/*:40*/
+      /*:40*/editor/*:40*/ = /*:43*/"    <div id=\"multiline-editor-dialog\" class=\"dialog\" style=\"display:none\" >\n      <textarea name=\"multi_line_input\" id=\"multi_line_input\"></textarea>\n    </div>\n"/*:40*/;/*:40*/
+      /*:44*/myself/*:44*/ = /*:44*/this/*:44*/;/*:40*/
+      /*:45*/(($a = /*:45*/(($b = /*:45*/(($c = __scope.Element) == null ? __opal.cm("Element") : $c)/*:45*/).$find || $mm('find'))/*:45*/.call(/*:45*/$b/*:45*/, /*:45*/"body"/*:45*/)/*:45*/)['$<<'] || $mm('<<'))/*:45*/.call(/*:45*/$a/*:46*/, /*:46*/editor/*:45*/)/*:45*/;/*:40*/
+      /*:57*/
     $( ".dialog" ).dialog({
                             autoOpen: false,
                             show: "blind",
@@ -17573,20 +17592,20 @@ Opal.eval = function(str) {
                             buttons: {
                               "Run it":  function() {
                                 $( this ).dialog( "close" );
-                                /*:38*/myself/*:45*/.$process_multiline();
+                                /*:57*/myself/*:64*/.$process_multiline();
                               },
                               "Cancel":  function() {
                                 $( this ).dialog( "close" );
                            },
                         }
           });
-      /*:21*/
-      /*:47*/this.open_editor_dialog_function/*:47*/ = /*:51*/function() {
+      /*:40*/
+      /*:66*/this.open_editor_dialog_function/*:66*/ = /*:70*/function() {
           $( ".dialog" ).dialog( "open" );
           setTimeout(function(){editor.refresh();}, 20);
       }
-      /*:47*/;/*:21*/
-      /*:52*/return /*:52*/this.editor/*:52*/ = /*:61*/
+      /*:66*/;/*:40*/
+      /*:71*/return /*:71*/this.editor/*:71*/ = /*:80*/
       editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
               {mode: "ruby",
                   lineNumbers: true,
@@ -17595,271 +17614,279 @@ Opal.eval = function(str) {
                   theme: "default"
               });
 
-   /*:52*/;/*:20*/
-    }/*:20*/;/*:4*/
+   /*:71*/;/*:39*/
+    }/*:39*/;/*:4*/
 
-    /*:65*/def.$open_multiline_dialog = /*:65*/function(/*:65*//*:65*/) {
-/*:65*/      var $a, $b, $c;/*:66*/
-      /*:66*/(($a = /*:66*/this.editor/*:66*/).$setValue || $mm('setValue'))/*:66*/.call(/*:66*/$a/*:66*/, /*:66*/(($b = /*:66*/this.jqconsole/*:66*/).$GetPromptText || $mm('GetPromptText'))/*:66*/.call(/*:66*/$b/*:66*/)/*:66*/)/*:66*/;/*:66*/
-      /*:67*/return /*:67*/(($c = /*:67*/this.open_editor_dialog_function/*:67*/).$call || $mm('call'))/*:67*/.call(/*:67*/$c/*:67*/)/*:67*/;/*:65*/
-    }/*:65*/;/*:4*/
+    /*:84*/def.$open_multiline_dialog = /*:84*/function(/*:84*//*:84*/) {
+/*:84*/      var $a, $b, $c;/*:85*/
+      /*:85*/(($a = /*:85*/this.editor/*:85*/).$setValue || $mm('setValue'))/*:85*/.call(/*:85*/$a/*:85*/, /*:85*/(($b = /*:85*/this.jqconsole/*:85*/).$GetPromptText || $mm('GetPromptText'))/*:85*/.call(/*:85*/$b/*:85*/)/*:85*/)/*:85*/;/*:85*/
+      /*:86*/return /*:86*/(($c = /*:86*/this.open_editor_dialog_function/*:86*/).$call || $mm('call'))/*:86*/.call(/*:86*/$c/*:86*/)/*:86*/;/*:84*/
+    }/*:84*/;/*:4*/
 
-    /*:70*/def.$process_multiline = /*:70*/function(/*:70*//*:70*/) {
-/*:70*/      var $a, $b, $c, $d, multi_line_value = nil;/*:71*/
-      /*:71*/multi_line_value/*:71*/ = /*:71*/(($a = /*:71*/(($b = /*:71*/this.editor/*:71*/).$getValue || $mm('getValue'))/*:71*/.call(/*:71*/$b/*:71*/)/*:71*/).$sub || $mm('sub'))/*:71*/.call(/*:71*/$a/*:71*/, /*:71*//(\n)+$//*:71*/, /*:71*/""/*:71*/)/*:71*/;/*:71*/
-      /*:72*/(($c = /*:72*/this.jqconsole/*:72*/).$SetPromptText || $mm('SetPromptText'))/*:72*/.call(/*:72*/$c/*:73*/, /*:73*/multi_line_value/*:72*/)/*:72*/;/*:71*/
-      /*:73*/return /*:73*/(($d = /*:73*/this.jqconsole/*:73*/).$_HandleEnter || $mm('_HandleEnter'))/*:73*/.call(/*:73*/$d/*:73*/)/*:73*/;/*:70*/
-    }/*:70*/;/*:4*/
+    /*:89*/def.$process_multiline = /*:89*/function(/*:89*//*:89*/) {
+/*:89*/      var $a, $b, $c, $d, multi_line_value = nil;/*:90*/
+      /*:90*/multi_line_value/*:90*/ = /*:90*/(($a = /*:90*/(($b = /*:90*/this.editor/*:90*/).$getValue || $mm('getValue'))/*:90*/.call(/*:90*/$b/*:90*/)/*:90*/).$sub || $mm('sub'))/*:90*/.call(/*:90*/$a/*:90*/, /*:90*//(\n)+$//*:90*/, /*:90*/""/*:90*/)/*:90*/;/*:90*/
+      /*:91*/(($c = /*:91*/this.jqconsole/*:91*/).$SetPromptText || $mm('SetPromptText'))/*:91*/.call(/*:91*/$c/*:92*/, /*:92*/multi_line_value/*:91*/)/*:91*/;/*:90*/
+      /*:92*/return /*:92*/(($d = /*:92*/this.jqconsole/*:92*/).$_HandleEnter || $mm('_HandleEnter'))/*:92*/.call(/*:92*/$d/*:92*/)/*:92*/;/*:89*/
+    }/*:89*/;/*:4*/
 
-    /*:77*/def.$jqconsole = /*:77*/function(/*:77*//*:77*/) {
-/*:77*/      /*:77*/
-      /*:77*/return /*:77*/this.jqconsole/*:77*/
-    }, nil/*:77*/;/*:4*/
+    /*:96*/def.$jqconsole = /*:96*/function(/*:96*//*:96*/) {
+/*:96*/      /*:96*/
+      /*:96*/return /*:96*/this.jqconsole/*:96*/
+    }, nil/*:96*/;/*:4*/
 
-    /*:78*/def.$setup_jqconsole = /*:78*/function(/*:78*/parent_element_id/*:78*/) {
-/*:78*/      var $a, $b, $c, $d, TMP_1, $e, TMP_2, $f, $g, TMP_3, $h, $i, TMP_4, $j, $k, TMP_5, $l, $m, TMP_6, $n, $o, TMP_7, $p, $q, TMP_8, $r, $s, TMP_9, $t, $u, TMP_10, $v, $w, TMP_11, $x, $y, TMP_12, $z, $aa, TMP_13, $ab, $ac;/*:79*/
-      /*:79*/this.jqconsole/*:79*/ = /*:79*/(($a = /*:79*/(($b = /*:79*/(($c = __scope.Element) == null ? __opal.cm("Element") : $c)/*:79*/).$find || $mm('find'))/*:79*/.call(/*:79*/$b/*:79*/, /*:79*/parent_element_id/*:79*/)/*:79*/).$jqconsole || $mm('jqconsole'))/*:79*/.call(/*:79*/$a/*:79*/, /*:79*/"Welcome to Opal "/*:79*/ + /*:79*/(/*:79*/(($c = (/*:79*/(($d = __scope.Opal) == null ? __opal.cm("Opal") : $d)/*:79*/)._scope)./*:79*/VERSION == null ? $c.cm("VERSION") : $c.VERSION)/*:79*/)/*:79*/ + /*:81*/"\ntype help for assistance\n"/*:81*/, /*:81*/"opal> "/*:79*/)/*:79*/;/*:79*/
-      /*:82*/(($c = /*:82*/this.jqconsole/*:82*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:82*/.call(/*:82*/$c/*:82*/, /*:82*/"M"/*:82*/, /*:82*/($d = /*:82*/(($e = /*:82*/this/*:82*/).$lambda || $mm('lambda'))/*:82*/, $d._p = /*:82*/(TMP_1 = /*:82*/function() {
-/*:82*/
-        var self = TMP_1._s || this, $a, $b;/*:82*/
-        /*:82*/
-        /*:82*/(($a = /*:82*/self/*:82*/).$open_multiline_dialog || $mm('open_multiline_dialog'))/*:82*/.call(/*:82*/$a/*:82*/)/*:82*/;/*:82*/
-        /*:82*/return /*:82*/(($b = /*:82*/self/*:82*/).$handler || $mm('handler'))/*:82*/.call(/*:82*/$b/*:82*/)/*:82*/;/*:82*/
-      }/*:82*/, TMP_1._s = this, TMP_1)/*:82*/, $d)/*:82*/.call(/*:82*/$e/*:82*/)/*:82*/)/*:82*/;/*:79*/
-      /*:83*/(($d = /*:83*/this.jqconsole/*:83*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:83*/.call(/*:83*/$d/*:83*/, /*:83*/"Z"/*:83*/, /*:83*/($f = /*:83*/(($g = /*:83*/this/*:83*/).$lambda || $mm('lambda'))/*:83*/, $f._p = /*:83*/(TMP_2 = /*:83*/function() {
-/*:83*/
+    /*:97*/def.$setup_jqconsole = /*:97*/function(/*:97*/parent_element_id/*:97*/) {
+/*:97*/      var $a, $b, $c, $d, TMP_1, $e, TMP_2, $f, $g, TMP_3, $h, $i, TMP_4, $j, $k, TMP_5, $l, $m, TMP_6, $n, $o, TMP_7, $p, $q, TMP_8, $r, $s, TMP_9, $t, $u, TMP_10, $v, $w, TMP_11, $x, $y, TMP_12, $z, $aa, TMP_13, $ab, $ac;/*:98*/
+      /*:98*/this.jqconsole/*:98*/ = /*:98*/(($a = /*:98*/(($b = /*:98*/(($c = __scope.Element) == null ? __opal.cm("Element") : $c)/*:98*/).$find || $mm('find'))/*:98*/.call(/*:98*/$b/*:98*/, /*:98*/parent_element_id/*:98*/)/*:98*/).$jqconsole || $mm('jqconsole'))/*:98*/.call(/*:98*/$a/*:98*/, /*:98*/"Welcome to Opal "/*:98*/ + /*:98*/(/*:98*/(($c = (/*:98*/(($d = __scope.Opal) == null ? __opal.cm("Opal") : $d)/*:98*/)._scope)./*:98*/VERSION == null ? $c.cm("VERSION") : $c.VERSION)/*:98*/)/*:98*/ + /*:100*/"\ntype help for assistance\n"/*:100*/, /*:100*/"opal> "/*:98*/)/*:98*/;/*:98*/
+      /*:101*/(($c = /*:101*/this.jqconsole/*:101*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:101*/.call(/*:101*/$c/*:101*/, /*:101*/"M"/*:101*/, /*:101*/($d = /*:101*/(($e = /*:101*/this/*:101*/).$lambda || $mm('lambda'))/*:101*/, $d._p = /*:101*/(TMP_1 = /*:101*/function() {
+/*:101*/
+        var self = TMP_1._s || this, $a, $b;/*:101*/
+        /*:101*/
+        /*:101*/(($a = /*:101*/self/*:101*/).$open_multiline_dialog || $mm('open_multiline_dialog'))/*:101*/.call(/*:101*/$a/*:101*/)/*:101*/;/*:101*/
+        /*:101*/return /*:101*/(($b = /*:101*/self/*:101*/).$handler || $mm('handler'))/*:101*/.call(/*:101*/$b/*:101*/)/*:101*/;/*:101*/
+      }/*:101*/, TMP_1._s = this, TMP_1)/*:101*/, $d)/*:101*/.call(/*:101*/$e/*:101*/)/*:101*/)/*:101*/;/*:98*/
+      /*:102*/(($d = /*:102*/this.jqconsole/*:102*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:102*/.call(/*:102*/$d/*:102*/, /*:102*/"C"/*:102*/, /*:102*/($f = /*:102*/(($g = /*:102*/this/*:102*/).$lambda || $mm('lambda'))/*:102*/, $f._p = /*:102*/(TMP_2 = /*:102*/function() {
+/*:102*/
         var self = TMP_2._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:83*/
-        /*:83*/
-        /*:83*/(($a = /*:83*/self.jqconsole/*:83*/).$AbortPrompt || $mm('AbortPrompt'))/*:83*/.call(/*:83*/$a/*:83*/)/*:83*/;/*:83*/
-        /*:83*/return /*:83*/(($b = /*:83*/self/*:83*/).$handler || $mm('handler'))/*:83*/.call(/*:83*/$b/*:83*/)/*:83*/;/*:83*/
-      }/*:83*/, TMP_2._s = this, TMP_2)/*:83*/, $f)/*:83*/.call(/*:83*/$g/*:83*/)/*:83*/)/*:83*/;/*:79*/
-      /*:87*/(($f = /*:87*/this.jqconsole/*:87*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:87*/.call(/*:87*/$f/*:87*/, /*:87*/"A"/*:87*/, /*:87*/($h = /*:87*/(($i = /*:87*/this/*:87*/).$lambda || $mm('lambda'))/*:87*/, $h._p = /*:87*/(TMP_3 = /*:87*/function() {
-/*:87*/
+/*:102*/
+        /*:102*/
+        /*:102*/(($a = /*:102*/self.jqconsole/*:102*/).$AbortPrompt || $mm('AbortPrompt'))/*:102*/.call(/*:102*/$a/*:102*/)/*:102*/;/*:102*/
+        /*:102*/return /*:102*/(($b = /*:102*/self/*:102*/).$handler || $mm('handler'))/*:102*/.call(/*:102*/$b/*:102*/)/*:102*/;/*:102*/
+      }/*:102*/, TMP_2._s = this, TMP_2)/*:102*/, $f)/*:102*/.call(/*:102*/$g/*:102*/)/*:102*/)/*:102*/;/*:98*/
+      /*:106*/(($f = /*:106*/this.jqconsole/*:106*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:106*/.call(/*:106*/$f/*:106*/, /*:106*/"A"/*:106*/, /*:106*/($h = /*:106*/(($i = /*:106*/this/*:106*/).$lambda || $mm('lambda'))/*:106*/, $h._p = /*:106*/(TMP_3 = /*:106*/function() {
+/*:106*/
         var self = TMP_3._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:87*/
-        /*:87*/
-        /*:87*/(($a = /*:87*/self.jqconsole/*:87*/).$MoveToStart || $mm('MoveToStart'))/*:87*/.call(/*:87*/$a/*:87*/)/*:87*/;/*:87*/
-        /*:87*/return /*:87*/(($b = /*:87*/self/*:87*/).$handler || $mm('handler'))/*:87*/.call(/*:87*/$b/*:87*/)/*:87*/;/*:87*/
-      }/*:87*/, TMP_3._s = this, TMP_3)/*:87*/, $h)/*:87*/.call(/*:87*/$i/*:87*/)/*:87*/)/*:87*/;/*:79*/
-      /*:88*/(($h = /*:88*/this.jqconsole/*:88*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:88*/.call(/*:88*/$h/*:88*/, /*:88*/"E"/*:88*/, /*:88*/($j = /*:88*/(($k = /*:88*/this/*:88*/).$lambda || $mm('lambda'))/*:88*/, $j._p = /*:88*/(TMP_4 = /*:88*/function() {
-/*:88*/
+/*:106*/
+        /*:106*/
+        /*:106*/(($a = /*:106*/self.jqconsole/*:106*/).$MoveToStart || $mm('MoveToStart'))/*:106*/.call(/*:106*/$a/*:106*/)/*:106*/;/*:106*/
+        /*:106*/return /*:106*/(($b = /*:106*/self/*:106*/).$handler || $mm('handler'))/*:106*/.call(/*:106*/$b/*:106*/)/*:106*/;/*:106*/
+      }/*:106*/, TMP_3._s = this, TMP_3)/*:106*/, $h)/*:106*/.call(/*:106*/$i/*:106*/)/*:106*/)/*:106*/;/*:98*/
+      /*:107*/(($h = /*:107*/this.jqconsole/*:107*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:107*/.call(/*:107*/$h/*:107*/, /*:107*/"E"/*:107*/, /*:107*/($j = /*:107*/(($k = /*:107*/this/*:107*/).$lambda || $mm('lambda'))/*:107*/, $j._p = /*:107*/(TMP_4 = /*:107*/function() {
+/*:107*/
         var self = TMP_4._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:88*/
-        /*:88*/
-        /*:88*/(($a = /*:88*/self.jqconsole/*:88*/).$MoveToEnd || $mm('MoveToEnd'))/*:88*/.call(/*:88*/$a/*:88*/)/*:88*/;/*:88*/
-        /*:88*/return /*:88*/(($b = /*:88*/self/*:88*/).$handler || $mm('handler'))/*:88*/.call(/*:88*/$b/*:88*/)/*:88*/;/*:88*/
-      }/*:88*/, TMP_4._s = this, TMP_4)/*:88*/, $j)/*:88*/.call(/*:88*/$k/*:88*/)/*:88*/)/*:88*/;/*:79*/
-      /*:89*/(($j = /*:89*/this.jqconsole/*:89*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:89*/.call(/*:89*/$j/*:89*/, /*:89*/"B"/*:89*/, /*:89*/($l = /*:89*/(($m = /*:89*/this/*:89*/).$lambda || $mm('lambda'))/*:89*/, $l._p = /*:89*/(TMP_5 = /*:89*/function() {
-/*:89*/
+/*:107*/
+        /*:107*/
+        /*:107*/(($a = /*:107*/self.jqconsole/*:107*/).$MoveToEnd || $mm('MoveToEnd'))/*:107*/.call(/*:107*/$a/*:107*/)/*:107*/;/*:107*/
+        /*:107*/return /*:107*/(($b = /*:107*/self/*:107*/).$handler || $mm('handler'))/*:107*/.call(/*:107*/$b/*:107*/)/*:107*/;/*:107*/
+      }/*:107*/, TMP_4._s = this, TMP_4)/*:107*/, $j)/*:107*/.call(/*:107*/$k/*:107*/)/*:107*/)/*:107*/;/*:98*/
+      /*:108*/(($j = /*:108*/this.jqconsole/*:108*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:108*/.call(/*:108*/$j/*:108*/, /*:108*/"B"/*:108*/, /*:108*/($l = /*:108*/(($m = /*:108*/this/*:108*/).$lambda || $mm('lambda'))/*:108*/, $l._p = /*:108*/(TMP_5 = /*:108*/function() {
+/*:108*/
         var self = TMP_5._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:89*/
-        /*:89*/
-        /*:89*/(($a = /*:89*/self.jqconsole/*:89*/).$_MoveLeft || $mm('_MoveLeft'))/*:89*/.call(/*:89*/$a/*:89*/)/*:89*/;/*:89*/
-        /*:89*/return /*:89*/(($b = /*:89*/self/*:89*/).$handler || $mm('handler'))/*:89*/.call(/*:89*/$b/*:89*/)/*:89*/;/*:89*/
-      }/*:89*/, TMP_5._s = this, TMP_5)/*:89*/, $l)/*:89*/.call(/*:89*/$m/*:89*/)/*:89*/)/*:89*/;/*:79*/
-      /*:90*/(($l = /*:90*/this.jqconsole/*:90*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:90*/.call(/*:90*/$l/*:90*/, /*:90*/"F"/*:90*/, /*:90*/($n = /*:90*/(($o = /*:90*/this/*:90*/).$lambda || $mm('lambda'))/*:90*/, $n._p = /*:90*/(TMP_6 = /*:90*/function() {
-/*:90*/
+/*:108*/
+        /*:108*/
+        /*:108*/(($a = /*:108*/self.jqconsole/*:108*/).$_MoveLeft || $mm('_MoveLeft'))/*:108*/.call(/*:108*/$a/*:108*/)/*:108*/;/*:108*/
+        /*:108*/return /*:108*/(($b = /*:108*/self/*:108*/).$handler || $mm('handler'))/*:108*/.call(/*:108*/$b/*:108*/)/*:108*/;/*:108*/
+      }/*:108*/, TMP_5._s = this, TMP_5)/*:108*/, $l)/*:108*/.call(/*:108*/$m/*:108*/)/*:108*/)/*:108*/;/*:98*/
+      /*:109*/(($l = /*:109*/this.jqconsole/*:109*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:109*/.call(/*:109*/$l/*:109*/, /*:109*/"F"/*:109*/, /*:109*/($n = /*:109*/(($o = /*:109*/this/*:109*/).$lambda || $mm('lambda'))/*:109*/, $n._p = /*:109*/(TMP_6 = /*:109*/function() {
+/*:109*/
         var self = TMP_6._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:90*/
-        /*:90*/
-        /*:90*/(($a = /*:90*/self.jqconsole/*:90*/).$_MoveRight || $mm('_MoveRight'))/*:90*/.call(/*:90*/$a/*:90*/)/*:90*/;/*:90*/
-        /*:90*/return /*:90*/(($b = /*:90*/self/*:90*/).$handler || $mm('handler'))/*:90*/.call(/*:90*/$b/*:90*/)/*:90*/;/*:90*/
-      }/*:90*/, TMP_6._s = this, TMP_6)/*:90*/, $n)/*:90*/.call(/*:90*/$o/*:90*/)/*:90*/)/*:90*/;/*:79*/
-      /*:91*/(($n = /*:91*/this.jqconsole/*:91*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:91*/.call(/*:91*/$n/*:91*/, /*:91*/"N"/*:91*/, /*:91*/($p = /*:91*/(($q = /*:91*/this/*:91*/).$lambda || $mm('lambda'))/*:91*/, $p._p = /*:91*/(TMP_7 = /*:91*/function() {
-/*:91*/
+/*:109*/
+        /*:109*/
+        /*:109*/(($a = /*:109*/self.jqconsole/*:109*/).$_MoveRight || $mm('_MoveRight'))/*:109*/.call(/*:109*/$a/*:109*/)/*:109*/;/*:109*/
+        /*:109*/return /*:109*/(($b = /*:109*/self/*:109*/).$handler || $mm('handler'))/*:109*/.call(/*:109*/$b/*:109*/)/*:109*/;/*:109*/
+      }/*:109*/, TMP_6._s = this, TMP_6)/*:109*/, $n)/*:109*/.call(/*:109*/$o/*:109*/)/*:109*/)/*:109*/;/*:98*/
+      /*:110*/(($n = /*:110*/this.jqconsole/*:110*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:110*/.call(/*:110*/$n/*:110*/, /*:110*/"N"/*:110*/, /*:110*/($p = /*:110*/(($q = /*:110*/this/*:110*/).$lambda || $mm('lambda'))/*:110*/, $p._p = /*:110*/(TMP_7 = /*:110*/function() {
+/*:110*/
         var self = TMP_7._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:91*/
-        /*:91*/
-        /*:91*/(($a = /*:91*/self.jqconsole/*:91*/).$_HistoryNext || $mm('_HistoryNext'))/*:91*/.call(/*:91*/$a/*:91*/)/*:91*/;/*:91*/
-        /*:91*/return /*:91*/(($b = /*:91*/self/*:91*/).$handler || $mm('handler'))/*:91*/.call(/*:91*/$b/*:91*/)/*:91*/;/*:91*/
-      }/*:91*/, TMP_7._s = this, TMP_7)/*:91*/, $p)/*:91*/.call(/*:91*/$q/*:91*/)/*:91*/)/*:91*/;/*:79*/
-      /*:92*/(($p = /*:92*/this.jqconsole/*:92*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:92*/.call(/*:92*/$p/*:92*/, /*:92*/"P"/*:92*/, /*:92*/($r = /*:92*/(($s = /*:92*/this/*:92*/).$lambda || $mm('lambda'))/*:92*/, $r._p = /*:92*/(TMP_8 = /*:92*/function() {
-/*:92*/
+/*:110*/
+        /*:110*/
+        /*:110*/(($a = /*:110*/self.jqconsole/*:110*/).$_HistoryNext || $mm('_HistoryNext'))/*:110*/.call(/*:110*/$a/*:110*/)/*:110*/;/*:110*/
+        /*:110*/return /*:110*/(($b = /*:110*/self/*:110*/).$handler || $mm('handler'))/*:110*/.call(/*:110*/$b/*:110*/)/*:110*/;/*:110*/
+      }/*:110*/, TMP_7._s = this, TMP_7)/*:110*/, $p)/*:110*/.call(/*:110*/$q/*:110*/)/*:110*/)/*:110*/;/*:98*/
+      /*:111*/(($p = /*:111*/this.jqconsole/*:111*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:111*/.call(/*:111*/$p/*:111*/, /*:111*/"P"/*:111*/, /*:111*/($r = /*:111*/(($s = /*:111*/this/*:111*/).$lambda || $mm('lambda'))/*:111*/, $r._p = /*:111*/(TMP_8 = /*:111*/function() {
+/*:111*/
         var self = TMP_8._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:92*/
-        /*:92*/
-        /*:92*/(($a = /*:92*/self.jqconsole/*:92*/).$_HistoryPrevious || $mm('_HistoryPrevious'))/*:92*/.call(/*:92*/$a/*:92*/)/*:92*/;/*:92*/
-        /*:92*/return /*:92*/(($b = /*:92*/self/*:92*/).$handler || $mm('handler'))/*:92*/.call(/*:92*/$b/*:92*/)/*:92*/;/*:92*/
-      }/*:92*/, TMP_8._s = this, TMP_8)/*:92*/, $r)/*:92*/.call(/*:92*/$s/*:92*/)/*:92*/)/*:92*/;/*:79*/
-      /*:93*/(($r = /*:93*/this.jqconsole/*:93*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:93*/.call(/*:93*/$r/*:93*/, /*:93*/"D"/*:93*/, /*:93*/($t = /*:93*/(($u = /*:93*/this/*:93*/).$lambda || $mm('lambda'))/*:93*/, $t._p = /*:93*/(TMP_9 = /*:93*/function() {
-/*:93*/
+/*:111*/
+        /*:111*/
+        /*:111*/(($a = /*:111*/self.jqconsole/*:111*/).$_HistoryPrevious || $mm('_HistoryPrevious'))/*:111*/.call(/*:111*/$a/*:111*/)/*:111*/;/*:111*/
+        /*:111*/return /*:111*/(($b = /*:111*/self/*:111*/).$handler || $mm('handler'))/*:111*/.call(/*:111*/$b/*:111*/)/*:111*/;/*:111*/
+      }/*:111*/, TMP_8._s = this, TMP_8)/*:111*/, $r)/*:111*/.call(/*:111*/$s/*:111*/)/*:111*/)/*:111*/;/*:98*/
+      /*:112*/(($r = /*:112*/this.jqconsole/*:112*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:112*/.call(/*:112*/$r/*:112*/, /*:112*/"D"/*:112*/, /*:112*/($t = /*:112*/(($u = /*:112*/this/*:112*/).$lambda || $mm('lambda'))/*:112*/, $t._p = /*:112*/(TMP_9 = /*:112*/function() {
+/*:112*/
         var self = TMP_9._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:93*/
-        /*:93*/
-        /*:93*/(($a = /*:93*/self.jqconsole/*:93*/).$_Delete || $mm('_Delete'))/*:93*/.call(/*:93*/$a/*:93*/)/*:93*/;/*:93*/
-        /*:93*/return /*:93*/(($b = /*:93*/self/*:93*/).$handler || $mm('handler'))/*:93*/.call(/*:93*/$b/*:93*/)/*:93*/;/*:93*/
-      }/*:93*/, TMP_9._s = this, TMP_9)/*:93*/, $t)/*:93*/.call(/*:93*/$u/*:93*/)/*:93*/)/*:93*/;/*:79*/
-      /*:94*/(($t = /*:94*/this.jqconsole/*:94*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:94*/.call(/*:94*/$t/*:94*/, /*:94*/"K"/*:94*/, /*:94*/($v = /*:94*/(($w = /*:94*/this/*:94*/).$lambda || $mm('lambda'))/*:94*/, $v._p = /*:94*/(TMP_10 = /*:94*/function() {
-/*:94*/
+/*:112*/
+        /*:112*/
+        /*:112*/(($a = /*:112*/self.jqconsole/*:112*/).$_Delete || $mm('_Delete'))/*:112*/.call(/*:112*/$a/*:112*/)/*:112*/;/*:112*/
+        /*:112*/return /*:112*/(($b = /*:112*/self/*:112*/).$handler || $mm('handler'))/*:112*/.call(/*:112*/$b/*:112*/)/*:112*/;/*:112*/
+      }/*:112*/, TMP_9._s = this, TMP_9)/*:112*/, $t)/*:112*/.call(/*:112*/$u/*:112*/)/*:112*/)/*:112*/;/*:98*/
+      /*:113*/(($t = /*:113*/this.jqconsole/*:113*/).$RegisterShortcut || $mm('RegisterShortcut'))/*:113*/.call(/*:113*/$t/*:113*/, /*:113*/"K"/*:113*/, /*:113*/($v = /*:113*/(($w = /*:113*/this/*:113*/).$lambda || $mm('lambda'))/*:113*/, $v._p = /*:113*/(TMP_10 = /*:113*/function() {
+/*:113*/
         var self = TMP_10._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:94*/
-        /*:94*/
-        /*:94*/(($a = /*:94*/self.jqconsole/*:94*/).$Kill || $mm('Kill'))/*:94*/.call(/*:94*/$a/*:94*/)/*:94*/;/*:94*/
-        /*:94*/return /*:94*/(($b = /*:94*/self/*:94*/).$handler || $mm('handler'))/*:94*/.call(/*:94*/$b/*:94*/)/*:94*/;/*:94*/
-      }/*:94*/, TMP_10._s = this, TMP_10)/*:94*/, $v)/*:94*/.call(/*:94*/$w/*:94*/)/*:94*/)/*:94*/;/*:79*/
-      /*:95*/(($v = /*:95*/this.jqconsole/*:95*/).$RegisterAltShortcut || $mm('RegisterAltShortcut'))/*:95*/.call(/*:95*/$v/*:95*/, /*:95*/"B"/*:95*/, /*:95*/($x = /*:95*/(($y = /*:95*/this/*:95*/).$lambda || $mm('lambda'))/*:95*/, $x._p = /*:95*/(TMP_11 = /*:95*/function() {
-/*:95*/
+/*:113*/
+        /*:113*/
+        /*:113*/(($a = /*:113*/self.jqconsole/*:113*/).$Kill || $mm('Kill'))/*:113*/.call(/*:113*/$a/*:113*/)/*:113*/;/*:113*/
+        /*:113*/return /*:113*/(($b = /*:113*/self/*:113*/).$handler || $mm('handler'))/*:113*/.call(/*:113*/$b/*:113*/)/*:113*/;/*:113*/
+      }/*:113*/, TMP_10._s = this, TMP_10)/*:113*/, $v)/*:113*/.call(/*:113*/$w/*:113*/)/*:113*/)/*:113*/;/*:98*/
+      /*:114*/(($v = /*:114*/this.jqconsole/*:114*/).$RegisterAltShortcut || $mm('RegisterAltShortcut'))/*:114*/.call(/*:114*/$v/*:114*/, /*:114*/"B"/*:114*/, /*:114*/($x = /*:114*/(($y = /*:114*/this/*:114*/).$lambda || $mm('lambda'))/*:114*/, $x._p = /*:114*/(TMP_11 = /*:114*/function() {
+/*:114*/
         var self = TMP_11._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:95*/
-        /*:95*/
-        /*:95*/(($a = /*:95*/self.jqconsole/*:95*/).$_MoveLeft || $mm('_MoveLeft'))/*:95*/.call(/*:95*/$a/*:95*/, /*:95*/true/*:95*/)/*:95*/;/*:95*/
-        /*:95*/return /*:95*/(($b = /*:95*/self/*:95*/).$handler || $mm('handler'))/*:95*/.call(/*:95*/$b/*:95*/)/*:95*/;/*:95*/
-      }/*:95*/, TMP_11._s = this, TMP_11)/*:95*/, $x)/*:95*/.call(/*:95*/$y/*:95*/)/*:95*/)/*:95*/;/*:79*/
-      /*:96*/(($x = /*:96*/this.jqconsole/*:96*/).$RegisterAltShortcut || $mm('RegisterAltShortcut'))/*:96*/.call(/*:96*/$x/*:96*/, /*:96*/"F"/*:96*/, /*:96*/($z = /*:96*/(($aa = /*:96*/this/*:96*/).$lambda || $mm('lambda'))/*:96*/, $z._p = /*:96*/(TMP_12 = /*:96*/function() {
-/*:96*/
+/*:114*/
+        /*:114*/
+        /*:114*/(($a = /*:114*/self.jqconsole/*:114*/).$_MoveLeft || $mm('_MoveLeft'))/*:114*/.call(/*:114*/$a/*:114*/, /*:114*/true/*:114*/)/*:114*/;/*:114*/
+        /*:114*/return /*:114*/(($b = /*:114*/self/*:114*/).$handler || $mm('handler'))/*:114*/.call(/*:114*/$b/*:114*/)/*:114*/;/*:114*/
+      }/*:114*/, TMP_11._s = this, TMP_11)/*:114*/, $x)/*:114*/.call(/*:114*/$y/*:114*/)/*:114*/)/*:114*/;/*:98*/
+      /*:115*/(($x = /*:115*/this.jqconsole/*:115*/).$RegisterAltShortcut || $mm('RegisterAltShortcut'))/*:115*/.call(/*:115*/$x/*:115*/, /*:115*/"F"/*:115*/, /*:115*/($z = /*:115*/(($aa = /*:115*/this/*:115*/).$lambda || $mm('lambda'))/*:115*/, $z._p = /*:115*/(TMP_12 = /*:115*/function() {
+/*:115*/
         var self = TMP_12._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:96*/
-        /*:96*/
-        /*:96*/(($a = /*:96*/self.jqconsole/*:96*/).$_MoveRight || $mm('_MoveRight'))/*:96*/.call(/*:96*/$a/*:96*/, /*:96*/true/*:96*/)/*:96*/;/*:96*/
-        /*:96*/return /*:96*/(($b = /*:96*/self/*:96*/).$handler || $mm('handler'))/*:96*/.call(/*:96*/$b/*:96*/)/*:96*/;/*:96*/
-      }/*:96*/, TMP_12._s = this, TMP_12)/*:96*/, $z)/*:96*/.call(/*:96*/$aa/*:96*/)/*:96*/)/*:96*/;/*:79*/
-      /*:97*/return /*:97*/(($z = /*:97*/this.jqconsole/*:97*/).$RegisterAltShortcut || $mm('RegisterAltShortcut'))/*:97*/.call(/*:97*/$z/*:97*/, /*:97*/"D"/*:97*/, /*:97*/($ab = /*:97*/(($ac = /*:97*/this/*:97*/).$lambda || $mm('lambda'))/*:97*/, $ab._p = /*:97*/(TMP_13 = /*:97*/function() {
-/*:97*/
+/*:115*/
+        /*:115*/
+        /*:115*/(($a = /*:115*/self.jqconsole/*:115*/).$_MoveRight || $mm('_MoveRight'))/*:115*/.call(/*:115*/$a/*:115*/, /*:115*/true/*:115*/)/*:115*/;/*:115*/
+        /*:115*/return /*:115*/(($b = /*:115*/self/*:115*/).$handler || $mm('handler'))/*:115*/.call(/*:115*/$b/*:115*/)/*:115*/;/*:115*/
+      }/*:115*/, TMP_12._s = this, TMP_12)/*:115*/, $z)/*:115*/.call(/*:115*/$aa/*:115*/)/*:115*/)/*:115*/;/*:98*/
+      /*:116*/return /*:116*/(($z = /*:116*/this.jqconsole/*:116*/).$RegisterAltShortcut || $mm('RegisterAltShortcut'))/*:116*/.call(/*:116*/$z/*:116*/, /*:116*/"D"/*:116*/, /*:116*/($ab = /*:116*/(($ac = /*:116*/this/*:116*/).$lambda || $mm('lambda'))/*:116*/, $ab._p = /*:116*/(TMP_13 = /*:116*/function() {
+/*:116*/
         var self = TMP_13._s || this, $a, $b;
         if (self.jqconsole == null) self.jqconsole = nil;
-/*:97*/
-        /*:97*/
-        /*:97*/(($a = /*:97*/self.jqconsole/*:97*/).$_Delete || $mm('_Delete'))/*:97*/.call(/*:97*/$a/*:97*/, /*:97*/true/*:97*/)/*:97*/;/*:97*/
-        /*:97*/return /*:97*/(($b = /*:97*/self/*:97*/).$handler || $mm('handler'))/*:97*/.call(/*:97*/$b/*:97*/)/*:97*/;/*:97*/
-      }/*:97*/, TMP_13._s = this, TMP_13)/*:97*/, $ab)/*:97*/.call(/*:97*/$ac/*:97*/)/*:97*/)/*:97*/;/*:78*/
-    }/*:78*/;/*:4*/
+/*:116*/
+        /*:116*/
+        /*:116*/(($a = /*:116*/self.jqconsole/*:116*/).$_Delete || $mm('_Delete'))/*:116*/.call(/*:116*/$a/*:116*/, /*:116*/true/*:116*/)/*:116*/;/*:116*/
+        /*:116*/return /*:116*/(($b = /*:116*/self/*:116*/).$handler || $mm('handler'))/*:116*/.call(/*:116*/$b/*:116*/)/*:116*/;/*:116*/
+      }/*:116*/, TMP_13._s = this, TMP_13)/*:116*/, $ab)/*:116*/.call(/*:116*/$ac/*:116*/)/*:116*/)/*:116*/;/*:97*/
+    }/*:97*/;/*:4*/
 
-    /*:109*/__scope.CMD_LINE_METHOD_DEFINITIONS = /*:113*/[/*:113*/"def help\n                                   OpalJqconsole.help\n                                   nil\n                                 end"/*:117*/, /*:117*/"def history\n                                   OpalJqconsole.history\n                                   nil\n                                 end"/*:122*/, /*:122*/"def alert stuff\n                                    Kernel.alert stuff\n                                    nil\n                                 end"/*:113*/]/*:109*/;/*:4*/
+    /*:128*/__scope.CMD_LINE_METHOD_DEFINITIONS = /*:132*/[/*:132*/"def help\n                                   OpalJqconsole.help\n                                   nil\n                                 end"/*:136*/, /*:136*/"def history\n                                   OpalJqconsole.history\n                                   nil\n                                 end"/*:141*/, /*:141*/"def alert stuff\n                                    Kernel.alert stuff\n                                    nil\n                                 end"/*:132*/]/*:128*/;/*:4*/
 
-    /*:126*/def.$setup_cmd_line_methods = /*:126*/function(/*:126*//*:126*/) {
-/*:126*/      var TMP_14, $a, $b, $c;/*:131*/
-      /*:127*/return /*:127*/($a = /*:127*/(($b = /*:127*/(($c = __scope.CMD_LINE_METHOD_DEFINITIONS) == null ? __opal.cm("CMD_LINE_METHOD_DEFINITIONS") : $c)/*:127*/).$each || $mm('each'))/*:127*/, $a._p = /*:127*/(TMP_14 = /*:127*/function(method_definition) {
-/*:127*/
+    /*:145*/def.$setup_cmd_line_methods = /*:145*/function(/*:145*//*:145*/) {
+/*:145*/      var TMP_14, $a, $b, $c;/*:150*/
+      /*:146*/return /*:146*/($a = /*:146*/(($b = /*:146*/(($c = __scope.CMD_LINE_METHOD_DEFINITIONS) == null ? __opal.cm("CMD_LINE_METHOD_DEFINITIONS") : $c)/*:146*/).$each || $mm('each'))/*:146*/, $a._p = /*:146*/(TMP_14 = /*:146*/function(method_definition) {
+/*:146*/
         var self = TMP_14._s || this, $a, compiled = nil;
         if (self.parser == null) self.parser = nil;
-/*:127*/
-        /*:127*/if (method_definition == null) method_definition = nil;
-/*:127*/
-        /*:128*/compiled/*:128*/ = /*:128*/(($a = /*:128*/self.parser/*:128*/).$parse || $mm('parse'))/*:128*/.call(/*:128*/$a/*:129*/, /*:129*/method_definition/*:128*/)/*:128*/;/*:128*/
-        /*:129*/return eval(compiled);/*:127*/
-      }/*:127*/, TMP_14._s = this, TMP_14)/*:127*/, $a)/*:127*/.call(/*:127*/$b/*:127*/)/*:127*/;/*:126*/
-    }/*:126*/;/*:4*/
+/*:146*/
+        /*:146*/if (method_definition == null) method_definition = nil;
+/*:146*/
+        /*:147*/compiled/*:147*/ = /*:147*/(($a = /*:147*/self.parser/*:147*/).$parse || $mm('parse'))/*:147*/.call(/*:147*/$a/*:148*/, /*:148*/method_definition/*:147*/)/*:147*/;/*:147*/
+        /*:148*/return eval(compiled);/*:146*/
+      }/*:146*/, TMP_14._s = this, TMP_14)/*:146*/, $a)/*:146*/.call(/*:146*/$b/*:146*/)/*:146*/;/*:145*/
+    }/*:145*/;/*:4*/
 
-    /*:133*/__opal.defs(OpalJqconsole, '$history', /*:133*/function(/*:134*//*:133*/) {
-/*:133*/      var $a, $b, TMP_15, $c, $d, $e, $f, history = nil, lines = nil;
+    /*:152*/__opal.defs(OpalJqconsole, '$history', /*:152*/function(/*:153*//*:152*/) {
+/*:152*/      var $a, $b, TMP_15, $c, $d, $e, $f, history = nil, lines = nil;
       if (this.console == null) this.console = nil;
-/*:134*/
-      /*:134*/history/*:134*/ = /*:134*/(($a = /*:134*/(($b = /*:134*/this.console/*:134*/).$jqconsole || $mm('jqconsole'))/*:134*/.call(/*:134*/$b/*:134*/)/*:134*/).$GetHistory || $mm('GetHistory'))/*:134*/.call(/*:134*/$a/*:134*/)/*:134*/;/*:134*/
-      /*:135*/lines/*:135*/ = /*:135*/[]/*:135*/;/*:134*/
-      /*:136*/($c = /*:136*/(($d = /*:136*/history/*:136*/).$each_with_index || $mm('each_with_index'))/*:136*/, $c._p = /*:136*/(TMP_15 = /*:136*/function(history_line, i) {
-/*:136*/
-        var self = TMP_15._s || this, $a, $b, $c;/*:136*/
-        /*:136*/if (history_line == null) history_line = nil;
-/*:136*/if (i == null) i = nil;
-/*:136*/
-        /*:137*/return /*:137*/(($a = /*:137*/lines/*:137*/)['$<<'] || $mm('<<'))/*:137*/.call(/*:137*/$a/*:137*/, /*:137*/""/*:137*/ + /*:137*/(/*:137*/($b = /*:137*/i/*:137*/, $c = /*:137*/1/*:137*/, typeof($b) === 'number' ? $b + $c /*:137*/: $b['$+']($c))/*:137*/)/*:137*/ + /*:137*/": "/*:137*/ + /*:137*/(/*:137*/history_line/*:137*/)/*:137*/)/*:136*/
-      }/*:136*/, TMP_15._s = this, TMP_15)/*:136*/, $c)/*:136*/.call(/*:136*/$d/*:136*/)/*:136*/;/*:134*/
-      /*:139*/return /*:139*/(($c = /*:139*/(($e = /*:139*/this.console/*:139*/).$jqconsole || $mm('jqconsole'))/*:139*/.call(/*:139*/$e/*:139*/)/*:139*/).$Write || $mm('Write'))/*:139*/.call(/*:139*/$c/*:141*/, /*:141*/""/*:141*/ + /*:140*/(/*:139*/(($f = /*:139*/lines/*:139*/).$join || $mm('join'))/*:139*/.call(/*:139*/$f/*:140*/, /*:140*/"\n"/*:139*/)/*:140*/)/*:141*/ + /*:141*/"\n"/*:139*/)/*:139*/;/*:133*/
-    }/*:133*/)/*:133*/;/*:4*/
+/*:153*/
+      /*:153*/history/*:153*/ = /*:153*/(($a = /*:153*/(($b = /*:153*/this.console/*:153*/).$jqconsole || $mm('jqconsole'))/*:153*/.call(/*:153*/$b/*:153*/)/*:153*/).$GetHistory || $mm('GetHistory'))/*:153*/.call(/*:153*/$a/*:153*/)/*:153*/;/*:153*/
+      /*:154*/lines/*:154*/ = /*:154*/[]/*:154*/;/*:153*/
+      /*:155*/($c = /*:155*/(($d = /*:155*/history/*:155*/).$each_with_index || $mm('each_with_index'))/*:155*/, $c._p = /*:155*/(TMP_15 = /*:155*/function(history_line, i) {
+/*:155*/
+        var self = TMP_15._s || this, $a, $b, $c;/*:155*/
+        /*:155*/if (history_line == null) history_line = nil;
+/*:155*/if (i == null) i = nil;
+/*:155*/
+        /*:156*/return /*:156*/(($a = /*:156*/lines/*:156*/)['$<<'] || $mm('<<'))/*:156*/.call(/*:156*/$a/*:156*/, /*:156*/""/*:156*/ + /*:156*/(/*:156*/($b = /*:156*/i/*:156*/, $c = /*:156*/1/*:156*/, typeof($b) === 'number' ? $b + $c /*:156*/: $b['$+']($c))/*:156*/)/*:156*/ + /*:156*/": "/*:156*/ + /*:156*/(/*:156*/history_line/*:156*/)/*:156*/)/*:155*/
+      }/*:155*/, TMP_15._s = this, TMP_15)/*:155*/, $c)/*:155*/.call(/*:155*/$d/*:155*/)/*:155*/;/*:153*/
+      /*:158*/return /*:158*/(($c = /*:158*/(($e = /*:158*/this.console/*:158*/).$jqconsole || $mm('jqconsole'))/*:158*/.call(/*:158*/$e/*:158*/)/*:158*/).$Write || $mm('Write'))/*:158*/.call(/*:158*/$c/*:160*/, /*:160*/""/*:160*/ + /*:159*/(/*:158*/(($f = /*:158*/lines/*:158*/).$join || $mm('join'))/*:158*/.call(/*:158*/$f/*:159*/, /*:159*/"\n"/*:158*/)/*:159*/)/*:160*/ + /*:160*/"\n"/*:158*/)/*:158*/;/*:152*/
+    }/*:152*/)/*:152*/;/*:4*/
 
-    /*:146*/def.$handler = /*:146*/function(/*:146*/cmd/*:146*/) {
-/*:146*/      var $a, $b, $c, $d, $e, $f, $g, $h, TMP_16, TMP_17, $i, e = nil;/*:147*/
-      /*:147*/if (/*:147*/($a = /*:147*/(($b = /*:147*/cmd/*:147*/ !== false && /*:147*/cmd/*:147*/ !== nil/*:147*/) ? /*:147*//*:147*/cmd/*:147*/ != undefined/*:147*/ : $b)/*:147*/) !== false && $a !== nil/*:147*/) {
-/*:147*/        /*:148*/try {
-          /*:149*/(($a = /*:149*/this.jqconsole/*:149*/).$Write || $mm('Write'))/*:149*/.call(/*:149*/$a/*:149*/, /*:149*/" => "/*:149*/ + /*:149*/(/*:149*/(($b = /*:149*/this/*:149*/).$process || $mm('process'))/*:149*/.call(/*:149*/$b/*:149*/, /*:149*/cmd/*:149*/)/*:149*/)/*:149*/ + /*:150*/" \n"/*:149*/)/*:148*/
+    /*:165*/def.$handler = /*:165*/function(/*:165*/cmd/*:165*/) {
+/*:165*/      var $a, $b, $c, $d, $e, $f, $g, $h, TMP_16, TMP_17, $i, e = nil;/*:166*/
+      /*:166*/if (/*:166*/($a = /*:166*/(($b = /*:166*/cmd/*:166*/ !== false && /*:166*/cmd/*:166*/ !== nil/*:166*/) ? /*:166*//*:166*/cmd/*:166*/ != undefined/*:166*/ : $b)/*:166*/) !== false && $a !== nil/*:166*/) {
+/*:166*/        /*:167*/try {
+          /*:168*/(($a = /*:168*/this.jqconsole/*:168*/).$Write || $mm('Write'))/*:168*/.call(/*:168*/$a/*:168*/, /*:168*/" => "/*:168*/ + /*:168*/(/*:168*/(($b = /*:168*/this/*:168*/).$process || $mm('process'))/*:168*/.call(/*:168*/$b/*:168*/, /*:168*/cmd/*:168*/)/*:168*/)/*:168*/ + /*:169*/" \n"/*:168*/)/*:167*/
         } catch ($err) {
-        /*:154*/if (/*:153*/(($d = /*:151*/(($e = __scope.Exception) == null ? __opal.cm("Exception") : $e)/*:153*/)['$==='] || $mm('==='))/*:153*/.call(/*:151*/$d/*:153*/, /*:153*/$err/*:153*/)/*:154*/){
-          /*:152*/e/*:152*/ = /*:153*/$err/*:154*/;/*:152*/(($c = /*:152*/this.jqconsole/*:152*/).$Write || $mm('Write'))/*:152*/.call(/*:152*/$c/*:153*/, /*:153*/($d = /*:152*/($f = /*:152*/"Error: "/*:152*/, $g = /*:152*/(($h = /*:152*/e/*:152*/).$message || $mm('message'))/*:152*/.call(/*:152*/$h/*:152*/)/*:152*/, typeof($f) === 'number' ? $f + $g /*:152*/: $f['$+']($g))/*:153*/, $e = /*:153*/"\n"/*:153*/, typeof($d) === 'number' ? $d + $e /*:153*/: $d['$+']($e))/*:152*/)/*:154*/}/*:148*/else { throw $err; }/*:148*/
-        }/*:147*/
-      }/*:147*/;/*:147*/
-      /*:156*/return /*:156*/(($e = /*:156*/this.jqconsole/*:156*/).$Prompt || $mm('Prompt'))/*:156*/.call(/*:156*/$e/*:156*/, /*:156*/true/*:156*/, /*:156*/($f = /*:156*/(($g = /*:156*/this/*:156*/).$lambda || $mm('lambda'))/*:156*/, $f._p = /*:156*/(TMP_16 = /*:156*/function(c) {
-/*:156*/
-        var self = TMP_16._s || this, $a;/*:156*/
-        /*:156*/if (c == null) c = nil;
-/*:156*/
-        /*:156*/return /*:156*/(($a = /*:156*/self/*:156*/).$handler || $mm('handler'))/*:156*/.call(/*:156*/$a/*:156*/, /*:156*/c/*:156*/)/*:156*/
-      }/*:156*/, TMP_16._s = this, TMP_16)/*:156*/, $f)/*:156*/.call(/*:156*/$g/*:156*/)/*:156*/, /*:156*/($f = /*:156*/(($i = /*:156*/this/*:156*/).$lambda || $mm('lambda'))/*:156*/, $f._p = /*:156*/(TMP_17 = /*:156*/function(c) {
-/*:156*/
-        var self = TMP_17._s || this, $a;/*:156*/
-        /*:156*/if (c == null) c = nil;
-/*:156*/
-        /*:156*/return /*:156*/(($a = /*:156*/self/*:156*/).$check_is_incomplete || $mm('check_is_incomplete'))/*:156*/.call(/*:156*/$a/*:156*/, /*:156*/c/*:156*/)/*:156*/
-      }/*:156*/, TMP_17._s = this, TMP_17)/*:156*/, $f)/*:156*/.call(/*:156*/$i/*:156*/)/*:156*/)/*:156*/;/*:146*/
-    }/*:146*/;/*:4*/
+        /*:173*/if (/*:172*/(($d = /*:170*/(($e = __scope.Exception) == null ? __opal.cm("Exception") : $e)/*:172*/)['$==='] || $mm('==='))/*:172*/.call(/*:170*/$d/*:172*/, /*:172*/$err/*:172*/)/*:173*/){
+          /*:171*/e/*:171*/ = /*:172*/$err/*:173*/;/*:171*/(($c = /*:171*/this.jqconsole/*:171*/).$Write || $mm('Write'))/*:171*/.call(/*:171*/$c/*:172*/, /*:172*/($d = /*:171*/($f = /*:171*/"Error: "/*:171*/, $g = /*:171*/(($h = /*:171*/e/*:171*/).$message || $mm('message'))/*:171*/.call(/*:171*/$h/*:171*/)/*:171*/, typeof($f) === 'number' ? $f + $g /*:171*/: $f['$+']($g))/*:172*/, $e = /*:172*/"\n"/*:172*/, typeof($d) === 'number' ? $d + $e /*:172*/: $d['$+']($e))/*:171*/)/*:173*/}/*:167*/else { throw $err; }/*:167*/
+        }/*:166*/
+      }/*:166*/;/*:166*/
+      /*:175*/return /*:175*/(($e = /*:175*/this.jqconsole/*:175*/).$Prompt || $mm('Prompt'))/*:175*/.call(/*:175*/$e/*:175*/, /*:175*/true/*:175*/, /*:175*/($f = /*:175*/(($g = /*:175*/this/*:175*/).$lambda || $mm('lambda'))/*:175*/, $f._p = /*:175*/(TMP_16 = /*:175*/function(c) {
+/*:175*/
+        var self = TMP_16._s || this, $a;/*:175*/
+        /*:175*/if (c == null) c = nil;
+/*:175*/
+        /*:175*/return /*:175*/(($a = /*:175*/self/*:175*/).$handler || $mm('handler'))/*:175*/.call(/*:175*/$a/*:175*/, /*:175*/c/*:175*/)/*:175*/
+      }/*:175*/, TMP_16._s = this, TMP_16)/*:175*/, $f)/*:175*/.call(/*:175*/$g/*:175*/)/*:175*/, /*:175*/($f = /*:175*/(($i = /*:175*/this/*:175*/).$lambda || $mm('lambda'))/*:175*/, $f._p = /*:175*/(TMP_17 = /*:175*/function(c) {
+/*:175*/
+        var self = TMP_17._s || this, $a;/*:175*/
+        /*:175*/if (c == null) c = nil;
+/*:175*/
+        /*:175*/return /*:175*/(($a = /*:175*/self/*:175*/).$check_is_incomplete || $mm('check_is_incomplete'))/*:175*/.call(/*:175*/$a/*:175*/, /*:175*/c/*:175*/)/*:175*/
+      }/*:175*/, TMP_17._s = this, TMP_17)/*:175*/, $f)/*:175*/.call(/*:175*/$i/*:175*/)/*:175*/)/*:175*/;/*:165*/
+    }/*:165*/;/*:4*/
 
-    /*:160*/def.$check_is_incomplete = /*:160*/function(/*:160*/cmd/*:160*/) {
-/*:160*/      var $a;/*:167*/
-      /*:161*/try {
-        /*:162*/(($a = /*:162*/this.parser/*:162*/).$parse || $mm('parse'))/*:162*/.call(/*:162*/$a/*:162*/, /*:162*/cmd/*:163*/, /*:163*/__hash2(["irb"], {/*:163*/"irb": /*:162*/true/*:163*/})/*:162*/)/*:162*/;/*:162*/
-        /*:163*/return /*:163*/false/*:163*/;/*:161*/
+    /*:179*/def.$check_is_incomplete = /*:179*/function(/*:179*/cmd/*:179*/) {
+/*:179*/      var $a;/*:186*/
+      /*:180*/try {
+        /*:181*/(($a = /*:181*/this.parser/*:181*/).$parse || $mm('parse'))/*:181*/.call(/*:181*/$a/*:181*/, /*:181*/cmd/*:182*/, /*:182*/__hash2(["irb"], {/*:182*/"irb": /*:181*/true/*:182*/})/*:181*/)/*:181*/;/*:181*/
+        /*:182*/return /*:182*/false/*:182*/;/*:180*/
       } catch ($err) {
-      /*:166*/if (/*:166*/true/*:166*/){
-        /*:165*/0/*:166*/}/*:161*/else { throw $err; }/*:161*/
-      }/*:161*/;/*:160*/
-    }/*:160*/;/*:4*/
+      /*:185*/if (/*:185*/true/*:185*/){
+        /*:184*/0/*:185*/}/*:180*/else { throw $err; }/*:180*/
+      }/*:180*/;/*:179*/
+    }/*:179*/;/*:4*/
 
-    /*:169*/def.$write = /*:169*/function(/*:169*/stuff/*:169*/) {
-/*:169*/      var $a;/*:169*/stuff = __slice.call(arguments, 0);/*:171*/
-      /*:170*/return /*:170*/(($a = /*:170*/this.jqconsole/*:170*/).$Write || $mm('Write'))/*:170*/.apply(/*:170*/$a/*:170*/, /*:171*/[].concat(/*:171*/stuff/*:171*/)/*:170*/)/*:170*/;/*:169*/
-    }/*:169*/;/*:4*/
+    /*:188*/def.$write = /*:188*/function(/*:188*/stuff/*:188*/) {
+/*:188*/      var $a;/*:188*/stuff = __slice.call(arguments, 0);/*:190*/
+      /*:189*/return /*:189*/(($a = /*:189*/this.jqconsole/*:189*/).$Write || $mm('Write'))/*:189*/.apply(/*:189*/$a/*:189*/, /*:190*/[].concat(/*:190*/stuff/*:190*/)/*:189*/)/*:189*/;/*:188*/
+    }/*:188*/;/*:4*/
 
-    /*:173*/def.$unescaped_write = /*:173*/function(/*:173*/str/*:173*/) {
-/*:173*/      /*:175*/
-      /*:174*/return /*:174*/this.jqconsole/*:174*/.Write(str, "unescaped", false)/*:174*/;/*:173*/
-    }/*:173*/;/*:4*/
+    /*:192*/def.$unescaped_write = /*:192*/function(/*:192*/str/*:192*/) {
+/*:192*/      /*:194*/
+      /*:193*/return /*:193*/this.jqconsole/*:193*/.Write(str, "unescaped", false)/*:193*/;/*:192*/
+    }/*:192*/;/*:4*/
 
-    /*:177*/__opal.defs(OpalJqconsole, '$write', /*:177*/function(/*:178*/stuff/*:177*/) {
-/*:177*/      var $a;
+    /*:196*/__opal.defs(OpalJqconsole, '$write', /*:196*/function(/*:197*/stuff/*:196*/) {
+/*:196*/      var $a;
       if (this.console == null) this.console = nil;
-/*:177*/stuff = __slice.call(arguments, 0);/*:178*/
-      /*:178*/return /*:178*/(($a = /*:178*/this.console/*:178*/).$write || $mm('write'))/*:178*/.apply(/*:178*/$a/*:178*/, /*:180*/[].concat(/*:180*/stuff/*:180*/)/*:178*/)/*:177*/
-    }/*:177*/)/*:177*/;/*:4*/
+/*:196*/stuff = __slice.call(arguments, 0);/*:197*/
+      /*:197*/return /*:197*/(($a = /*:197*/this.console/*:197*/).$write || $mm('write'))/*:197*/.apply(/*:197*/$a/*:197*/, /*:198*/[].concat(/*:198*/stuff/*:198*/)/*:197*/)/*:196*/
+    }/*:196*/)/*:196*/;/*:4*/
 
-    /*:181*/__opal.defs(OpalJqconsole, '$unescaped_write', /*:181*/function(/*:182*/stuff/*:181*/) {
-/*:181*/      var $a;
+    /*:200*/__opal.defs(OpalJqconsole, '$puts', /*:200*/function(/*:201*/stuff/*:200*/) {
+/*:200*/      var $a, $b;
       if (this.console == null) this.console = nil;
-/*:181*/stuff = __slice.call(arguments, 0);/*:182*/
-      /*:182*/return /*:182*/(($a = /*:182*/this.console/*:182*/).$unescaped_write || $mm('unescaped_write'))/*:182*/.apply(/*:182*/$a/*:182*/, /*:184*/[].concat(/*:184*/stuff/*:184*/)/*:182*/)/*:181*/
-    }/*:181*/)/*:181*/;/*:4*/
+/*:200*/stuff = __slice.call(arguments, 0);/*:201*/
+      /*:201*/(($a = /*:201*/this.console/*:201*/).$write || $mm('write'))/*:201*/.apply(/*:201*/$a/*:201*/, /*:202*/[].concat(/*:202*/stuff/*:202*/)/*:201*/)/*:201*/;/*:201*/
+      /*:202*/return /*:202*/(($b = /*:202*/this.console/*:202*/).$write || $mm('write'))/*:202*/.call(/*:202*/$b/*:203*/, /*:203*/"\n"/*:202*/)/*:202*/;/*:200*/
+    }/*:200*/)/*:200*/;/*:4*/
 
-    /*:186*/__opal.defs(OpalJqconsole, '$help', /*:186*/function(/*:187*//*:186*/) {
-/*:186*/      var $a, help = nil;/*:187*/
-      /*:187*/help/*:187*/ = /*:191*/"<b><i>help</i></b>:                            this text\n<b>history</b>:                         shows history\n<b>ctrl-m</b>:                          multi-line edit mode\n<b>Up/Down Arrow and ctrl-p/ctrl-n</b>: flips through history\n"/*:187*/;/*:187*/
-      /*:193*/return /*:193*/(($a = /*:193*/this/*:193*/).$unescaped_write || $mm('unescaped_write'))/*:193*/.call(/*:193*/$a/*:193*/, /*:193*/help/*:193*/)/*:193*/;/*:186*/
-    }/*:186*/)/*:186*/;/*:4*/
+    /*:206*/__opal.defs(OpalJqconsole, '$unescaped_write', /*:206*/function(/*:207*/stuff/*:206*/) {
+/*:206*/      var $a;
+      if (this.console == null) this.console = nil;
+/*:206*/stuff = __slice.call(arguments, 0);/*:207*/
+      /*:207*/return /*:207*/(($a = /*:207*/this.console/*:207*/).$unescaped_write || $mm('unescaped_write'))/*:207*/.apply(/*:207*/$a/*:207*/, /*:209*/[].concat(/*:209*/stuff/*:209*/)/*:207*/)/*:206*/
+    }/*:206*/)/*:206*/;/*:4*/
 
-    /*:195*/def.$process = /*:195*/function(/*:195*/cmd/*:195*/) {
-/*:195*/      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, compiled = nil, value = nil, output = nil, e = nil;/*:230*/
-      /*:196*/try {
-        /*:199*/(($a = /*:199*/this/*:199*/).$puts || $mm('puts'))/*:199*/.call(/*:199*/$a/*:199*/, /*:199*/"\n\n|"/*:199*/ + /*:199*/(/*:199*/cmd/*:199*/)/*:199*/ + /*:199*/"|"/*:199*/)/*:199*/;/*:199*/
-        /*:201*/if (/*:201*/cmd/*:201*/ !== false && /*:201*/cmd/*:201*/ !== nil/*:201*/) {
-/*:201*/          /*:201*/compiled/*:201*/ = /*:201*/(($b = /*:201*/this.parser/*:201*/).$parse || $mm('parse'))/*:201*/.call(/*:201*/$b/*:201*/, /*:201*/cmd/*:202*/, /*:202*/__hash2(["irb"], {/*:202*/"irb": /*:201*/true/*:202*/})/*:201*/)/*:201*/;/*:201*/
-          /*:203*/(($c = /*:203*/this/*:203*/).$puts || $mm('puts'))/*:203*/.call(/*:203*/$c/*:203*/, /*:203*/compiled/*:203*/)/*:203*/;/*:201*/
-          /*:203*/value/*:203*/ = /*:203*/eval(compiled)/*:203*/;/*:201*/
-          /*:204*/__gvars["_"] = /*:205*/value/*:204*/;/*:201*/
-          /*:205*/return /*:205*/(($d = /*:205*/__gvars["_"]/*:205*/).$inspect || $mm('inspect'))/*:205*/.call(/*:205*/$d/*:205*/)/*:205*/;/*:201*/
+    /*:211*/__opal.defs(OpalJqconsole, '$help', /*:211*/function(/*:212*//*:211*/) {
+/*:211*/      var $a, help = nil;/*:212*/
+      /*:212*/help/*:212*/ = /*:217*/"<b>help</b>:                            This text\n<b>history</b>:                         Shows history\n<b>ctrl-c</b>:                          Abort prompt\n<b>ctrl-m</b>:                          Multi-line edit mode\n<b>Up/Down Arrow and ctrl-p/ctrl-n</b>: Navigate through history\n"/*:212*/;/*:212*/
+      /*:219*/return /*:219*/(($a = /*:219*/this/*:219*/).$unescaped_write || $mm('unescaped_write'))/*:219*/.call(/*:219*/$a/*:219*/, /*:219*/help/*:219*/)/*:219*/;/*:211*/
+    }/*:211*/)/*:211*/;/*:4*/
+
+    /*:221*/def.$process = /*:221*/function(/*:221*/cmd/*:221*/) {
+/*:221*/      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, compiled = nil, value = nil, output = nil, e = nil;/*:256*/
+      /*:222*/try {
+        /*:225*/(($a = /*:225*/this/*:225*/).$log || $mm('log'))/*:225*/.call(/*:225*/$a/*:225*/, /*:225*/"\n\n|"/*:225*/ + /*:225*/(/*:225*/cmd/*:225*/)/*:225*/ + /*:225*/"|"/*:225*/)/*:225*/;/*:225*/
+        /*:227*/if (/*:227*/cmd/*:227*/ !== false && /*:227*/cmd/*:227*/ !== nil/*:227*/) {
+/*:227*/          /*:227*/compiled/*:227*/ = /*:227*/(($b = /*:227*/this.parser/*:227*/).$parse || $mm('parse'))/*:227*/.call(/*:227*/$b/*:227*/, /*:227*/cmd/*:228*/, /*:228*/__hash2(["irb"], {/*:228*/"irb": /*:227*/true/*:228*/})/*:227*/)/*:227*/;/*:227*/
+          /*:229*/(($c = /*:229*/this/*:229*/).$log || $mm('log'))/*:229*/.call(/*:229*/$c/*:229*/, /*:229*/compiled/*:229*/)/*:229*/;/*:227*/
+          /*:229*/value/*:229*/ = /*:229*/eval(compiled)/*:229*/;/*:227*/
+          /*:230*/__gvars["_"] = /*:231*/value/*:230*/;/*:227*/
+          /*:231*/return /*:231*/(($d = /*:231*/__gvars["_"]/*:231*/).$inspect || $mm('inspect'))/*:231*/.call(/*:231*/$d/*:231*/)/*:231*/;/*:227*/
         } else {
-          /*:230*/return /*:230*/nil/*:201*/
-        }/*:201*/;/*:196*/
+          /*:256*/return /*:256*/nil/*:227*/
+        }/*:227*/;/*:222*/
       } catch ($err) {
-      /*:229*/if (/*:228*/(($g = /*:207*/(($j = __scope.Exception) == null ? __opal.cm("Exception") : $j)/*:228*/)['$==='] || $mm('==='))/*:228*/.call(/*:207*/$g/*:228*/, /*:228*/$err/*:228*/)/*:229*/){
-        /*:208*/e/*:208*/ = /*:228*/$err/*:229*/;/*:209*/if (/*:209*/($e = /*:209*/(($f = /*:209*/e/*:209*/).$backtrace || $mm('backtrace'))/*:209*/.call(/*:209*/$f/*:209*/)/*:209*/) !== false && $e !== nil/*:209*/) {
-/*:209*/          /*:210*/output/*:210*/ = /*:215*/($e = /*:211*/"FOR:\n"/*:211*/ + /*:211*/(/*:211*/compiled/*:211*/)/*:211*/ + /*:213*/"\n============\n"/*:215*/, $g = /*:213*/(($h = /*:213*/(($i = /*:213*/e/*:213*/).$backtrace || $mm('backtrace'))/*:213*/.call(/*:213*/$i/*:213*/)/*:213*/).$join || $mm('join'))/*:213*/.call(/*:213*/$h/*:214*/, /*:214*/"\n"/*:213*/)/*:215*/, typeof($e) === 'number' ? $e + $g /*:215*/: $e['$+']($g))/*:210*/;/*:210*/
-          /*:217*/return /*:217*/output/*:217*/;/*:209*/
+      /*:255*/if (/*:254*/(($g = /*:233*/(($j = __scope.Exception) == null ? __opal.cm("Exception") : $j)/*:254*/)['$==='] || $mm('==='))/*:254*/.call(/*:233*/$g/*:254*/, /*:254*/$err/*:254*/)/*:255*/){
+        /*:234*/e/*:234*/ = /*:254*/$err/*:255*/;/*:235*/if (/*:235*/($e = /*:235*/(($f = /*:235*/e/*:235*/).$backtrace || $mm('backtrace'))/*:235*/.call(/*:235*/$f/*:235*/)/*:235*/) !== false && $e !== nil/*:235*/) {
+/*:235*/          /*:236*/output/*:236*/ = /*:241*/($e = /*:237*/"FOR:\n"/*:237*/ + /*:237*/(/*:237*/compiled/*:237*/)/*:237*/ + /*:239*/"\n============\n"/*:241*/, $g = /*:239*/(($h = /*:239*/(($i = /*:239*/e/*:239*/).$backtrace || $mm('backtrace'))/*:239*/.call(/*:239*/$i/*:239*/)/*:239*/).$join || $mm('join'))/*:239*/.call(/*:239*/$h/*:240*/, /*:240*/"\n"/*:239*/)/*:241*/, typeof($e) === 'number' ? $e + $g /*:241*/: $e['$+']($g))/*:236*/;/*:236*/
+          /*:243*/return /*:243*/output/*:243*/;/*:235*/
         } else {
-          /*:223*/output/*:223*/ = /*:223*/e.toString()/*:223*/;/*:223*/
-          /*:225*/(($e = /*:225*/this/*:225*/).$puts || $mm('puts'))/*:225*/.call(/*:225*/$e/*:225*/, /*:225*/"\nReturning NO have backtrace |"/*:225*/ + /*:225*/(/*:225*/output/*:225*/)/*:225*/ + /*:225*/"|"/*:225*/)/*:225*/;/*:223*/
-          /*:228*/return /*:228*/output/*:228*/;/*:209*/
-        }/*:229*/}/*:196*/else { throw $err; }/*:196*/
-      }/*:196*/;/*:195*/
-    }/*:195*/;/*:4*/
+          /*:249*/output/*:249*/ = /*:249*/e.toString()/*:249*/;/*:249*/
+          /*:251*/(($e = /*:251*/this/*:251*/).$log || $mm('log'))/*:251*/.call(/*:251*/$e/*:251*/, /*:251*/"\nReturning NO have backtrace |"/*:251*/ + /*:251*/(/*:251*/output/*:251*/)/*:251*/ + /*:251*/"|"/*:251*/)/*:251*/;/*:249*/
+          /*:254*/return /*:254*/output/*:254*/;/*:235*/
+        }/*:255*/}/*:222*/else { throw $err; }/*:222*/
+      }/*:222*/;/*:221*/
+    }/*:221*/;/*:4*/
 
     /*:3*/return /*:3*/nil/*:3*/;/*:3*/
   })/*:3*/(/*:3*/self/*:3*/, /*:3*/null/*:3*/)/*:3*/;/*:1*/

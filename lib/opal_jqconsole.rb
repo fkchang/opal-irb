@@ -14,7 +14,26 @@ class OpalJqconsole
     setup_cmd_line_methods
     setup_jqconsole(parent_element_id)
     create_multiline_editor
+    redirect_console_dot_log
     handler()
+  end
+
+  def log thing
+    `console.orig_log(#{thing})`
+  end
+
+
+  def redirect_console_dot_log
+    %x|
+    console.orig_log = console.log
+    console.log = function() {
+      var args;
+      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      console.orig_log(args);
+      Opal.OpalJqconsole.$puts(args);
+    };
+    |
+
   end
 
   def create_multiline_editor
@@ -79,7 +98,7 @@ EDITOR
   def setup_jqconsole(parent_element_id)
     @jqconsole = Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\ntype help for assistance\n", 'opal> ');
     @jqconsole.RegisterShortcut('M', lambda { open_multiline_dialog; handler})
-    @jqconsole.RegisterShortcut('Z', lambda { @jqconsole.AbortPrompt(); handler})
+    @jqconsole.RegisterShortcut('C', lambda { @jqconsole.AbortPrompt(); handler})
 
     # These are the ubiquitous emacs commands that I have to implement now, my other
     # solution I got them all for free in OSX
@@ -171,8 +190,13 @@ EDITOR
 
   def self.write *stuff
     @console.write *stuff
-
   end
+
+  def self.puts *stuff
+    @console.write *stuff
+    @console.write "\n"
+  end
+
   def self.unescaped_write *stuff
     @console.unescaped_write *stuff
 
@@ -180,20 +204,21 @@ EDITOR
 
   def self.help
     help = <<HELP
-<b><i>help</i></b>:                            this text
-<b>history</b>:                         shows history
-<b>ctrl-m</b>:                          multi-line edit mode
-<b>Up/Down Arrow and ctrl-p/ctrl-n</b>: flips through history
+<b>help</b>:                            This text
+<b>history</b>:                         Shows history
+<b>ctrl-c</b>:                          Abort prompt
+<b>ctrl-m</b>:                          Multi-line edit mode
+<b>Up/Down Arrow and ctrl-p/ctrl-n</b>: Navigate through history
 HELP
     unescaped_write help
   end
 
   def process(cmd)
     begin
-      puts "\n\n|#{cmd}|"
+      log "\n\n|#{cmd}|"
       if cmd
         compiled = @parser.parse cmd, :irb => true
-        puts compiled
+        log compiled
         value = `eval(compiled)`
         $_ = value
         $_.inspect
@@ -211,7 +236,7 @@ HELP
         # end
       else
         output = `e.toString()`
-        puts "\nReturning NO have backtrace |#{output}|"
+        log "\nReturning NO have backtrace |#{output}|"
         # TODO remove return when bug is fixed in rescue block
         return output
       end
