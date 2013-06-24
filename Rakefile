@@ -4,18 +4,23 @@ require 'opal'
 require 'opal-sprockets'
 
 require 'opal-jquery'
+require 'opal-irb'
 
-task :build do
-=begin
+task :build_homebrew_console do
   File.open("js/application.js", "w+") do |out|
     env = Opal::Environment.new
-    env.append_path "lib"
+    env.append_path "examples"
+    env.append_path "opal"
     out << env["application"].to_s
   end
-=end
+  system "open -a 'Google Chrome' index.html"
+end
+
+task :build_jqconsole do
 
   File.open("js/app-jqconsole.js", "w+") do |out|
     env = Opal::Environment.new
+    env.append_path "examples"
     env.append_path "opal"
     out << env["app-jqconsole"].to_s
   end
@@ -23,4 +28,5 @@ task :build do
   system "open -a 'Google Chrome' index-jq.html"
 end
 
-task :default => :build
+task :build_all => [:build_homebrew_console, :build_jqconsole]
+task :default => :build_all

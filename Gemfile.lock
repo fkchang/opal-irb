@@ -12,6 +12,13 @@ GIT
     opal-jquery (0.0.8)
       opal (>= 0.3.43)
 
+PATH
+  remote: .
+  specs:
+    opal-irb (0.0.1)
+      opal (~> 0.4.1)
+      opal-jquery
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -75,6 +82,7 @@ DEPENDENCIES
   guard
   guard-process
   opal!
+  opal-irb!
   opal-jquery!
   opal-spec
   opal-sprockets

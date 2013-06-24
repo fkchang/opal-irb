@@ -1,4 +1,6 @@
 source 'https://rubygems.org'
+gemspec
+
 gem 'opal', :git => "git://github.com/opal/opal.git"
 gem 'opal-sprockets'
 gem 'opal-spec'
