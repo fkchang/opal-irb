@@ -894,7 +894,7 @@ Licensed under the MIT license
           case KEY_DOWN:
             this._MoveDown();
             break;
-          case KEY_PAGE(_UP):
+          case KEY_PAGE_UP:
             this._ScrollUp();
             break;
           case KEY_PAGE_DOWN:
