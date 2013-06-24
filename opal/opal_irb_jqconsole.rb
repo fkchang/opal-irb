@@ -1,4 +1,5 @@
 require 'opal-parser'
+require 'opal_irb_log_redirector'
 
 class OpalIrbJqconsole
   def self.console
@@ -24,15 +25,7 @@ class OpalIrbJqconsole
 
 
   def redirect_console_dot_log
-    %x|
-    console.orig_log = console.log
-    console.log = function() {
-      var args;
-      args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
-      console.orig_log(args);
-      Opal.OpalIrbJqconsole.$puts(args);
-    };
-    |
+    OpalIrbLogRedirector.add_to_redirect(lambda {|args| OpalIrbJqconsole.write(args)})
 
   end
 

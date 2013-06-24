@@ -29,4 +29,4 @@ task :build_jqconsole do
 end
 
 task :build_all => [:build_homebrew_console, :build_jqconsole]
-task :default => :build_all
+task :default => :build_jqconsole
