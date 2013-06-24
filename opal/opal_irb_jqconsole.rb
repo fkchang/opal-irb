@@ -201,7 +201,18 @@ EDITOR
 <b>history</b>:                         Shows history
 <b>ctrl-c</b>:                          Abort prompt
 <b>ctrl-m</b>:                          Multi-line edit mode
+<hr/>
+<b>EDITOR FUNCTIONALITY</b>
 <b>Up/Down Arrow and ctrl-p/ctrl-n</b>: Navigate through history
+<b>ctrl-a</b>:                          Beginning of line
+<b>ctrl-e</b>:                          End of line
+<b>ctrl-b</b>:                          Back 1 character
+<b>ctrl-f</b>:                          Forward 1 character
+<b>ctrl-d</b>:                          Delete 1 character
+<b>ctrl-k</b>:                          Kill to the end of the line
+<b>alt-b</b>:                           Back 1 word
+<b>alt-f</b>:                           Forward 1 word
+<b>alt-d</b>:                           Delete 1 word
 HELP
     unescaped_write help
   end
