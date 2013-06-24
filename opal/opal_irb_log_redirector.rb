@@ -9,7 +9,7 @@ class OpalIrbLogRedirector
       var args;
       args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
       console.orig_log(args);
-      Opal.OpalIrbLogRedirector.$puts(args);
+      Opal.OpalIrbLogRedirector.$puts(args+"\\n");
     };
     |
 
