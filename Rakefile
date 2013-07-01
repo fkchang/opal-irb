@@ -6,6 +6,7 @@ require 'opal-sprockets'
 require 'opal-jquery'
 require 'opal-irb'
 
+desc "build irb with homebrew console"
 task :build_homebrew_console do
   File.open("js/application.js", "w+") do |out|
     env = Opal::Environment.new
@@ -16,6 +17,7 @@ task :build_homebrew_console do
   system "open -a 'Google Chrome' index.html"
 end
 
+desc "build jqconsole based irb"
 task :build_jqconsole do
 
   File.open("js/app-jqconsole.js", "w+") do |out|
