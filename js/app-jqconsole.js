@@ -17238,63 +17238,68 @@ Opal.eval = function(str) {
        irbVars/*:4*/
     }/*:4*/;/*:4*/
 
-    /*:14*/def.$initialize = /*:14*/function(/*:14*//*:14*/) {
-/*:14*/      var $a, $b, $c;/*:16*/
-      /*:15*/return /*:15*/this.parser/*:15*/ = /*:15*/(($a = /*:15*/(($b = (/*:15*/(($c = __scope.Opal) == null ? __opal.cm("Opal") : $c)/*:15*/)._scope)./*:15*/Parser == null ? $b.cm("Parser") : $b.Parser)/*:15*/).$new || $mm('new'))/*:15*/.call(/*:15*/$a/*:15*/)/*:15*/;/*:14*/
-    }/*:14*/;/*:4*/
+    /*:14*/def.$parser = /*:14*/function(/*:14*//*:14*/) {
+/*:14*/      /*:14*/
+      /*:14*/return /*:14*/this.parser/*:14*/
+    }, nil/*:14*/;/*:4*/
 
-    /*:18*/def.$parse = /*:18*/function(/*:18*/cmd/*:18*/) {
-/*:18*/      var $a;/*:20*/
-      /*:19*/return /*:19*/(($a = /*:19*/this.parser/*:19*/).$parse || $mm('parse'))/*:19*/.call(/*:19*/$a/*:19*/, /*:19*/cmd/*:20*/, /*:20*/__hash2(["irb"], {/*:20*/"irb": /*:19*/true/*:20*/})/*:19*/)/*:19*/;/*:18*/
-    }/*:18*/;/*:4*/
+    /*:15*/def.$initialize = /*:15*/function(/*:15*//*:15*/) {
+/*:15*/      var $a, $b, $c;/*:17*/
+      /*:16*/return /*:16*/this.parser/*:16*/ = /*:16*/(($a = /*:16*/(($b = (/*:16*/(($c = __scope.Opal) == null ? __opal.cm("Opal") : $c)/*:16*/)._scope)./*:16*/Parser == null ? $b.cm("Parser") : $b.Parser)/*:16*/).$new || $mm('new'))/*:16*/.call(/*:16*/$a/*:16*/)/*:16*/;/*:15*/
+    }/*:15*/;/*:4*/
+
+    /*:19*/def.$parse = /*:19*/function(/*:19*/cmd/*:19*/) {
+/*:19*/      var $a;/*:21*/
+      /*:20*/return /*:20*/(($a = /*:20*/this.parser/*:20*/).$parse || $mm('parse'))/*:20*/.call(/*:20*/$a/*:20*/, /*:20*/cmd/*:21*/, /*:21*/__hash2(["irb"], {/*:21*/"irb": /*:20*/true/*:21*/})/*:20*/)/*:20*/;/*:19*/
+    }/*:19*/;/*:4*/
 
     /*:3*/return /*:3*/nil/*:3*/;/*:3*/
   })/*:3*/(/*:3*/self/*:3*/, /*:3*/null/*:3*/)/*:3*/;/*:1*/
-  /*:25*/(function(__base, __super){
+  /*:26*/(function(__base, __super){
     function Object() {};
     Object = __klass(__base, __super, "Object", Object);
-/*:25*/
-/*:25*/    var def = Object.prototype, __scope = Object._scope;/*:25*/
+/*:26*/
+/*:26*/    var def = Object.prototype, __scope = Object._scope;/*:26*/
 
-    /*:26*/Object._defn('$irb_instance_variables', /*:26*/function(/*:26*//*:26*/) {
-/*:26*/      var $a, TMP_1, $b, $c, $d, filtered = nil;/*:27*/
-      /*:27*/filtered/*:27*/ = /*:27*/[/*:27*/"_id"/*:27*/, /*:27*/"constructor"/*:27*/, /*:27*/"toString"/*:27*/]/*:27*/;/*:27*/
-      /*:28*/return /*:28*/(($a = /*:28*/($b = /*:28*/(($c = /*:28*/(($d = /*:28*/this/*:28*/).$instance_variables || $mm('instance_variables'))/*:28*/.call(/*:28*/$d/*:28*/)/*:28*/).$reject || $mm('reject'))/*:28*/, $b._p = /*:28*/(TMP_1 = /*:28*/function(var$) {
-/*:28*/
-        var self = TMP_1._s || this, $a;/*:28*/
-        /*:28*/if (var$ == null) var$ = nil;
-/*:28*/
-        /*:28*/return /*:28*/(($a = /*:28*/filtered/*:28*/)['$include?'] || $mm('include?'))/*:28*/.call(/*:28*/$a/*:28*/, /*:28*/var$/*:28*/)/*:28*/
-      }/*:28*/, TMP_1._s = this, TMP_1)/*:28*/, $b)/*:28*/.call(/*:28*/$c/*:28*/)/*:28*/).$sort || $mm('sort'))/*:28*/.call(/*:28*/$a/*:28*/)/*:28*/;/*:26*/
-    }/*:26*/)/*:26*/;/*:26*/
+    /*:27*/Object._defn('$irb_instance_variables', /*:27*/function(/*:27*//*:27*/) {
+/*:27*/      var $a, TMP_1, $b, $c, $d, filtered = nil;/*:28*/
+      /*:28*/filtered/*:28*/ = /*:28*/[/*:28*/"_id"/*:28*/, /*:28*/"constructor"/*:28*/, /*:28*/"toString"/*:28*/]/*:28*/;/*:28*/
+      /*:29*/return /*:29*/(($a = /*:29*/($b = /*:29*/(($c = /*:29*/(($d = /*:29*/this/*:29*/).$instance_variables || $mm('instance_variables'))/*:29*/.call(/*:29*/$d/*:29*/)/*:29*/).$reject || $mm('reject'))/*:29*/, $b._p = /*:29*/(TMP_1 = /*:29*/function(var$) {
+/*:29*/
+        var self = TMP_1._s || this, $a;/*:29*/
+        /*:29*/if (var$ == null) var$ = nil;
+/*:29*/
+        /*:29*/return /*:29*/(($a = /*:29*/filtered/*:29*/)['$include?'] || $mm('include?'))/*:29*/.call(/*:29*/$a/*:29*/, /*:29*/var$/*:29*/)/*:29*/
+      }/*:29*/, TMP_1._s = this, TMP_1)/*:29*/, $b)/*:29*/.call(/*:29*/$c/*:29*/)/*:29*/).$sort || $mm('sort'))/*:29*/.call(/*:29*/$a/*:29*/)/*:29*/;/*:27*/
+    }/*:27*/)/*:27*/;/*:27*/
 
-    /*:31*/Object._defn('$irb_instance_var_values', /*:31*/function(/*:31*//*:31*/) {
-/*:31*/      var TMP_2, $a, $b, $c;/*:33*/
-      /*:32*/return /*:32*/($a = /*:32*/(($b = /*:32*/(($c = /*:32*/this/*:32*/).$irb_instance_variables || $mm('irb_instance_variables'))/*:32*/.call(/*:32*/$c/*:32*/)/*:32*/).$map || $mm('map'))/*:32*/, $a._p = /*:32*/(TMP_2 = /*:32*/function(var_name) {
-/*:32*/
-        var self = TMP_2._s || this, $a;/*:32*/
-        /*:32*/if (var_name == null) var_name = nil;
-/*:32*/
-        /*:32*/return /*:32*/[/*:32*/var_name/*:32*/, /*:32*/(($a = /*:32*/self/*:32*/).$instance_variable_get || $mm('instance_variable_get'))/*:32*/.call(/*:32*/$a/*:32*/, /*:32*/"@"/*:32*/ + /*:32*/(/*:32*/var_name/*:32*/)/*:32*/)/*:32*/]/*:32*/
-      }/*:32*/, TMP_2._s = this, TMP_2)/*:32*/, $a)/*:32*/.call(/*:32*/$b/*:32*/)/*:32*/;/*:31*/
-    }/*:31*/)/*:31*/;/*:26*/
+    /*:32*/Object._defn('$irb_instance_var_values', /*:32*/function(/*:32*//*:32*/) {
+/*:32*/      var TMP_2, $a, $b, $c;/*:34*/
+      /*:33*/return /*:33*/($a = /*:33*/(($b = /*:33*/(($c = /*:33*/this/*:33*/).$irb_instance_variables || $mm('irb_instance_variables'))/*:33*/.call(/*:33*/$c/*:33*/)/*:33*/).$map || $mm('map'))/*:33*/, $a._p = /*:33*/(TMP_2 = /*:33*/function(var_name) {
+/*:33*/
+        var self = TMP_2._s || this, $a;/*:33*/
+        /*:33*/if (var_name == null) var_name = nil;
+/*:33*/
+        /*:33*/return /*:33*/[/*:33*/var_name/*:33*/, /*:33*/(($a = /*:33*/self/*:33*/).$instance_variable_get || $mm('instance_variable_get'))/*:33*/.call(/*:33*/$a/*:33*/, /*:33*/"@"/*:33*/ + /*:33*/(/*:33*/var_name/*:33*/)/*:33*/)/*:33*/]/*:33*/
+      }/*:33*/, TMP_2._s = this, TMP_2)/*:33*/, $a)/*:33*/.call(/*:33*/$b/*:33*/)/*:33*/;/*:32*/
+    }/*:32*/)/*:32*/;/*:27*/
 
-    /*:25*/return /*:25*/nil/*:25*/;/*:25*/
-  })/*:25*/(/*:25*/self/*:25*/, /*:25*/null/*:25*/)/*:25*/;/*:1*/
-  /*:38*/return /*:38*/(function(__base, __super){
+    /*:26*/return /*:26*/nil/*:26*/;/*:26*/
+  })/*:26*/(/*:26*/self/*:26*/, /*:26*/null/*:26*/)/*:26*/;/*:1*/
+  /*:39*/return /*:39*/(function(__base, __super){
     function Foo() {};
     Foo = __klass(__base, __super, "Foo", Foo);
-/*:38*/
-/*:38*/    var def = Foo.prototype, __scope = Foo._scope;/*:38*/
+/*:39*/
+/*:39*/    var def = Foo.prototype, __scope = Foo._scope;/*:39*/
 
-    /*:39*/def.$initialize = /*:39*/function(/*:39*//*:39*/) {
-/*:39*/      /*:40*/
-      /*:40*/this.a/*:40*/ = /*:40*/"a"/*:40*/;/*:40*/
-      /*:41*/return /*:41*/this.b/*:41*/ = /*:41*/"b"/*:41*/;/*:39*/
-    }/*:39*/;/*:38*/
+    /*:40*/def.$initialize = /*:40*/function(/*:40*//*:40*/) {
+/*:40*/      /*:41*/
+      /*:41*/this.a/*:41*/ = /*:41*/"a"/*:41*/;/*:41*/
+      /*:42*/return /*:42*/this.b/*:42*/ = /*:42*/"b"/*:42*/;/*:40*/
+    }/*:40*/;/*:39*/
 
-    /*:38*/return /*:38*/nil/*:38*/;/*:38*/
-  })/*:38*/(/*:38*/self/*:38*/, /*:38*/null/*:38*/)/*:38*/;/*:1*/
+    /*:39*/return /*:39*/nil/*:39*/;/*:39*/
+  })/*:39*/(/*:39*/self/*:39*/, /*:39*/null/*:39*/)/*:39*/;/*:1*/
 })(Opal);
 //@ sourceMappingURL=/__opal_source_maps__/opal_irb_jqconsole.js.map
 /* Generated by Opal 0.4.1 */

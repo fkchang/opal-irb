@@ -8,7 +8,7 @@ of a browser based interactive development tool for Opal
 
 Try it here: http://fkchang.github.io/opal-irb/index-jq.html
 
-Original https://github.com/larryng/coffeescript-repl based port http://fkchang.github.io/opal-irb/
+Original https://github.com/larryng/coffeescript-repl based port http://fkchang.github.io/opal-irb/index-homebrew.html
 
 Features
 --------

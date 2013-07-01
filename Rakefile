@@ -6,6 +6,9 @@ require 'opal-sprockets'
 require 'opal-jquery'
 require 'opal-irb'
 
+require 'opal/spec/rake_task'
+Opal::Spec::RakeTask.new(:default)
+
 desc "build irb with homebrew console"
 task :build_homebrew_console do
   File.open("js/application.js", "w+") do |out|
@@ -31,4 +34,4 @@ task :build_jqconsole do
 end
 
 task :build_all => [:build_homebrew_console, :build_jqconsole]
-task :default => :build_jqconsole
+#task :default => :build_jqconsole
