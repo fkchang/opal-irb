@@ -1,4 +1,3 @@
-require 'opal-parser'
 require 'opal_irb_log_redirector'
 require 'opal_irb'
 
@@ -12,7 +11,7 @@ class OpalIrbJqconsole
   end
 
   def initialize(parent_element_id)
-    @parser = Opal::Parser.new
+    @irb = OpalIrb.new
     setup_cmd_line_methods
     setup_jqconsole(parent_element_id)
     create_multiline_editor
@@ -137,7 +136,7 @@ EDITOR
                                  ]
   def setup_cmd_line_methods
     CMD_LINE_METHOD_DEFINITIONS.each {|method_definition|
-      compiled = @parser.parse method_definition
+      compiled = @irb.parse method_definition
       `eval(compiled)`
     }
   end
@@ -167,7 +166,7 @@ EDITOR
 
   def check_is_incomplete(cmd)
     begin
-      @parser.parse cmd, :irb => true
+      @irb.parse cmd
       false
     rescue Exception => e
       # make this a global so we can inspect this
@@ -231,7 +230,7 @@ HELP
     begin
       log "\n\n|#{cmd}|"
       if cmd
-        compiled = @parser.parse cmd, :irb => true
+        compiled = @irb.parse cmd
         log compiled
         value = `eval(compiled)`
         $_ = value

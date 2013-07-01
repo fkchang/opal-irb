@@ -1,6 +1,6 @@
 require 'opal'
 require "opal-jquery"
-require "opal-parser"
+require "opal_irb"
 
 class OpalIRBHomebrewConsole
 
@@ -50,7 +50,7 @@ class OpalIRBHomebrewConsole
     @multiline = false
     @settings = DEFAULT_SETTINGS.clone
 
-    @parser = Opal::Parser.new
+    @irb = OpalIrb.new
 
     # if localStorage and localStorage.settings
     #   for k, v of JSON.parse(localStorage.settings)
@@ -107,8 +107,7 @@ class OpalIRBHomebrewConsole
 
   def process_saved
     begin
-      #compiled = Opal::Parser.new.parse @saved
-      compiled = @parser.parse @saved, :irb => true
+      compiled = @irb.parse @saved
       # doesn't work w/th opal 0.3.27 compiled = compiled[14..-7] # strip off anonymous function so variables will persist
       # compiled = compiled.split("\n")[2..-2].join("\n")
       # compiled = compiled.gsub("return", "")
@@ -256,7 +255,7 @@ class OpalIRBHomebrewConsole
                                 ]
   def setup_cmd_line_methods
     CMD_LINE_METHOD_DEFINITIONS.each {|method_defn|
-      compiled = @parser.parse method_defn
+      compiled = @irb.parse method_defn
       `eval(compiled)`
     }
 
@@ -343,6 +342,7 @@ class OpalIRBHomebrewConsole
   end
 
   def setup_multi_line
+    myself = self               # hate that I have to do this, didn't have to do it before
      %x|
     $( ".dialog" ).dialog({
                             autoOpen: false,
@@ -354,7 +354,7 @@ class OpalIRBHomebrewConsole
                             buttons: {
                               "Run it":  function() {
                                 $( this ).dialog( "close" );
-                                #{self}.$process_multiline();
+                                #{myself}.$process_multiline();
                               },
                               "Cancel":  function() {
                                 $( this ).dialog( "close" );
