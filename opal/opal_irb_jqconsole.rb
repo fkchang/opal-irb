@@ -1,5 +1,6 @@
 require 'opal-parser'
 require 'opal_irb_log_redirector'
+require 'opal_irb'
 
 class OpalIrbJqconsole
   def self.console
@@ -168,8 +169,17 @@ EDITOR
     begin
       @parser.parse cmd, :irb => true
       false
-    rescue
-      0
+    rescue Exception => e
+      # make this a global so we can inspect this
+      $check_error = e.backtrace
+      # 1st attempt to return on bad code vs incomplete code
+      if $check_error.first =~ /unexpected '"\\/
+        # TODO when rescue is fixed to return last evaluated value remove returns
+        return false
+      else
+        # see above todo
+        return 0
+      end
     end
   end
 
