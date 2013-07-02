@@ -67,12 +67,14 @@ EDITOR
               {mode: "ruby",
                   lineNumbers: true,
                   matchBrackets: true,
+                  extraKeys: {
+                        "Ctrl-Enter": function(cm) { $(".ui-dialog-buttonset").find("button:eq(0)").trigger("click"); } // submit on ctrl-enter
+                  },
                   keyMap: "emacs",
                   theme: "default"
               });
 
    |
-
 
   end
   def open_multiline_dialog
@@ -209,7 +211,8 @@ EDITOR
 <b>help</b>:                            This text
 <b>history</b>:                         Shows history
 <b>ctrl-c</b>:                          Abort prompt
-<b>ctrl-m</b>:                          Multi-line edit mode
+<b>ctrl-m</b>:                          Pop up multi-line editor
+<b>ctrl-Enter</b>:                      Submit code in multi-line editor
 <hr/>
 <b>EDITOR FUNCTIONALITY</b>
 <b>Up/Down Arrow and ctrl-p/ctrl-n</b>: Navigate through history
