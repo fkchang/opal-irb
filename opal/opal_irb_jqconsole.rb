@@ -1,6 +1,11 @@
 require 'opal_irb_log_redirector'
 require 'opal_irb'
 
+# top level methods for irb cmd line
+def irb_link_for history_num=nil
+  OpalIrbJqconsole.console.irb_link_for history_num
+end
+
 class OpalIrbJqconsole
   def self.console
     @console
@@ -17,10 +22,64 @@ class OpalIrbJqconsole
     create_multiline_editor
     redirect_console_dot_log
     handler()
+    setup_code_link_handling
+    grab_link_code
   end
 
+  # logs only to js console, not to irb, for things you want only for
+  # debug and not public viewing
   def log thing
     `console.orig_log(#{thing})`
+  end
+
+
+  def setup_code_link_handling
+    @code_link_handler = CodeLinkHandler.new
+    link_code = @code_link_handler.grab_link_code
+    print_and_process_code link_code if link_code
+  end
+
+  def create_and_display_code_link code
+    code_link = @code_link_handler.create_link_for_code code
+    unescaped_write "<a href=#{code_link}>#{code_link}</a>\n" if code_link
+  end
+
+  class CodeLinkHandler
+
+    def initialize(location=`window.location`)
+      @location = location      # inject this so we can test
+    end
+
+    def create_link_for_code code
+      if code
+        @location.origin + @location.pathname + "#code:" + `encodeURIComponent(#{code})`
+      else
+        nil
+      end
+    end
+    # initialize irb w/link passed in code ala try opal
+    def grab_link_code
+      link_code = `decodeURIComponent(#@location.hash)`
+      if link_code != ''
+        link_code[6..-1]
+      else
+        nil
+      end
+    end
+
+  end
+
+  def irb_link_for history_num
+    history_num = -1 unless history_num # pick last command before irb_link_for if nil
+    history_num -= 1                    # offset off by 1
+    code = jqconsole.GetHistory[history_num] #
+    create_and_display_code_link code
+  end
+
+
+  def irb_link_for_current_line
+    current_code = jqconsole.GetPromptText
+    create_and_display_code_link current_code
   end
 
 
@@ -82,10 +141,14 @@ EDITOR
     @open_editor_dialog_function.call
   end
 
+  def print_and_process_code code
+    @jqconsole.SetPromptText code
+    @jqconsole._HandleEnter
+  end
+
   def process_multiline
     multi_line_value = @editor.getValue.sub(/(\n)+$/, "")
-    @jqconsole.SetPromptText multi_line_value
-    @jqconsole._HandleEnter
+    print_and_process_code multi_line_value
   end
 
 
@@ -105,11 +168,13 @@ EDITOR
     @jqconsole.RegisterShortcut('P', lambda{ @jqconsole._HistoryPrevious(); handler})
     @jqconsole.RegisterShortcut('D', lambda{ @jqconsole._Delete(); handler})
     @jqconsole.RegisterShortcut('K', lambda{ @jqconsole.Kill; handler})
+    @jqconsole.RegisterShortcut('L', lambda{ irb_link_for_current_line})
+
     @jqconsole.RegisterAltShortcut('B', lambda{ @jqconsole._MoveLeft(true); handler})
     @jqconsole.RegisterAltShortcut('F', lambda{ @jqconsole._MoveRight(true); handler})
     @jqconsole.RegisterAltShortcut('D', lambda{ @jqconsole._Delete(true); handler})
 
-    # to implement in jq-console that you also get for free normally
+    # to implement in jq-console emacs key bindings you get for free normally
     # in all Cocoa text widgets
     # alt-u upcase
     # alt-l lowercase

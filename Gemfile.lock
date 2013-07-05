@@ -41,7 +41,7 @@ GEM
       rb-fsevent (>= 0.9.3)
       rb-inotify (>= 0.9)
       rb-kqueue (>= 0.2)
-    lumberjack (1.0.3)
+    lumberjack (1.0.4)
     method_source (0.8.1)
     multi_json (1.7.7)
     opal-spec (0.2.17)
