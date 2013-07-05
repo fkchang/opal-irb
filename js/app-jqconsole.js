@@ -17739,35 +17739,35 @@ Opal.eval = function(str) {
 
     /*:280*/__opal.defs(OpalIrbJqconsole, '$help', /*:280*/function(/*:281*//*:280*/) {
 /*:280*/      var $a, help = nil;/*:281*/
-      /*:281*/help/*:281*/ = /*:298*/"<b>help</b>:                            This text\n<b>history</b>:                         Shows history\n<b>ctrl-c</b>:                          Abort prompt\n<b>ctrl-m</b>:                          Pop up multi-line editor\n<b>ctrl-Enter</b>:                      Submit code in multi-line editor\n<hr/>\n<b>EDITOR FUNCTIONALITY</b>\n<b>Up/Down Arrow and ctrl-p/ctrl-n</b>: Navigate through history\n<b>ctrl-a</b>:                          Beginning of line\n<b>ctrl-e</b>:                          End of line\n<b>ctrl-b</b>:                          Back 1 character\n<b>ctrl-f</b>:                          Forward 1 character\n<b>ctrl-d</b>:                          Delete 1 character\n<b>ctrl-k</b>:                          Kill to the end of the line\n<b>alt-b</b>:                           Back 1 word\n<b>alt-f</b>:                           Forward 1 word\n<b>alt-d</b>:                           Delete 1 word\n"/*:281*/;/*:281*/
-      /*:300*/return /*:300*/(($a = /*:300*/this/*:300*/).$unescaped_write || $mm('unescaped_write'))/*:300*/.call(/*:300*/$a/*:300*/, /*:300*/help/*:300*/)/*:300*/;/*:280*/
+      /*:281*/help/*:281*/ = /*:301*/"<b>help</b>:                            This text\n<b>$_</b>                               last value returned is stored in this global\n<b>history</b>:                         Shows history\n<b>irb_link_for history_num</b>:        Create a link for the code in the history\n<b>ctrl-c</b>:                          Abort prompt\n<b>ctrl-m</b>:                          Pop up multi-line editor\n<b>ctrl-Enter</b>:                      Submit code in multi-line editor\n<b>ctrl-l</b>:                          Creates a link with the code you have on the current line/lines\n<hr/>\n<b>EDITOR FUNCTIONALITY</b>\n<b>Up/Down Arrow and ctrl-p/ctrl-n</b>: Navigate through history\n<b>ctrl-a</b>:                          Beginning of line\n<b>ctrl-e</b>:                          End of line\n<b>ctrl-b</b>:                          Back 1 character\n<b>ctrl-f</b>:                          Forward 1 character\n<b>ctrl-d</b>:                          Delete 1 character\n<b>ctrl-k</b>:                          Kill to the end of the line\n<b>alt-b</b>:                           Back 1 word\n<b>alt-f</b>:                           Forward 1 word\n<b>alt-d</b>:                           Delete 1 word\n"/*:281*/;/*:281*/
+      /*:303*/return /*:303*/(($a = /*:303*/this/*:303*/).$unescaped_write || $mm('unescaped_write'))/*:303*/.call(/*:303*/$a/*:303*/, /*:303*/help/*:303*/)/*:303*/;/*:280*/
     }/*:280*/)/*:280*/;/*:10*/
 
-    /*:302*/def.$process = /*:302*/function(/*:302*/cmd/*:302*/) {
-/*:302*/      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, value = nil, output = nil, e = nil;/*:337*/
-      /*:303*/try {
-        /*:306*/(($a = /*:306*/this/*:306*/).$log || $mm('log'))/*:306*/.call(/*:306*/$a/*:306*/, /*:306*/"\n\n|"/*:306*/ + /*:306*/(/*:306*/cmd/*:306*/)/*:306*/ + /*:306*/"|"/*:306*/)/*:306*/;/*:306*/
-        /*:308*/if (/*:308*/cmd/*:308*/ !== false && /*:308*/cmd/*:308*/ !== nil/*:308*/) {
-/*:308*/          /*:308*/__gvars["irb_last_compiled"] = /*:308*/(($b = /*:308*/this.irb/*:308*/).$parse || $mm('parse'))/*:308*/.call(/*:308*/$b/*:309*/, /*:309*/cmd/*:308*/)/*:308*/;/*:308*/
-          /*:309*/(($c = /*:309*/this/*:309*/).$log || $mm('log'))/*:309*/.call(/*:309*/$c/*:309*/, /*:309*/__gvars["irb_last_compiled"]/*:309*/)/*:309*/;/*:308*/
-          /*:310*/value/*:310*/ = /*:310*/eval(/*:310*/__gvars["irb_last_compiled"]/*:310*/)/*:310*/;/*:308*/
-          /*:311*/__gvars["_"] = /*:312*/value/*:311*/;/*:308*/
-          /*:312*/return /*:312*/(($d = /*:312*/__gvars["_"]/*:312*/).$inspect || $mm('inspect'))/*:312*/.call(/*:312*/$d/*:312*/)/*:312*/;/*:308*/
+    /*:305*/def.$process = /*:305*/function(/*:305*/cmd/*:305*/) {
+/*:305*/      var $a, $b, $c, $d, $e, $f, $g, $h, $i, $j, value = nil, output = nil, e = nil;/*:340*/
+      /*:306*/try {
+        /*:309*/(($a = /*:309*/this/*:309*/).$log || $mm('log'))/*:309*/.call(/*:309*/$a/*:309*/, /*:309*/"\n\n|"/*:309*/ + /*:309*/(/*:309*/cmd/*:309*/)/*:309*/ + /*:309*/"|"/*:309*/)/*:309*/;/*:309*/
+        /*:311*/if (/*:311*/cmd/*:311*/ !== false && /*:311*/cmd/*:311*/ !== nil/*:311*/) {
+/*:311*/          /*:311*/__gvars["irb_last_compiled"] = /*:311*/(($b = /*:311*/this.irb/*:311*/).$parse || $mm('parse'))/*:311*/.call(/*:311*/$b/*:312*/, /*:312*/cmd/*:311*/)/*:311*/;/*:311*/
+          /*:312*/(($c = /*:312*/this/*:312*/).$log || $mm('log'))/*:312*/.call(/*:312*/$c/*:312*/, /*:312*/__gvars["irb_last_compiled"]/*:312*/)/*:312*/;/*:311*/
+          /*:313*/value/*:313*/ = /*:313*/eval(/*:313*/__gvars["irb_last_compiled"]/*:313*/)/*:313*/;/*:311*/
+          /*:314*/__gvars["_"] = /*:315*/value/*:314*/;/*:311*/
+          /*:315*/return /*:315*/(($d = /*:315*/__gvars["_"]/*:315*/).$inspect || $mm('inspect'))/*:315*/.call(/*:315*/$d/*:315*/)/*:315*/;/*:311*/
         } else {
-          /*:337*/return /*:337*/nil/*:308*/
-        }/*:308*/;/*:303*/
+          /*:340*/return /*:340*/nil/*:311*/
+        }/*:311*/;/*:306*/
       } catch ($err) {
-      /*:336*/if (/*:335*/(($g = /*:314*/(($j = __scope.Exception) == null ? __opal.cm("Exception") : $j)/*:335*/)['$==='] || $mm('==='))/*:335*/.call(/*:314*/$g/*:335*/, /*:335*/$err/*:335*/)/*:336*/){
-        /*:315*/e/*:315*/ = /*:335*/$err/*:336*/;/*:316*/if (/*:316*/($e = /*:316*/(($f = /*:316*/e/*:316*/).$backtrace || $mm('backtrace'))/*:316*/.call(/*:316*/$f/*:316*/)/*:316*/) !== false && $e !== nil/*:316*/) {
-/*:316*/          /*:317*/output/*:317*/ = /*:322*/($e = /*:318*/"FOR:\n"/*:318*/ + /*:318*/(/*:318*/__gvars["irb_last_compiled"]/*:318*/)/*:318*/ + /*:320*/"\n============\n"/*:322*/, $g = /*:320*/(($h = /*:320*/(($i = /*:320*/e/*:320*/).$backtrace || $mm('backtrace'))/*:320*/.call(/*:320*/$i/*:320*/)/*:320*/).$join || $mm('join'))/*:320*/.call(/*:320*/$h/*:321*/, /*:321*/"\n"/*:320*/)/*:322*/, typeof($e) === 'number' ? $e + $g /*:322*/: $e['$+']($g))/*:317*/;/*:317*/
-          /*:324*/return /*:324*/output/*:324*/;/*:316*/
+      /*:339*/if (/*:338*/(($g = /*:317*/(($j = __scope.Exception) == null ? __opal.cm("Exception") : $j)/*:338*/)['$==='] || $mm('==='))/*:338*/.call(/*:317*/$g/*:338*/, /*:338*/$err/*:338*/)/*:339*/){
+        /*:318*/e/*:318*/ = /*:338*/$err/*:339*/;/*:319*/if (/*:319*/($e = /*:319*/(($f = /*:319*/e/*:319*/).$backtrace || $mm('backtrace'))/*:319*/.call(/*:319*/$f/*:319*/)/*:319*/) !== false && $e !== nil/*:319*/) {
+/*:319*/          /*:320*/output/*:320*/ = /*:325*/($e = /*:321*/"FOR:\n"/*:321*/ + /*:321*/(/*:321*/__gvars["irb_last_compiled"]/*:321*/)/*:321*/ + /*:323*/"\n============\n"/*:325*/, $g = /*:323*/(($h = /*:323*/(($i = /*:323*/e/*:323*/).$backtrace || $mm('backtrace'))/*:323*/.call(/*:323*/$i/*:323*/)/*:323*/).$join || $mm('join'))/*:323*/.call(/*:323*/$h/*:324*/, /*:324*/"\n"/*:323*/)/*:325*/, typeof($e) === 'number' ? $e + $g /*:325*/: $e['$+']($g))/*:320*/;/*:320*/
+          /*:327*/return /*:327*/output/*:327*/;/*:319*/
         } else {
-          /*:330*/output/*:330*/ = /*:330*/e.toString()/*:330*/;/*:330*/
-          /*:332*/(($e = /*:332*/this/*:332*/).$log || $mm('log'))/*:332*/.call(/*:332*/$e/*:332*/, /*:332*/"\nReturning NO have backtrace |"/*:332*/ + /*:332*/(/*:332*/output/*:332*/)/*:332*/ + /*:332*/"|"/*:332*/)/*:332*/;/*:330*/
-          /*:335*/return /*:335*/output/*:335*/;/*:316*/
-        }/*:336*/}/*:303*/else { throw $err; }/*:303*/
-      }/*:303*/;/*:302*/
-    }/*:302*/;/*:10*/
+          /*:333*/output/*:333*/ = /*:333*/e.toString()/*:333*/;/*:333*/
+          /*:335*/(($e = /*:335*/this/*:335*/).$log || $mm('log'))/*:335*/.call(/*:335*/$e/*:335*/, /*:335*/"\nReturning NO have backtrace |"/*:335*/ + /*:335*/(/*:335*/output/*:335*/)/*:335*/ + /*:335*/"|"/*:335*/)/*:335*/;/*:333*/
+          /*:338*/return /*:338*/output/*:338*/;/*:319*/
+        }/*:339*/}/*:306*/else { throw $err; }/*:306*/
+      }/*:306*/;/*:305*/
+    }/*:305*/;/*:10*/
 
     /*:9*/return /*:9*/nil/*:9*/;/*:9*/
   })/*:9*/(/*:9*/self/*:9*/, /*:9*/null/*:9*/)/*:9*/;/*:1*/

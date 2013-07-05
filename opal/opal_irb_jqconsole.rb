@@ -273,10 +273,13 @@ EDITOR
   def self.help
     help = <<HELP
 <b>help</b>:                            This text
+<b>$_</b>                               last value returned is stored in this global
 <b>history</b>:                         Shows history
+<b>irb_link_for history_num</b>:        Create a link for the code in the history
 <b>ctrl-c</b>:                          Abort prompt
 <b>ctrl-m</b>:                          Pop up multi-line editor
 <b>ctrl-Enter</b>:                      Submit code in multi-line editor
+<b>ctrl-l</b>:                          Creates a link with the code you have on the current line/lines
 <hr/>
 <b>EDITOR FUNCTIONALITY</b>
 <b>Up/Down Arrow and ctrl-p/ctrl-n</b>: Navigate through history

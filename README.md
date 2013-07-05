@@ -13,11 +13,13 @@ Original https://github.com/larryng/coffeescript-repl based port http://fkchang.
 Features
 --------
 * Opal irb in your browser
-* Command history
-* Multiline support
+* Command history - up/down arrows, ctrl-n/ctrl-p
+* Multiline support - ctrl-m to enter editor, ctrl-Enter to submit code
 * Colorized output
-* Access last returned value
-* Customizable settings
+* Access last returned value via $_
+* Shareable code links like [this](http://fkchang.github.io/opal-irb/index-jq.html#code:class%20Welcome%0A%20%20def%20announce%0A%20%20%20%20alert%20%22Welcome%20to%20opal-irb%22%0A%20%20end%0Aend%0Aw%20%3D%20Welcome.new%0Aw.announce)
+  * create links by hitting ctrl-L and the lines/multilines will be made into a shareable link
+  * also can create links using the history number, i.e. irb\_link\_for 2
 * Emacs keystrokes like all GNU readline apps (original irb included)
 * 100% HTML and JavaScript
 
