@@ -23,7 +23,6 @@ class OpalIrbJqconsole
     redirect_console_dot_log
     handler()
     setup_code_link_handling
-    grab_link_code
   end
 
   # logs only to js console, not to irb, for things you want only for
