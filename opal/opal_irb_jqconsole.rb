@@ -297,16 +297,16 @@ HELP
     begin
       log "\n\n|#{cmd}|"
       if cmd
-        compiled = @irb.parse cmd
-        log compiled
-        value = `eval(compiled)`
+        $irb_last_compiled = @irb.parse cmd
+        log $irb_last_compiled
+        value = `eval(#{$irb_last_compiled})`
         $_ = value
         $_.inspect
       end
     rescue Exception => e
       # alert e.backtrace.join("\n")
       if e.backtrace
-        output = "FOR:\n#{compiled}\n============\n" + e.backtrace.join("\n")
+        output = "FOR:\n#{$irb_last_compiled}\n============\n" + e.backtrace.join("\n")
         # TODO remove return when bug is fixed in rescue block
         return output
         # FF doesn't have Error.toString() as the first line of Error.stack
