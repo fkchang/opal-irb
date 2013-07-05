@@ -17385,7 +17385,7 @@ Opal.eval = function(str) {
 
       /*:50*/def.$initialize = /*:50*/function(/*:50*/location/*:50*/) {
 /*:50*/        /*:50*/if (location == null) {
-          /*:50*/location/*:50*/ = /*:50*/location/*:50*/
+          /*:50*/location/*:50*/ = /*:50*/window.location/*:50*/
         }/*:52*/
         /*:51*/return /*:51*/this.location/*:51*/ = /*:52*/location/*:51*/;/*:50*/
       }/*:50*/;/*:50*/
