@@ -6,6 +6,12 @@ def irb_link_for history_num=nil
   OpalIrbJqconsole.console.irb_link_for history_num
 end
 
+class Timeout
+  def initialize(time=0, &block)
+    `setTimeout(function(){#{block.call}}, time)`
+  end
+end
+
 class OpalIrbJqconsole
   def self.console
     @console
@@ -35,7 +41,10 @@ class OpalIrbJqconsole
   def setup_code_link_handling
     @code_link_handler = CodeLinkHandler.new
     link_code = @code_link_handler.grab_link_code
-    print_and_process_code link_code if link_code
+    if link_code
+      # do this after everything initializes
+      Timeout.new { print_and_process_code link_code  }
+    end
   end
 
   def create_and_display_code_link code
