@@ -6,6 +6,10 @@ def irb_link_for history_num=nil
   OpalIrbJqconsole.console.irb_link_for history_num
 end
 
+def require_js(js_filename)
+  Element.find("head").append("<script src='#{js_filename} type='text/javascript''></script>")
+end
+
 class Timeout
   def initialize(time=0, &block)
     `setTimeout(function(){#{block.call}}, time)`
