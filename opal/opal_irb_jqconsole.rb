@@ -21,6 +21,7 @@ class OpalIrbJqconsole
     @console = OpalIrbJqconsole.new(parent_element_id)
   end
 
+  attr_reader :irb
   def initialize(parent_element_id)
     @irb = OpalIrb.new
     setup_cmd_line_methods
