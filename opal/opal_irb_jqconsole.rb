@@ -252,12 +252,12 @@ EDITOR
       # make this a global so we can inspect this
       $check_error = e.backtrace
       # 1st attempt to return on bad code vs incomplete code
-      if $check_error.first =~ /unexpected '"\\/
+      if $check_error.first =~ /unexpected 'false/
         # TODO when rescue is fixed to return last evaluated value remove returns
-        return false
+        return 0
       else
         # see above todo
-        return 0
+        return false
       end
     end
   end
