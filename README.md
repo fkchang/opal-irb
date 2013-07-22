@@ -13,7 +13,7 @@ Original https://github.com/larryng/coffeescript-repl based port http://fkchang.
 Features
 --------
 
-Video: overview http://www.youtube.com/watch?v=6hUwN5BdSHo
+Video overview: http://www.youtube.com/watch?v=6hUwN5BdSHo
 
 * Opal irb in your browser
 * Command history - up/down arrows, ctrl-n/ctrl-p
