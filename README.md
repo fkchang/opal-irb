@@ -12,6 +12,9 @@ Original https://github.com/larryng/coffeescript-repl based port http://fkchang.
 
 Features
 --------
+
+Video: overview http://www.youtube.com/watch?v=6hUwN5BdSHo
+
 * Opal irb in your browser
 * Command history - up/down arrows, ctrl-n/ctrl-p
 * Multiline support - ctrl-m to enter editor, ctrl-Enter to submit code
@@ -30,8 +33,8 @@ Roadmap
 * have it automatically know when a complete ruby expression is there instead of multi line mode like irb -- CLOSE ENOUGH 6/21/2013 via jqconsole
 * Make a gem - DONE 6/23/2013 1st for use in opal-inspector
 * Hook into smalltalk style object browser for opal that I plan to write - STARTED
-* Some demos to show how convenient it can be
-* Add more irb functionality
+* Some demos to show how convenient it can be - DONE 7/19/2013 - you tube video overview
+* Add more irb/pry functionality
 * Make embeddable in any app
 * print out inspect in ruby format
 * Rails plugin
