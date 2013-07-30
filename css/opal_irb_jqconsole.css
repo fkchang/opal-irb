@@ -1,0 +1,77 @@
+html, body {
+  background-color: #333;
+  color: white;
+  font-family: monospace;
+  margin: 0;
+  padding: 0;
+}
+#opal-irb-console-bottom-panel {
+  width: 100%;
+  position: fixed;
+  bottom: 0px;
+}
+#opal-irb-console-topbar {
+  height:24px;
+}
+#opal-irb-console {
+  height: 400px;
+  position:relative;
+  background-color: #9b111e;
+  border: 2px solid #CCC;
+  margin: 0 auto;
+}
+.jqconsole {
+  padding: 10px;
+  padding-bottom: 10px;
+}
+.jqconsole-cursor {
+  background-color: #999;
+}
+.jqconsole-blurred .jqconsole-cursor {
+  background-color: #666;
+}
+.jqconsole-prompt {
+  color: #0d0;
+}
+.jqconsole-old-prompt {
+  color: #0b0;
+  font-weight: normal;
+}
+.jqconsole-input {
+  color: #dd0;
+}
+.jqconsole-old-input {
+  color: #bb0;
+  font-weight: normal;
+}
+.brace {
+  color: #00FFFF;
+}
+.paran {
+  color: #FF00FF;
+}
+.bracket {
+  color: #FFFF00;
+}
+.jqconsole-composition {
+  background-color: red;
+}
+
+a.boxclose{
+  float:right;
+  cursor:pointer;
+  color: #fff;
+  border: 1px solid #AEAEAE;
+  border-radius: 30px;
+  background: red;
+  font-family: helvetica;
+  font-size: 20px;
+  font-weight: bold;
+  display: inline-block;
+  line-height: 0px;
+  padding: 11px 3px;       
+}
+
+.boxclose:before {
+  content: "x";
+}

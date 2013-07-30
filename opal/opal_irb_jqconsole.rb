@@ -1,3 +1,5 @@
+require 'opal'
+require 'opal-jquery'
 require 'opal_irb_log_redirector'
 require 'opal_irb'
 
@@ -21,8 +23,38 @@ class OpalIrbJqconsole
     @console
   end
 
+  # create on a pre existing div
   def self.create(parent_element_id)
     @console = OpalIrbJqconsole.new(parent_element_id)
+  end
+
+  BOTTOM_PANEL_ID = "opal-irb-console-bottom-panel"
+  # create a bottom panel
+  def self.create_bottom_panel
+    parent_element_id="opal-irb-console"
+    html = <<HTML
+    <div id="#{BOTTOM_PANEL_ID}">
+      <div id="opal-irb-console-topbar">
+        <a href="#" id="collapse-opal-irb-console" class=\"boxclose\"></a>
+      </div>
+      <div id='#{parent_element_id}'>
+      </div>
+    w</div>
+HTML
+    Element.find("body").append(html)
+    Element.id("collapse-opal-irb-console").on(:click) { Element.id("#{BOTTOM_PANEL_ID}").hide }
+    create("##{parent_element_id}")
+  end
+
+  def self.add_open_panel_behavior(link_id)
+    Element.id(link_id).on(:click) {
+      panel = Element.id("#{BOTTOM_PANEL_ID}")
+        if panel.visible?
+          alert "OpalIRB is already showing"
+        else
+          panel.show
+        end
+    }
   end
 
   attr_reader :irb
@@ -256,7 +288,7 @@ EDITOR
         # TODO when rescue is fixed to return last evaluated value remove returns
         return 0
       else
-        # see above todo
+        # see above to-do
         return false
       end
     end

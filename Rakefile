@@ -33,5 +33,20 @@ task :build_jqconsole do
   system "open -a 'Google Chrome' index-jq.html"
 end
 
+desc "build embeddable irb"
+task :build_embeddable do
+
+  File.open("js/app-embeddable.js", "w+") do |out|
+    env = Opal::Environment.new
+    env.append_path "examples"
+    env.append_path "opal"
+    out << env["app-embeddable"].to_s
+  end
+  # system "terminal-notifier -title 'opal-irb build' -message 'js file built'"
+  system "open -a 'Google Chrome' index-embeddable.html"
+end
+
+
 task :build_all => [:build_homebrew_console, :build_jqconsole]
+task :build => :build_embeddable
 #task :default => :build_jqconsole

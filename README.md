@@ -7,6 +7,7 @@ interactively without having to install anything.  Intended to be part
 of a browser based interactive development tool for Opal
 
 Try it here: http://fkchang.github.io/opal-irb/index-jq.html
+Embedded example http://fkchang.github.io/opal-irb/index-embeddable.html
 
 Original https://github.com/larryng/coffeescript-repl based port http://fkchang.github.io/opal-irb/index-homebrew.html
 
@@ -15,7 +16,7 @@ Features
 
 Video overview: http://www.youtube.com/watch?v=6hUwN5BdSHo
 
-* Opal irb in your browser
+* Opal irb in your browsero
 * Command history - up/down arrows, ctrl-n/ctrl-p
 * Multiline support - ctrl-m to enter editor, ctrl-Enter to submit code
 * Colorized output
@@ -35,6 +36,6 @@ Roadmap
 * Hook into smalltalk style object browser for opal that I plan to write - STARTED
 * Some demos to show how convenient it can be - DONE 7/19/2013 - you tube video overview
 * Add more irb/pry functionality
-* Make embeddable in any app
+* Make embeddable in any app STARTED 7/30/2013
 * print out inspect in ruby format
 * Rails plugin
