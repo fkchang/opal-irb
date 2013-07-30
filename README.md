@@ -7,6 +7,7 @@ interactively without having to install anything.  Intended to be part
 of a browser based interactive development tool for Opal
 
 Try it here: http://fkchang.github.io/opal-irb/index-jq.html
+
 Embedded example http://fkchang.github.io/opal-irb/index-embeddable.html
 
 Original https://github.com/larryng/coffeescript-repl based port http://fkchang.github.io/opal-irb/index-homebrew.html
