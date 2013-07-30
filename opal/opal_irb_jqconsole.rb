@@ -39,7 +39,7 @@ class OpalIrbJqconsole
       </div>
       <div id='#{parent_element_id}'>
       </div>
-    w</div>
+    </div>
 HTML
     Element.find("body").append(html)
     Element.id("collapse-opal-irb-console").on(:click) { Element.id("#{BOTTOM_PANEL_ID}").hide }
