@@ -17,7 +17,7 @@ Features
 
 Video overview: http://www.youtube.com/watch?v=6hUwN5BdSHo
 
-* Opal irb in your browsero
+* Opal irb in your browser
 * Command history - up/down arrows, ctrl-n/ctrl-p
 * Multiline support - ctrl-m to enter editor, ctrl-Enter to submit code
 * Colorized output
