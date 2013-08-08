@@ -46,6 +46,16 @@ task :build_embeddable do
   system "open -a 'Google Chrome' index-embeddable.html"
 end
 
+desc "build PhantomJS based repl"
+
+task :build_phantomjs do
+  File.open("js/opal-phantom.js", "w+") do |out|
+    env = Opal::Environment.new
+    env.append_path "opal"
+    out << env["opal_phantomjs"].to_s
+  end
+end
+
 
 task :build_all => [:build_homebrew_console, :build_jqconsole]
 task :build => :build_embeddable
