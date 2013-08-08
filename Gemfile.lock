@@ -1,17 +1,3 @@
-GIT
-  remote: git://github.com/opal/opal.git
-  revision: ee56d2e78ccfbabf6dbef74f539b9eb1ce3b2450
-  specs:
-    opal (0.4.2)
-      source_map
-
-GIT
-  remote: git@github.com:fkchang/opal-jquery.git
-  revision: 117a3966bd8a11598a1ae9382648ba6c2617aea4
-  specs:
-    opal-jquery (0.0.8)
-      opal (>= 0.3.43)
-
 PATH
   remote: .
   specs:
@@ -25,7 +11,7 @@ GEM
     coderay (1.0.9)
     ffi (1.0.11)
     formatador (0.2.4)
-    guard (1.8.1)
+    guard (1.8.2)
       formatador (>= 0.2.4)
       listen (>= 1.0.0)
       lumberjack (>= 1.0.2)
@@ -42,10 +28,14 @@ GEM
       rb-inotify (>= 0.9)
       rb-kqueue (>= 0.2)
     lumberjack (1.0.4)
-    method_source (0.8.1)
-    multi_json (1.7.7)
-    opal-spec (0.2.17)
-      opal (~> 0.4.1)
+    method_source (0.8.2)
+    multi_json (1.7.8)
+    opal (0.4.3)
+      source_map
+    opal-jquery (0.0.12)
+      opal (>= 0.4.3)
+    opal-spec (0.3.0)
+      opal (~> 0.4.3)
       opal-sprockets (~> 0.1.0)
     opal-sprockets (0.1.1)
       opal (~> 0.4.0)
@@ -61,7 +51,7 @@ GEM
       ffi (>= 0.5.0)
     rb-kqueue (0.2.0)
       ffi (>= 0.5.0)
-    slop (3.4.5)
+    slop (3.4.6)
     source_map (3.0.1)
       json
     spoon (0.0.4)
@@ -81,11 +71,11 @@ PLATFORMS
 DEPENDENCIES
   guard
   guard-process
-  opal!
+  opal (= 0.4.3)
   opal-irb!
-  opal-jquery!
+  opal-jquery (= 0.0.12)
   opal-spec
-  opal-sprockets
+  opal-sprockets (= 0.1.1)
   rake
   rb-fsevent
   terminal-notifier
