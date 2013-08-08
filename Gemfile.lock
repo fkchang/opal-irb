@@ -30,12 +30,12 @@ GEM
     lumberjack (1.0.4)
     method_source (0.8.2)
     multi_json (1.7.8)
-    opal (0.4.3)
+    opal (0.4.2)
       source_map
-    opal-jquery (0.0.12)
-      opal (>= 0.4.3)
-    opal-spec (0.3.0)
-      opal (~> 0.4.3)
+    opal-jquery (0.0.11)
+      opal (>= 0.4.2)
+    opal-spec (0.2.17)
+      opal (~> 0.4.1)
       opal-sprockets (~> 0.1.0)
     opal-sprockets (0.1.1)
       opal (~> 0.4.0)
@@ -71,9 +71,9 @@ PLATFORMS
 DEPENDENCIES
   guard
   guard-process
-  opal (= 0.4.3)
+  opal (= 0.4.2)
   opal-irb!
-  opal-jquery (= 0.0.12)
+  opal-jquery (= 0.0.11)
   opal-spec
   opal-sprockets (= 0.1.1)
   rake
