@@ -7,6 +7,7 @@ class OpalIrbLogRedirector
     console.orig_log = console.log
     console.log = function() {
       var args;
+      var __slice = [].slice;
       args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
       console.orig_log(args);
       Opal.OpalIrbLogRedirector.$puts(args+"\\n");

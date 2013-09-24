@@ -5,6 +5,7 @@ require 'opal-sprockets'
 
 require 'opal-jquery'
 require 'opal-irb'
+require 'opal/browser'
 
 require 'opal/spec/rake_task'
 Opal::Spec::RakeTask.new(:default)

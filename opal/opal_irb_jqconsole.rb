@@ -2,6 +2,8 @@ require 'opal'
 require 'opal-jquery'
 require 'opal_irb_log_redirector'
 require 'opal_irb'
+require 'browser'
+require 'browser/dom'
 
 # top level methods for irb cmd line
 def irb_link_for history_num=nil
@@ -92,7 +94,7 @@ HTML
   class CodeLinkHandler
 
     def initialize(location=`window.location`)
-      @location = location      # inject this so we can test
+      @location = Native(location)      # inject this so we can test
     end
 
     def create_link_for_code code
@@ -104,7 +106,7 @@ HTML
     end
     # initialize irb w/link passed in code ala try opal
     def grab_link_code
-      link_code = `decodeURIComponent(#@location.hash)`
+      link_code = `decodeURIComponent(#{@location.hash})`
       if link_code != ''
         link_code[6..-1]
       else
@@ -179,6 +181,7 @@ EDITOR
               });
 
    |
+    @editor = Native(@editor)   # seamless bridging removed
 
   end
   def open_multiline_dialog
@@ -199,7 +202,9 @@ EDITOR
 
   attr_reader :jqconsole
   def setup_jqconsole(parent_element_id)
-    @jqconsole = Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\ntype help for assistance\n", 'opal> ');
+    Element.expose(:jqconsole)
+
+    @jqconsole = Native(Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\ntype help for assistance\n", 'opal> ')) # seamless jquery plugin removed
     @jqconsole.RegisterShortcut('M', lambda { open_multiline_dialog; handler})
     @jqconsole.RegisterShortcut('C', lambda { @jqconsole.AbortPrompt(); handler})
 
@@ -239,10 +244,10 @@ EDITOR
                                    nil
                                  end',
                                  # TODO Kernel.alert is now returning undefined in opal, rm when fixed
-                                 'def alert stuff
-                                    Kernel.alert stuff
-                                    nil
-                                 end',
+                                 # 'def alert stuff
+                                 #    Kernel.alert stuff
+                                 #    nil
+                                 # end',
 
 
                                  ]
@@ -299,7 +304,8 @@ EDITOR
   end
 
   def unescaped_write str
-    `#{@jqconsole}.Write(str, "unescaped", false)`
+    # `#{@jqconsole}.Write(str, "unescaped", false)`
+    @jqconsole.Write(str, "unescaped", false)
   end
 
   def self.write *stuff
@@ -342,6 +348,7 @@ HELP
     unescaped_write help
   end
 
+
   def process(cmd)
     begin
       log "\n\n|#{cmd}|"
@@ -350,7 +357,7 @@ HELP
         log $irb_last_compiled
         value = `eval(#{$irb_last_compiled})`
         $_ = value
-        $_.inspect
+        Native($_).inspect      # coz native JS objects don't support inspect
       end
     rescue Exception => e
       # alert e.backtrace.join("\n")
