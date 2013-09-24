@@ -1,7 +1,7 @@
 # monkey patch object to get some stuff we want
 class Object
   def irb_instance_variables
-    filtered = ["_id", "constructor", "toString"]
+    filtered = ["_id", "constructor", "toString", "_klass"]
     instance_variables.reject {|var| filtered.include?(var)}.sort
   end
 

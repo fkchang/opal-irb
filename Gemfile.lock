@@ -22,7 +22,7 @@ GIT
 
 GIT
   remote: git://github.com/opal/opal.git
-  revision: 9aa37c3233995d2b7cb8b538f7a36894fd4d3404
+  revision: a847aed9b81111e1a7ace4e1930213bcc31e775b
   specs:
     opal (0.4.4)
       source_map

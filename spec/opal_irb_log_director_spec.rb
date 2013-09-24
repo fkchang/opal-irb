@@ -1,3 +1,4 @@
+require 'spec_helper'
 require 'opal_irb_log_redirector'
 describe OpalIrbLogRedirector do
   it "redirect to added log clients" do

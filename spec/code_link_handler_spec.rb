@@ -1,3 +1,4 @@
+require 'spec_helper'
 require 'opal_irb_jqconsole'
 describe OpalIrbJqconsole::CodeLinkHandler do
 

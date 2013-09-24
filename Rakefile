@@ -18,7 +18,7 @@ task :build_homebrew_console do
     env.append_path "opal"
     out << env["application"].to_s
   end
-  system "open -a 'Google Chrome' index.html"
+  system "open -a 'Google Chrome' index-homebrew.html"
 end
 
 desc "build jqconsole based irb"
@@ -58,6 +58,6 @@ task :build_phantomjs do
 end
 
 
-task :build_all => [:build_homebrew_console, :build_jqconsole]
+task :build_all => [:build_homebrew_console, :build_jqconsole, :build_embeddable]
 task :build => :build_embeddable
 #task :default => :build_jqconsole

@@ -2256,7 +2256,11 @@
       var proc = function() {
         var value, args = $slice.call(arguments);
 
-        if ((value = block.apply(null, arguments)) === $breaker) {
+        if (block.length > 1 && args.length === 1 && args[0]._isArray) {
+          args = args[0]
+        }
+
+        if ((value = block.apply(null, args)) === $breaker) {
           return $breaker.$v;
         }
 
@@ -11280,7 +11284,7 @@ var $zuper = $slice.call(arguments, 0);      var $a, $b, TMP_2, $c, $d, $iter = 
 (function($opal) {
   var self = $opal.top, $scope = $opal, nil = $opal.nil, $breaker = $opal.breaker, $slice = $opal.slice, $module = $opal.module, $klass = $opal.klass, $hash2 = $opal.hash2;
 
-  $opal.add_stubs(['$attr_reader', '$new', '$line=', '$push_scope', '$do_parse', '$pop_scope', '$raise', '$inspect', '$token_to_str', '$last', '$parent=', '$<<', '$pop', '$|', '$&', '$>>', '$==', '$include?', '$arg?', '$space?', '$check', '$[]', '$scan', '$escape', '$[]=', '$pos=', '$-', '$pos', '$matched', '$add_string_content', '$join', '$+', '$count', '$eos?', '$next_string_token', '$length', '$empty?', '$after_operator?', '$next_token', '$spcarg?', '$beg?', '$end_with?', '$cond_push', '$cmdarg_push', '$cond_lexpop', '$cmdarg_lexpop', '$sub', '$peek', '$to_i', '$to_f', '$gsub', '$===', '$cond?', '$cmdarg?', '$to_s', '$=~']);
+  $opal.add_stubs(['$attr_reader', '$new', '$line=', '$push_scope', '$do_parse', '$pop_scope', '$raise', '$inspect', '$token_to_str', '$last', '$parent=', '$<<', '$pop', '$|', '$&', '$>>', '$==', '$include?', '$arg?', '$space?', '$check', '$[]', '$scan', '$escape', '$[]=', '$pos=', '$-', '$pos', '$matched', '$add_string_content', '$join', '$+', '$count', '$eos?', '$next_string_token', '$length', '$empty?', '$after_operator?', '$next_token', '$spcarg?', '$beg?', '$end_with?', '$cond_push', '$cmdarg_push', '$cond_lexpop', '$cmdarg_lexpop', '$end?', '$sub', '$peek', '$to_i', '$to_f', '$gsub', '$===', '$cond?', '$cmdarg?', '$to_s', '$=~']);
   ;
   ;
   ;
@@ -11979,7 +11983,7 @@ var $zuper = $slice.call(arguments, 0);      var $a, $b, TMP_2, $c, $d, $iter = 
                                                                 return ["::", scanner.$matched()];
                                                               } else {
                                                                 if (($b = scanner.$scan(/\:/)) !== false && $b !== nil) {
-                                                                  if (($b = ((($c = ["expr_end", "expr_endarg"]['$include?'](this.lex_state)) !== false && $c !== nil) ? $c : scanner.$check(/\s/))) !== false && $b !== nil) {
+                                                                  if (($b = ((($c = this['$end?']()) !== false && $c !== nil) ? $c : scanner.$check(/\s/))) !== false && $b !== nil) {
                                                                     if (($b = scanner.$check(/\w/)) === false || $b === nil) {
                                                                       this.lex_state = "expr_beg";
                                                                       return [":", ":"];
@@ -12131,11 +12135,11 @@ var $zuper = $slice.call(arguments, 0);      var $a, $b, TMP_2, $c, $d, $iter = 
                                                                               return [result, result];
                                                                             } else {
                                                                               if (($b = scanner.$scan(/\?/)) !== false && $b !== nil) {
-                                                                                if (($b = ["expr_end", "expr_endarg"]['$include?'](this.lex_state)) !== false && $b !== nil) {
+                                                                                if (($b = this['$end?']()) !== false && $b !== nil) {
                                                                                   this.lex_state = "expr_beg";
                                                                                   return ["?", scanner.$matched()];
                                                                                 };
-                                                                                if (($b = scanner.$check(/\ |\t|\r/)) === false || $b === nil) {
+                                                                                if (($b = scanner.$check(/\ |\t|\r|\s/)) === false || $b === nil) {
                                                                                   this.lex_state = "expr_end";
                                                                                   return ["STRING", scanner.$scan(/./)];
                                                                                 };
@@ -12855,6 +12859,9 @@ var $zuper = $slice.call(arguments, 0);      var $a, $b, TMP_2, $c, $d, $iter = 
         }else if ("ensure"['$===']($case)) {
         sexp['$[]='](1, this.$returns(sexp['$[]'](1)));
         return sexp;
+        }else if ("begin"['$===']($case)) {
+        sexp['$[]='](1, this.$returns(sexp['$[]'](1)));
+        return sexp;
         }else if ("while"['$===']($case)) {
         return sexp
         }else if ("return"['$===']($case)) {
@@ -13295,7 +13302,7 @@ var $zuper = $slice.call(arguments, 0);      var $a, $b, TMP_2, $c, $d, $iter = 
         $a = $opal.to_ary(sexp), recv = ($a[0] == null ? nil : $a[0]), meth = ($a[1] == null ? nil : $a[1]), arglist = ($a[2] == null ? nil : $a[2]), iter = ($a[3] == null ? nil : $a[3]);
         mid = this.$mid_to_jsid(meth.$to_s());
         this.method_calls['$[]='](meth.$to_sym(), true);
-        if (($a = ($b = ($b = ($b = this.irb_vars, $b !== false && $b !== nil ? this.scope['$top?']() : $b), $b !== false && $b !== nil ? arglist['$=='](this.$s("arglist")) : $b), $b !== false && $b !== nil ? recv['$=='](nil) : $b)) !== false && $a !== nil) {
+        if (($a = ($b = ($b = ($b = ($b = this.irb_vars, $b !== false && $b !== nil ? this.scope['$top?']() : $b), $b !== false && $b !== nil ? arglist['$=='](this.$s("arglist")) : $b), $b !== false && $b !== nil ? recv['$=='](nil) : $b), $b !== false && $b !== nil ? iter['$=='](nil) : $b)) !== false && $a !== nil) {
           return ($a = ($b = this).$with_temp, $a._p = (TMP_25 = function(t) {
 
             var self = TMP_25._s || this, $a, lvar = nil, call = nil;
@@ -16225,6 +16232,9 @@ var $zuper = $slice.call(arguments, 0);      var $a, $b, TMP_2, $c, $d, $iter = 
         }else if ("ensure"['$===']($case)) {
         sexp['$[]='](1, this.$returns(sexp['$[]'](1)));
         return sexp;
+        }else if ("begin"['$===']($case)) {
+        sexp['$[]='](1, this.$returns(sexp['$[]'](1)));
+        return sexp;
         }else if ("while"['$===']($case)) {
         return sexp
         }else if ("return"['$===']($case)) {
@@ -16665,7 +16675,7 @@ var $zuper = $slice.call(arguments, 0);      var $a, $b, TMP_2, $c, $d, $iter = 
         $a = $opal.to_ary(sexp), recv = ($a[0] == null ? nil : $a[0]), meth = ($a[1] == null ? nil : $a[1]), arglist = ($a[2] == null ? nil : $a[2]), iter = ($a[3] == null ? nil : $a[3]);
         mid = this.$mid_to_jsid(meth.$to_s());
         this.method_calls['$[]='](meth.$to_sym(), true);
-        if (($a = ($b = ($b = ($b = this.irb_vars, $b !== false && $b !== nil ? this.scope['$top?']() : $b), $b !== false && $b !== nil ? arglist['$=='](this.$s("arglist")) : $b), $b !== false && $b !== nil ? recv['$=='](nil) : $b)) !== false && $a !== nil) {
+        if (($a = ($b = ($b = ($b = ($b = this.irb_vars, $b !== false && $b !== nil ? this.scope['$top?']() : $b), $b !== false && $b !== nil ? arglist['$=='](this.$s("arglist")) : $b), $b !== false && $b !== nil ? recv['$=='](nil) : $b), $b !== false && $b !== nil ? iter['$=='](nil) : $b)) !== false && $a !== nil) {
           return ($a = ($b = this).$with_temp, $a._p = (TMP_25 = function(t) {
 
             var self = TMP_25._s || this, $a, lvar = nil, call = nil;
@@ -18522,7 +18532,7 @@ if (typeof(document) !== 'undefined') {
 
     Object._defn('$irb_instance_variables', function() {
       var TMP_1, $a, $b, filtered = nil;
-      filtered = ["_id", "constructor", "toString"];
+      filtered = ["_id", "constructor", "toString", "_klass"];
       return ($a = ($b = this.$instance_variables()).$reject, $a._p = (TMP_1 = function(var$) {
 
         var self = TMP_1._s || this;

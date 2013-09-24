@@ -1,4 +1,6 @@
+require 'spec_helper'
 require 'opal_irb'
+
 describe OpalIrb do
   let(:subject) {OpalIrb.new}
   it "should parse with irb parsing" do

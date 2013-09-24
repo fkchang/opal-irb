@@ -1,4 +1,6 @@
+require 'spec_helper'
 require 'object_extensions'
+
 class TestClass
   def initialize
     @a = "value_for_a"
