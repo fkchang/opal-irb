@@ -1,14 +1,16 @@
-require 'bundler/setup'
+# require 'bundler/setup'
+require 'bundler'
+Bundler.require
 # require 'opal/rake_task'
 require 'opal'
-require 'opal-sprockets'
+# require 'opal-sprockets'
 
-require 'opal-jquery'
-require 'opal-irb'
-require 'opal/browser'
+# require 'opal-jquery'
+# require 'opal-irb'
+# require 'opal/browser'
 
-require 'opal/spec/rake_task'
-Opal::Spec::RakeTask.new(:default)
+require 'opal/rspec/rake_task'
+Opal::RSpec::RakeTask.new(:default)
 
 desc "build irb with homebrew console"
 task :build_homebrew_console do

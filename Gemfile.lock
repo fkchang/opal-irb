@@ -1,83 +1,82 @@
 GIT
   remote: git://github.com/opal/opal-browser.git
-  revision: de313513b497b9ce6f29b180e159eaae05718e05
+  revision: 3ad0b163397f5f29d2f9b523ce5ebf405b28a511
   specs:
-    opal-browser (0.1.0)
-      opal (>= 0.4.3)
+    opal-browser (0.2.0.beta1)
+      opal (~> 0.6.0)
+      paggio
 
 GIT
   remote: git://github.com/opal/opal-jquery.git
-  revision: 02f8f172187885f6955564a44593e84e158ba7ff
+  revision: eab45e24ed1128721395d38d7d4b9e84c4427c00
   specs:
-    opal-jquery (0.0.13)
-      opal (>= 0.4.4)
+    opal-jquery (0.1.2)
+      opal (>= 0.5.0, < 1.0.0)
 
 GIT
-  remote: git://github.com/opal/opal-sprockets.git
-  revision: b2c61fc07405121b829418c5ca38d874dbbc26bf
+  remote: git://github.com/opal/opal-rspec.git
+  revision: edb975ba09804d28e187e60d11488efdb624d703
   specs:
-    opal-sprockets (0.2.0)
-      opal (~> 0.4.4)
-      sprockets
+    opal-rspec (0.3.0.beta3)
+      opal (>= 0.6.0, < 1.0.0)
 
 GIT
   remote: git://github.com/opal/opal.git
-  revision: a847aed9b81111e1a7ace4e1930213bcc31e775b
+  revision: 9e090292375ad0cd693eee12262a759fc18b7539
   specs:
-    opal (0.4.4)
+    opal (0.6.0)
       source_map
+      sprockets
 
 PATH
   remote: .
   specs:
     opal-irb (0.1.0)
-      opal (~> 0.4.1)
+      opal
       opal-jquery
 
 GEM
   remote: https://rubygems.org/
   specs:
-    coderay (1.0.9)
-    ffi (1.9.0)
+    celluloid (0.15.2)
+      timers (~> 1.1.0)
+    coderay (1.1.0)
+    ffi (1.9.3)
     formatador (0.2.4)
-    guard (1.8.3)
+    guard (2.3.0)
       formatador (>= 0.2.4)
-      listen (~> 1.3)
-      lumberjack (>= 1.0.2)
-      pry (>= 0.9.10)
-      thor (>= 0.14.6)
+      listen (~> 2.1)
+      lumberjack (~> 1.0)
+      pry (>= 0.9.12)
+      thor (>= 0.18.1)
     guard-process (1.0.6)
       guard (>= 0.4.2)
       spoon (~> 0.0.1)
     hike (1.2.3)
-    json (1.8.0)
-    listen (1.3.1)
+    json (1.8.1)
+    listen (2.4.0)
+      celluloid (>= 0.15.2)
       rb-fsevent (>= 0.9.3)
       rb-inotify (>= 0.9)
-      rb-kqueue (>= 0.2)
     lumberjack (1.0.4)
     method_source (0.8.2)
-    multi_json (1.8.0)
-    opal-spec (0.3.1)
-      opal (~> 0.4.4)
-      opal-sprockets (~> 0.2.0)
-    pry (0.9.12.2)
-      coderay (~> 1.0.5)
+    multi_json (1.8.4)
+    paggio (0.2.4)
+    pry (0.9.12.6)
+      coderay (~> 1.0)
       method_source (~> 0.8)
       slop (~> 3.4)
     rack (1.5.2)
-    rake (10.1.0)
-    rb-fsevent (0.9.3)
-    rb-inotify (0.9.2)
+    rake (10.1.1)
+    rb-fsevent (0.9.4)
+    rb-inotify (0.9.3)
       ffi (>= 0.5.0)
-    rb-kqueue (0.2.0)
-      ffi (>= 0.5.0)
-    slop (3.4.6)
+    slop (3.4.7)
     source_map (3.0.1)
       json
     spoon (0.0.4)
       ffi
-    sprockets (2.10.0)
+    sprockets (2.10.1)
       hike (~> 1.2)
       multi_json (~> 1.0)
       rack (~> 1.0)
@@ -85,6 +84,7 @@ GEM
     terminal-notifier (1.5.1)
     thor (0.18.1)
     tilt (1.4.1)
+    timers (1.1.0)
 
 PLATFORMS
   ruby
@@ -96,8 +96,7 @@ DEPENDENCIES
   opal-browser!
   opal-irb!
   opal-jquery!
-  opal-spec
-  opal-sprockets!
+  opal-rspec!
   rake
   rb-fsevent
   terminal-notifier

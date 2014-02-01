@@ -1,5 +1,5 @@
 require 'opal'
-require 'opal-parser'
+require 'opal/compiler'
 require 'object_extensions'
 
 class OpalIrb
@@ -25,11 +25,11 @@ class OpalIrb
 
   attr_reader :parser
   def initialize
-    @parser = Opal::Parser.new
+    @parser = Opal::Compiler.new
   end
 
   def parse(cmd)
-    @parser.parse cmd, :irb => true
+    @parser.compile cmd, :irb => true
   end
 
 end
