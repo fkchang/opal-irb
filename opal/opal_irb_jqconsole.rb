@@ -243,6 +243,12 @@ EDITOR
                                    OpalIrbJqconsole.history
                                    nil
                                  end',
+                                 'def js_require(js_file)
+                                    s = DOM do
+                                      script({ src: js_file})
+                                    end
+                                    $document.body << s
+                                  end', # js_require "http://www.goodboydigital.com/runpixierun/js/pixi.js"
                                  # TODO Kernel.alert is now returning undefined in opal, rm when fixed
                                  # 'def alert stuff
                                  #    Kernel.alert stuff
