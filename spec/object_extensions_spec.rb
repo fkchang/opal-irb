@@ -14,7 +14,7 @@ describe Object do
 
     it "should show vars and not _id, constructor, and toString" do
       f = TestClass.new
-      f.irb_instance_variables.should == ["a", "b"]
+      f.irb_instance_variables.should == ["@a", "@b"]
     end
 
   end
@@ -23,8 +23,8 @@ describe Object do
 
     it "should show vars and not _id, constructor, and toString" do
       f = TestClass.new
-      f.irb_instance_var_values.should == [["a", "value_for_a"],
-                                           ["b", "value_for_b"]]
+      f.irb_instance_var_values.should == [["@a", "value_for_a"],
+                                           ["@b", "value_for_b"]]
     end
 
   end
