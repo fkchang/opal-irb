@@ -54,9 +54,9 @@ lissio start --require opal-irb
 * change the require in app/app.rb -- order matters, at the moment to have opal-jquery and opal-browser coexist you need to load opal-jquery before loading lissio
 ```ruby
 require 'opal'
-require 'jqconsole'           # add these 2
-require 'opal_irb_jqconsole_css'  # add these 2
-require 'opal_irb_jqconsole'  # add these 2
+require 'jqconsole'           # add these 3 jqconsole support
+require 'opal_irb_jqconsole_css'  # css for opal_irb_jqconsole_css
+require 'opal_irb_jqconsole'  # the console code
 require 'lissio'
 
 ```
