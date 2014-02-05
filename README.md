@@ -28,6 +28,54 @@ Video overview: http://www.youtube.com/watch?v=6hUwN5BdSHo
 * Emacs keystrokes like all GNU readline apps (original irb included)
 * 100% HTML and JavaScript
 
+HOW TOS
+-------
+
+## Embedding into opal apps
+
+### Lissio
+
+Embedding into lissio app, as made by lissio new
+
+* add to Gemfile opal-irb
+```ruby
+    gem 'opal-irb', github: 'fkchang/opal-irb'
+```
+* invoke app to require opal-jquery and opal-irb
+```bash
+lissio start --require opal-irb
+```
+* add a helper which includes the jquery and codemirror requirements
+
+```html
+ <%= OpalIrbUtils.include_opal_irb_jqconsole_requirements %>
+```
+
+* change the require in app/app.rb -- order matters, at the moment to have opal-jquery and opal-browser coexist you need to load opal-jquery before loading lissio
+```ruby
+require 'opal'
+require 'jqconsole'           # add these 2
+require 'opal_irb_jqconsole_css'  # add these 2
+require 'opal_irb_jqconsole'  # add these 2
+require 'lissio'
+
+```
+* override Application#start() to create a button and hook up opal-irb
+```ruby
+  def start
+    super
+    element << DOM do
+      button.show_irb! "Show Irb"
+    end
+
+    OpalIrbJqconsole.create_bottom_panel
+    OpalIrbJqconsole.add_open_panel_behavior("show_irb")
+  end
+
+```
+
+* profit!
+
 
 Roadmap
 -------
@@ -37,6 +85,6 @@ Roadmap
 * Hook into smalltalk style object browser for opal that I plan to write - STARTED
 * Some demos to show how convenient it can be - DONE 7/19/2013 - you tube video overview
 * Add more irb/pry functionality
-* Make embeddable in any app STARTED 7/30/2013
+* Make embeddable in any app STARTED 7/30/2013, made embeddable into lisso 2/4/2014
 * print out inspect in ruby format
 * Rails plugin
