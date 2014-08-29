@@ -1,3 +1,18 @@
+#opal-irb-console-bottom-panel {
+  width: 100%;
+  position: fixed;
+  bottom: 0px;
+}
+#opal-irb-console-topbar {
+  height:24px;
+}
+#opal-irb-console {
+  height: 400px;
+  position:relative;
+  background-color: #9b111e;
+  border: 2px solid #CCC;
+  margin: 0 auto;
+}
 .jqconsole-ansi-bold {
   font-weight: bold!important;
 }
@@ -228,7 +243,7 @@
   background-color: red;
 }
 
-a.boxclose{
+span.boxclose, a.boxclose{
   float:right;
   cursor:pointer;
   color: #fff;

@@ -32,19 +32,24 @@ class OpalIrbJqconsole
 
   BOTTOM_PANEL_ID = "opal-irb-console-bottom-panel"
   # create a bottom panel
-  def self.create_bottom_panel
+  def self.create_bottom_panel(hidden = false)
     parent_element_id="opal-irb-console"
+    style = hidden ? "style=\"display:none\"" : ""
+    # <a href="#" id="collapse-opal-irb-console" class=\"boxclose\"></a>
+
     html = <<HTML
-    <div id="#{BOTTOM_PANEL_ID}">
+    <div id="#{BOTTOM_PANEL_ID}" #{style}>
       <div id="opal-irb-console-topbar">
-        <a href="#" id="collapse-opal-irb-console" class=\"boxclose\"></a>
+     <span id="collapse-opal-irb-console" class=\"boxclose\"></span>
       </div>
       <div id='#{parent_element_id}'>
       </div>
     </div>
 HTML
     Element.find("body").append(html)
-    Element.id("collapse-opal-irb-console").on(:click) { Element.id("#{BOTTOM_PANEL_ID}").hide }
+    Element.id("collapse-opal-irb-console").on(:click) {
+      Element.id("#{BOTTOM_PANEL_ID}").hide;
+    }
     create("##{parent_element_id}")
   end
 
