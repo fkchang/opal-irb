@@ -76,6 +76,43 @@ require 'lissio'
 
 * profit!
 
+### Rails
+
+* add to Gemfile opal-irb
+```ruby
+    gem 'opal-irb', github: 'fkchang/opal-irb', require: 'opal-irb-rails'
+```
+* include application.css.scss
+*= require_self
+ *= require jquery-ui/dialog
+ *= require opal-irb/jqconsole
+ */
+
+* include codemirror in your template (haml example below)
+```haml
+= OpalIrbUtils.include_code_mirror.html_safe
+```
+
+* in opal code set it up
+```ruby
+    $document["#workarea"] << DOM do
+      button.show_irb! "Show Irb"
+    end
+
+    OpalIrbJqconsole.create_bottom_panel(hidden=true)
+    OpalIrbJqconsole.add_open_panel_behavior("show_irb")
+```
+* profit!
+
+Dependencies
+------------
+
+* opal -  of course
+* opal-jquery (would like to do away with this, don't need it)
+  * jquery (cuz of the above)
+  * jquery-ui dialog - for the code dial
+* opal-browser (so you can use it from opal-irb)
+* code mirror - for code editing
 
 Roadmap
 -------
@@ -87,4 +124,6 @@ Roadmap
 * Add more irb/pry functionality
 * Make embeddable in any app STARTED 7/30/2013, made embeddable into lisso 2/4/2014
 * print out inspect in ruby format
-* Rails plugin
+* Rails plugin - WORK done on 8/27/14, works w/opal rails and assets, need to document
+* remove jquery dependancy -- need to convert jqconsole, and remove the the jquery-ui dialog
+* split up dependancy and hierarchy, jquery and jquery free versions, rails vs no rails, etc.
