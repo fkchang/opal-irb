@@ -122,8 +122,12 @@ Roadmap
 * Hook into smalltalk style object browser for opal that I plan to write - STARTED
 * Some demos to show how convenient it can be - DONE 7/19/2013 - you tube video overview
 * Add more irb/pry functionality
+  * tab completion
+  * cd ls
+  * show source via source maps and opal-inspector
 * Make embeddable in any app STARTED 7/30/2013, made embeddable into lisso 2/4/2014
 * print out inspect in ruby format
 * Rails plugin - WORK done on 8/27/14, works w/opal rails and assets, need to document
+* navigate stacktrace code via source maps
 * remove jquery dependancy -- need to convert jqconsole, and remove the the jquery-ui dialog
 * split up dependancy and hierarchy, jquery and jquery free versions, rails vs no rails, etc.
