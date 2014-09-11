@@ -20,7 +20,7 @@ class OpalIrb
       attr = $opal_js_object[k]
       classes << attr if attr.is_a?(Class)
     }
-    classes.uniq                # coz some Opal classes are the same, i.e. module == class, base, Kernel = Object
+    classes.uniq.sort_by &:name                # coz some Opal classes are the same, i.e. module == class, base, Kernel = Object
   end
 
   attr_reader :parser
