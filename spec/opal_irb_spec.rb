@@ -10,4 +10,10 @@ describe OpalIrb do
     # subject.parse cmd
     subject.parse(cmd).should =~ /irb_vars/
   end
+
+  it "should return classes" do
+    opal_classes = subject.opal_classes
+    expect(opal_classes.size).to be > 0
+    expect(opal_classes.include?(OpalIrb)).to be true
+  end
 end
