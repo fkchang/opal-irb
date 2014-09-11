@@ -56,6 +56,7 @@ task :build_phantomjs do
 end
 
 
+desc "build all the example apps and view them"
 task :build_all => [:build_homebrew_console, :build_jqconsole, :build_embeddable]
 task :build => :build_embeddable
 #task :default => :build_jqconsole
