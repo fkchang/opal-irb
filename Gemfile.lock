@@ -1,25 +1,27 @@
 GIT
   remote: git://github.com/opal/opal-browser.git
-  revision: afd43f6aa0ac0acfe6ab97b5ad016cdb3c85d78d
+  revision: c909f1bfab40b354001feeafeefc2a2d2ed8f7b9
   specs:
     opal-browser (0.2.0.beta1)
-      opal (~> 0.6.0)
+      opal
       paggio
 
 GIT
   remote: git://github.com/opal/opal-jquery.git
-  revision: eab45e24ed1128721395d38d7d4b9e84c4427c00
+  revision: 0f2d82a635c11a453cc10ef044cb60106e860cce
   specs:
-    opal-jquery (0.1.2)
-      opal (>= 0.5.0, < 1.0.0)
+    opal-jquery (0.3.0.beta1)
+      opal (~> 0.7.0.beta1)
 
 GIT
   remote: git://github.com/opal/opal.git
-  revision: 9e090292375ad0cd693eee12262a759fc18b7539
+  revision: 578911b70987beeda1fc066155515cfffbfb5a52
   specs:
-    opal (0.6.0)
-      source_map
-      sprockets
+    opal (0.7.0.beta3)
+      hike (~> 1.2)
+      sourcemap (~> 0.1.0)
+      sprockets (>= 2.2.3, < 4.0.0)
+      tilt (~> 1.4)
 
 PATH
   remote: .
@@ -31,14 +33,14 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    celluloid (0.15.2)
-      timers (~> 1.1.0)
+    celluloid (0.16.0)
+      timers (~> 4.0.0)
     coderay (1.1.0)
-    ffi (1.9.3)
-    formatador (0.2.4)
-    guard (2.3.0)
+    ffi (1.9.6)
+    formatador (0.2.5)
+    guard (2.8.2)
       formatador (>= 0.2.4)
-      listen (~> 2.1)
+      listen (~> 2.7)
       lumberjack (~> 1.0)
       pry (>= 0.9.12)
       thor (>= 0.18.1)
@@ -46,40 +48,40 @@ GEM
       guard (>= 0.4.2)
       spoon (~> 0.0.1)
     hike (1.2.3)
-    json (1.8.1)
-    listen (2.4.0)
+    hitimes (1.2.2)
+    listen (2.8.0)
       celluloid (>= 0.15.2)
       rb-fsevent (>= 0.9.3)
       rb-inotify (>= 0.9)
-    lumberjack (1.0.4)
+    lumberjack (1.0.9)
     method_source (0.8.2)
-    multi_json (1.8.4)
+    multi_json (1.10.1)
     opal-rspec (0.3.0.beta3)
       opal (>= 0.6.0, < 1.0.0)
     paggio (0.2.4)
-    pry (0.9.12.6)
-      coderay (~> 1.0)
-      method_source (~> 0.8)
+    pry (0.10.1)
+      coderay (~> 1.1.0)
+      method_source (~> 0.8.1)
       slop (~> 3.4)
     rack (1.5.2)
-    rake (10.1.1)
+    rake (10.3.2)
     rb-fsevent (0.9.4)
-    rb-inotify (0.9.3)
+    rb-inotify (0.9.5)
       ffi (>= 0.5.0)
-    slop (3.4.7)
-    source_map (3.0.1)
-      json
+    slop (3.6.0)
+    sourcemap (0.1.1)
     spoon (0.0.4)
       ffi
-    sprockets (2.10.1)
+    sprockets (2.12.3)
       hike (~> 1.2)
       multi_json (~> 1.0)
       rack (~> 1.0)
       tilt (~> 1.1, != 1.3.0)
-    terminal-notifier (1.5.1)
-    thor (0.18.1)
+    terminal-notifier (1.6.2)
+    thor (0.19.1)
     tilt (1.4.1)
-    timers (1.1.0)
+    timers (4.0.1)
+      hitimes
 
 PLATFORMS
   ruby

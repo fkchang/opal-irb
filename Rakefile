@@ -4,6 +4,7 @@ Bundler.require
 
 require 'opal'
 require 'opal-rspec'
+require 'opal/sprockets/environment'
 
 require 'opal/rspec/rake_task'
 Opal::RSpec::RakeTask.new(:default)
@@ -11,6 +12,7 @@ Opal::RSpec::RakeTask.new(:default)
 desc "build irb with homebrew console"
 task :build_homebrew_console do
   File.open("compiled/application.js", "w+") do |out|
+    Opal::Processor.source_map_enabled = false
     env = Opal::Environment.new
     env.append_path "examples"
     env.append_path "opal"

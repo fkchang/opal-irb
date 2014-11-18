@@ -24,12 +24,9 @@ class OpalIrb
   end
 
   attr_reader :parser
-  def initialize
-    @parser = Opal::Compiler.new
-  end
 
   def parse(cmd)
-    @parser.compile cmd, :irb => true
+    Opal::Compiler.new(cmd, irb: true).compile
   end
 
 end
