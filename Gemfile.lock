@@ -8,14 +8,21 @@ GIT
 
 GIT
   remote: git://github.com/opal/opal-jquery.git
-  revision: 0f2d82a635c11a453cc10ef044cb60106e860cce
+  revision: d7ababd48596ac4bbe2055d96121e7c761b32c4c
   specs:
     opal-jquery (0.3.0.beta1)
       opal (~> 0.7.0.beta1)
 
 GIT
+  remote: git://github.com/opal/opal-rspec.git
+  revision: 88170baf691e1b080418448325cd5fadeebaf1ea
+  specs:
+    opal-rspec (0.4.0.beta3)
+      opal (~> 0.7.0.beta1)
+
+GIT
   remote: git://github.com/opal/opal.git
-  revision: 578911b70987beeda1fc066155515cfffbfb5a52
+  revision: d086c27af82bd00780feca5bffb5ff7b7f25d1ed
   specs:
     opal (0.7.0.beta3)
       hike (~> 1.2)
@@ -56,8 +63,6 @@ GEM
     lumberjack (1.0.9)
     method_source (0.8.2)
     multi_json (1.10.1)
-    opal-rspec (0.3.0.beta3)
-      opal (>= 0.6.0, < 1.0.0)
     paggio (0.2.4)
     pry (0.10.1)
       coderay (~> 1.1.0)
@@ -93,7 +98,7 @@ DEPENDENCIES
   opal-browser!
   opal-irb!
   opal-jquery!
-  opal-rspec (= 0.3.0.beta3)
+  opal-rspec!
   rake
   rb-fsevent
   terminal-notifier
