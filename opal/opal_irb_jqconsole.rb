@@ -11,7 +11,7 @@ def irb_link_for history_num=nil
 end
 
 def require_js(js_filename)
-  Element.find("head").append("<script src='#{js_filename} type='text/javascript''></script>")
+  Element.find("head").append("<script src='#{js_filename}' type='text/javascript'></script>")
 end
 
 class Timeout
