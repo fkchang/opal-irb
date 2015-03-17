@@ -82,11 +82,13 @@ require 'lissio'
 ```ruby
     gem 'opal-irb', github: 'fkchang/opal-irb', require: 'opal-irb-rails'
 ```
-* include application.css.scss
-*= require_self
+* include in application.css.scss
+```scss
+/*= require_self
  *= require jquery-ui/dialog
  *= require opal-irb/jqconsole
  */
+```
 
 * include codemirror in your template (haml example below)
 ```haml
