@@ -2,8 +2,7 @@ require 'opal'
 require 'opal-jquery'
 require 'opal_irb_log_redirector'
 require 'opal_irb'
-require 'browser'
-require 'browser/dom'
+require 'jqconsole'
 
 # top level methods for irb cmd line
 def irb_link_for history_num=nil
@@ -51,6 +50,24 @@ HTML
       Element.id("#{BOTTOM_PANEL_ID}").hide;
     }
     create("##{parent_element_id}")
+  end
+
+  def self.add_hot_key_panel_behavior(keys_hash)
+    Element.find("body").on(:keypress) { |evt|
+      puts "evt.meta_key #{evt.meta_key} && evt.key_code == '>'.ord #{evt.key_code}"
+      if create_key_filter(keys_hash, evt)
+        panel = Element.id("#{BOTTOM_PANEL_ID}")
+        if panel.visible?
+          panel.hide
+        else
+          panel.show
+        end
+      end
+    }
+  end
+
+  def self.create_key_filter(keys_hash, evt)
+    keys_hash[:modifiers].all? { |modifier| evt.send("#{modifier}_key") } && evt.key_code == keys_hash[:key].ord
   end
 
   def self.add_open_panel_behavior(link_id)
