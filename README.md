@@ -78,11 +78,12 @@ require 'lissio'
 
 ### Rails
 
-* add to Gemfile opal-irb
+* add to Gemfile opal-irb, jquery-ui-rails (for multi editor)
 ```ruby
     gem 'opal-irb', github: 'fkchang/opal-irb', require: 'opal-irb-rails'
+    gem 'jquery-ui-rails'
 ```
-* include in application.css.scss
+* include stylesheets in application.css.scss
 ```scss
 /*= require_self
  *= require jquery-ui/dialog
@@ -90,20 +91,36 @@ require 'lissio'
  */
 ```
 
-* include codemirror in your template (haml example below)
+* include codemirror js/css, you can pull from CDN w/the below in your template (haml example below)
 ```haml
 = OpalIrbUtils.include_code_mirror.html_safe
 ```
 
-* in opal code set it up
+* Set it up in opal code
+
+  * Example that creates a bottom panel, a button to bring it up
 ```ruby
+    # opal-browser code to add a button
     $document["#workarea"] << DOM do
       button.show_irb! "Show Irb"
     end
+    # opal-jquery code to add a button
+    Element.find(".main").append "<button class='btn' id='show_irb'>Show Irb</button>"
 
+    # creates a panel at the bottom
     OpalIrbJqconsole.create_bottom_panel(hidden=true)
+    # adds open panel behavior to element w/id show_irb
     OpalIrbJqconsole.add_open_panel_behavior("show_irb")
 ```
+
+* Example that creates a bottom panel, makes a hot key "shift-command-c" to toggle the panel
+
+```ruby
+    OpalIrbJqconsole.create_bottom_panel(hidden=true)
+    OpalIrbJqconsole.add_hot_key_panel_behavior(modifiers: %w(meta shift), key: "c")
+
+```
+
 * profit!
 
 Dependencies
