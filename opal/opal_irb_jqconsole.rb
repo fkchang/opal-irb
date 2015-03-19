@@ -54,7 +54,6 @@ HTML
 
   def self.add_hot_key_panel_behavior(keys_hash)
     Element.find("body").on(:keypress) { |evt|
-      puts "evt.meta_key #{evt.meta_key} && evt.key_code == '>'.ord #{evt.key_code}"
       if create_key_filter(keys_hash, evt)
         panel = Element.id("#{BOTTOM_PANEL_ID}")
         if panel.visible?
