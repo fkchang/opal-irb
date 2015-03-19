@@ -57,7 +57,7 @@ html, body {
   background-color: red;
 }
 
-a.boxclose{
+span.boxclose, a.boxclose{
   float:right;
   cursor:pointer;
   color: #fff;
@@ -71,7 +71,9 @@ a.boxclose{
   line-height: 0px;
   padding: 11px 3px;       
 }
-
+#opal-irb-console-topbar {
+  background-color: #AAA;
+}
 .boxclose:before {
   content: "x";
 }

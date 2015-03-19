@@ -29,12 +29,17 @@
   var $hasOwn = Opal.hasOwnProperty;
   var $slice  = Opal.slice = Array.prototype.slice;
 
-  // Generates unique id for every ruby object
-  var unique_id = 0;
+  // Nil object id is always 4
+  var nil_id = 4;
+
+  // Generates even sequential numbers greater than 4
+  // (nil_id) to serve as unique ids for ruby objects
+  var unique_id = nil_id;
 
   // Return next unique id
   Opal.uid = function() {
-    return unique_id++;
+    unique_id += 2;
+    return unique_id;
   };
 
   // Table holds all class variables
@@ -43,7 +48,26 @@
   // Globals table
   Opal.gvars = {};
 
-  // Get constants
+  // Exit function, this should be replaced by platform specific implementation
+  // (See nodejs and phantom for examples)
+  Opal.exit = function(status) { if (Opal.gvars.DEBUG) console.log('Exited with status '+status); };
+
+  /**
+    Get a constant on the given scope. Every class and module in Opal has a
+    scope used to store, and inherit, constants. For example, the top level
+    `Object` in ruby has a scope accessible as `Opal.Object.$$scope`.
+
+    To get the `Array` class using this scope, you could use:
+
+        Opal.Object.$$scope.get("Array")
+
+    If a constant with the given name cannot be found, then a dispatch to the
+    class/module's `#const_method` is called, which by default will raise an
+    error.
+
+    @param [String] name the name of the constant to lookup
+    @returns [RubyObject]
+  */
   Opal.get = function(name) {
     var constant = this[name];
 
@@ -148,7 +172,7 @@
 
       // Copy all parent constants to child, unless parent is Object
       if (superklass !== ObjectClass && superklass !== BasicObjectClass) {
-        Opal.donate_constants(superklass, klass);
+        donate_constants(superklass, klass);
       }
 
       // call .inherited() hook with new class on the superclass
@@ -219,7 +243,7 @@
   function setup_module_or_class_object(module, constructor, superklass, prototype) {
     // @property $$id Each class is assigned a unique `id` that helps
     //                comparation and implementation of `#object_id`
-    module.$$id = unique_id++;
+    module.$$id = Opal.uid();
 
     // @property $$proto This is the prototype on which methods will be defined
     module.$$proto = prototype;
@@ -253,7 +277,26 @@
     module.$$inc = [];
   }
 
-  // Define new module (or return existing module)
+  /**
+    Define new module (or return existing module). The given `base` is basically
+    the current `self` value the `module` statement was defined in. If this is
+    a ruby module or class, then it is used, otherwise if the base is a ruby
+    object then that objects real ruby class is used (e.g. if the base is the
+    main object, then the top level `Object` class is used as the base).
+
+    If a module of the given name is already defined in the base, then that
+    instance is just returned.
+
+    If there is a class of the given name in the base, then an error is
+    generated instead (cannot have a class and module of same name in same base).
+
+    Otherwise, a new module is created in the base with the given name, and that
+    new instance is returned back (to be referenced at runtime).
+
+    @param [RubyModule or Class] base class or module this definition is inside
+    @param [String] id the name of the new (or existing) module
+    @returns [RubyModule]
+  */
   Opal.module = function(base, id) {
     var module;
 
@@ -303,11 +346,19 @@
     return module;
   }
 
-  /*
-   * Get (or prepare) the singleton class for the passed object.
-   *
-   * @param object [Ruby Object]
-   */
+  /**
+    Return the singleton class for the passed object.
+
+    If the given object alredy has a singleton class, then it will be stored on
+    the object as the `$$meta` property. If this exists, then it is simply
+    returned back.
+
+    Otherwise, a new singleton object for the class or object is created, set on
+    the object at `$$meta` for future use, and then returned.
+
+    @param [RubyObject] object the ruby object
+    @returns [RubyClass] the singleton class for object
+  */
   Opal.get_singleton_class = function(object) {
     if (object.$$meta) {
       return object.$$meta;
@@ -320,11 +371,14 @@
     return build_object_singleton_class(object);
   };
 
-  /*
-   * Build the singleton class for an existing class.
-   *
-   * NOTE: Actually in MRI a class' singleton class inherits from its
-   * superclass' singleton class which in turn inherits from Class;
+  /**
+    Build the singleton class for an existing class.
+
+    NOTE: Actually in MRI a class' singleton class inherits from its
+    superclass' singleton class which in turn inherits from Class.
+
+    @param [RubyClass] klass
+    @returns [RubyClass]
    */
   function build_class_singleton_class(klass) {
     var meta = new Opal.Class.$$alloc;
@@ -340,8 +394,11 @@
     return klass.$$meta = meta;
   }
 
-  /*
-   * Build the singleton class for a Ruby (non class) Object.
+  /**
+    Build the singleton class for a Ruby (non class) Object.
+
+    @param [RubyObject] object
+    @returns [RubyClass]
    */
   function build_object_singleton_class(object) {
     var orig_class = object.$$class,
@@ -358,9 +415,26 @@
     return object.$$meta = meta;
   }
 
-  /*
-   * The actual inclusion of a module into a class.
-   */
+  /**
+    The actual inclusion of a module into a class.
+
+    ## Class `$$parent` and `iclass`
+
+    To handle `super` calls, every class has a `$$parent`. This parent is
+    used to resolve the next class for a super call. A normal class would
+    have this point to its superclass. However, if a class includes a module
+    then this would need to take into account the module. The module would
+    also have to then point its `$$parent` to the actual superclass. We
+    cannot modify modules like this, because it might be included in more
+    then one class. To fix this, we actually insert an `iclass` as the class'
+    `$$parent` which can then point to the superclass. The `iclass` acts as
+    a proxy to the actual module, so the `super` chain can then search it for
+    the required method.
+
+    @param [RubyModule] module the module to include
+    @param [RubyClass] klass the target class to include module into
+    @returns [null]
+  */
   Opal.append_features = function(module, klass) {
     var included = klass.$$inc;
 
@@ -406,10 +480,10 @@
     }
 
     if (klass.$$dep) {
-      Opal.donate(klass, methods.slice(), true);
+      donate_methods(klass, methods.slice(), true);
     }
 
-    Opal.donate_constants(module, klass);
+    donate_constants(module, klass);
   };
 
   // Boot a base class (makes instances).
@@ -535,29 +609,10 @@
   };
 
   /*
-   * constant get
-   */
-  Opal.cget = function(base_scope, path) {
-    if (path == null) {
-      path       = base_scope;
-      base_scope = Opal.Object;
-    }
-
-    var result = base_scope;
-
-    path = path.split('::');
-    while (path.length !== 0) {
-      result = result.$const_get(path.shift());
-    }
-
-    return result;
-  };
-
-  /*
    * When a source module is included into the target module, we must also copy
    * its constants to the target.
    */
-  Opal.donate_constants = function(source_mod, target_mod) {
+  function donate_constants(source_mod, target_mod) {
     var source_constants = source_mod.$$scope.constants,
         target_scope     = target_mod.$$scope,
         target_constants = target_scope.constants;
@@ -844,6 +899,34 @@
     return [value];
   };
 
+  /**
+    Used to get a list of rest keyword arguments. Method takes the given
+    keyword args, i.e. the hash literal passed to the method containing all
+    keyword arguemnts passed to method, as well as the used args which are
+    the names of required and optional arguments defined. This method then
+    just returns all key/value pairs which have not been used, in a new
+    hash literal.
+
+    @param given_args [Hash] all kwargs given to method
+    @param used_args [Object<String: true>] all keys used as named kwargs
+    @return [Hash]
+   */
+  Opal.kwrestargs = function(given_args, used_args) {
+    var keys      = [],
+        map       = {},
+        key       = null,
+        given_map = given_args.smap;
+
+    for (key in given_map) {
+      if (!used_args[key]) {
+        keys.push(key);
+        map[key] = given_map[key];
+      }
+    }
+
+    return Opal.hash2(keys, map);
+  };
+
   /*
    * Call a ruby method on a ruby object with some arguments:
    *
@@ -885,7 +968,7 @@
   /*
    * Donate methods for a class/module
    */
-  Opal.donate = function(klass, defined, indirect) {
+  function donate_methods(klass, defined, indirect) {
     var methods = klass.$$methods, included_in = klass.$$dep;
 
     // if (!indirect) {
@@ -905,20 +988,120 @@
         }
 
         if (includee.$$dep) {
-          Opal.donate(includee, defined, true);
+          donate_methods(includee, defined, true);
         }
       }
     }
   };
 
+  /**
+    Define the given method on the module.
+
+    This also handles donating methods to all classes that include this
+    module. Method conflicts are also handled here, where a class might already
+    have defined a method of the same name, or another included module defined
+    the same method.
+
+    @param [RubyModule] module the module method defined on
+    @param [String] jsid javascript friendly method name (e.g. "$foo")
+    @param [Function] body method body of actual function
+  */
+  function define_module_method(module, jsid, body) {
+    module.$$proto[jsid] = body;
+    body.$$owner = module;
+
+    module.$$methods.push(jsid);
+
+    if (module.$$module_function) {
+      module[jsid] = body;
+    }
+
+    var included_in = module.$$dep;
+
+    if (included_in) {
+      for (var i = 0, length = included_in.length; i < length; i++) {
+        var includee = included_in[i];
+        var dest = includee.$$proto;
+        var current = dest[jsid];
+
+
+        if (dest.hasOwnProperty(jsid) && !current.$$donated && !current.$$stub) {
+          // target class has already defined the same method name - do nothing
+        }
+        else if (dest.hasOwnProperty(jsid) && !current.$$stub) {
+          // target class includes another module that has defined this method
+          var klass_includees = includee.$$inc;
+
+          for (var j = 0, jj = klass_includees.length; j < jj; j++) {
+            if (klass_includees[j] === current.$$owner) {
+              var current_owner_index = j;
+            }
+            if (klass_includees[j] === module) {
+              var module_index = j;
+            }
+          }
+
+          // only redefine method on class if the module was included AFTER
+          // the module which defined the current method body. Also make sure
+          // a module can overwrite a method it defined before
+          if (current_owner_index <= module_index) {
+            dest[jsid] = body;
+            dest[jsid].$$donated = true;
+          }
+        }
+        else {
+          // neither a class, or module included by class, has defined method
+          dest[jsid] = body;
+          dest[jsid].$$donated = true;
+        }
+
+        if (includee.$$dep) {
+          donate_methods(includee, [jsid], true);
+        }
+      }
+    }
+  }
+
+  /**
+    Used to define methods on an object. This is a helper method, used by the
+    compiled source to define methods on special case objects when the compiler
+    can not determine the destination object, or the object is a Module
+    instance. This can get called by `Module#define_method` as well.
+
+    ## Modules
+
+    Any method defined on a module will come through this runtime helper.
+    The method is added to the module body, and the owner of the method is
+    set to be the module itself. This is used later when choosing which
+    method should show on a class if more than 1 included modules define
+    the same method. Finally, if the module is in `module_function` mode,
+    then the method is also defined onto the module itself.
+
+    ## Classes
+
+    This helper will only be called for classes when a method is being
+    defined indirectly; either through `Module#define_method`, or by a
+    literal `def` method inside an `instance_eval` or `class_eval` body. In
+    either case, the method is simply added to the class' prototype. A special
+    exception exists for `BasicObject` and `Object`. These two classes are
+    special because they are used in toll-free bridged classes. In each of
+    these two cases, extra work is required to define the methods on toll-free
+    bridged class' prototypes as well.
+
+    ## Objects
+
+    If a simple ruby object is the object, then the method is simply just
+    defined on the object as a singleton method. This would be the case when
+    a method is defined inside an `instance_eval` block.
+
+    @param [RubyObject or Class] obj the actual obj to define method for
+    @param [String] jsid the javascript friendly method name (e.g. '$foo')
+    @param [Function] body the literal javascript function used as method
+    @returns [null]
+  */
   Opal.defn = function(obj, jsid, body) {
     if (obj.$$is_mod) {
-      obj.$$proto[jsid] = body;
-      Opal.donate(obj, [jsid]);
-
-      if (obj.$$module_function) {
-        obj[jsid] = body;
-      }
+      define_module_method(obj, jsid, body);
     }
     else if (obj.$$is_class) {
       obj.$$proto[jsid] = body;
@@ -927,7 +1110,7 @@
         define_basic_object_method(jsid, body);
       }
       else if (obj === ObjectClass) {
-        Opal.donate(obj, [jsid]);
+        donate_methods(obj, [jsid]);
       }
     }
     else {
@@ -955,6 +1138,13 @@
       bridged_classes[i].$$proto[jsid] = body;
     }
   }
+
+  /*
+   * Called to remove a method.
+   */
+  Opal.undef = function(obj, jsid) {
+    delete obj.$$proto[jsid];
+  };
 
   Opal.hash = function() {
     if (arguments.length == 1 && arguments[0].$$class == Opal.Hash) {
@@ -1230,7 +1420,6 @@
   Opal.top = new ObjectClass.$$alloc();
 
   // Nil
-  var nil_id = Opal.uid(); // nil id is traditionally 4
   Opal.klass(ObjectClass, ObjectClass, 'NilClass', NilClass);
   var nil = Opal.nil = new NilClass();
   nil.$$id = nil_id;
@@ -1260,9 +1449,9 @@ if (typeof(window) !== 'undefined') {
   Opal.global = window;
 }
 Opal.mark_as_loaded(Opal.normalize_loadable_path("corelib/runtime"));
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/helpers"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module;
 
   Opal.add_stubs(['$new', '$class', '$===', '$respond_to?', '$raise', '$type_error', '$__send__', '$coerce_to', '$nil?', '$<=>', '$inspect']);
@@ -1393,21 +1582,20 @@ Opal.modules["corelib/helpers"] = function(Opal) {
       }
     
     });
-    
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/module"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
-  Opal.add_stubs(['$attr_reader', '$attr_writer', '$=~', '$raise', '$const_missing', '$const_get', '$to_str', '$to_proc', '$append_features', '$included', '$name', '$new', '$to_s', '$__id__']);
+  Opal.add_stubs(['$attr_reader', '$attr_writer', '$coerce_to!', '$raise', '$=~', '$[]', '$!', '$==', '$inject', '$const_get', '$split', '$const_missing', '$to_str', '$===', '$class', '$append_features', '$included', '$name', '$new', '$to_s', '$__id__']);
   return (function($base, $super) {
     function $Module(){};
     var self = $Module = $klass($base, $super, 'Module', $Module);
 
-    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4;
+    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_3, TMP_4, TMP_5;
 
     Opal.defs(self, '$new', TMP_1 = function() {
       var self = this, $iter = TMP_1.$$p, block = $iter || nil;
@@ -1466,11 +1654,17 @@ Opal.modules["corelib/module"] = function(Opal) {
       var self = this;
 
       
-      self.$$proto['$' + newname] = self.$$proto['$' + oldname];
+      var newjsid = '$' + newname,
+          body    = self.$$proto['$' + oldname];
 
-      if (self.$$methods) {
-        Opal.donate(self, ['$' + newname ])
+      if (self.$$is_singleton) {
+        self.$$proto[newjsid] = body;
       }
+      else {
+        Opal.defn(self, newjsid, body);
+      }
+
+      return self;
     
       return self;
     };
@@ -1517,25 +1711,36 @@ Opal.modules["corelib/module"] = function(Opal) {
       return ($b = self).$attr_writer.apply($b, [].concat(names));
     };
 
+    Opal.defn(self, '$attr', def.$attr_accessor);
+
     def.$attr_reader = function(names) {
       var self = this;
 
       names = $slice.call(arguments, 0);
       
-      var proto = self.$$proto, cls = self;
-      for (var i = 0, length = names.length; i < length; i++) {
-        (function(name) {
-          proto[name] = nil;
-          var func = function() { return this[name] };
+      var proto = self.$$proto;
 
-          if (cls.$$is_singleton) {
-            proto.constructor.prototype['$' + name] = func;
-          }
-          else {
-            proto['$' + name] = func;
-            Opal.donate(self, ['$' + name ]);
-          }
-        })(names[i]);
+      for (var i = names.length - 1; i >= 0; i--) {
+        var name = names[i],
+            id   = '$' + name;
+
+        // the closure here is needed because name will change at the next
+        // cycle, I wish we could use let.
+        var body = (function(name) {
+          return function() {
+            return this[name];
+          };
+        })(name);
+
+        // initialize the instance variable as nil
+        proto[name] = nil;
+
+        if (self.$$is_singleton) {
+          proto.constructor.prototype[id] = body;
+        }
+        else {
+          Opal.defn(self, id, body);
+        }
       }
     
       return nil;
@@ -1546,26 +1751,33 @@ Opal.modules["corelib/module"] = function(Opal) {
 
       names = $slice.call(arguments, 0);
       
-      var proto = self.$$proto, cls = self;
-      for (var i = 0, length = names.length; i < length; i++) {
-        (function(name) {
-          proto[name] = nil;
-          var func = function(value) { return this[name] = value; };
+      var proto = self.$$proto;
 
-          if (cls.$$is_singleton) {
-            proto.constructor.prototype['$' + name + '='] = func;
+      for (var i = names.length - 1; i >= 0; i--) {
+        var name = names[i],
+            id   = '$' + name + '=';
+
+        // the closure here is needed because name will change at the next
+        // cycle, I wish we could use let.
+        var body = (function(name){
+          return function(value) {
+            return this[name] = value;
           }
-          else {
-            proto['$' + name + '='] = func;
-            Opal.donate(self, ['$' + name + '=']);
-          }
-        })(names[i]);
+        })(name);
+
+        // initialize the instance variable as nil
+        proto[name] = nil;
+
+        if (self.$$is_singleton) {
+          proto.constructor.prototype[id] = body;
+        }
+        else {
+          Opal.defn(self, id, body);
+        }
       }
     
       return nil;
     };
-
-    Opal.defn(self, '$attr', def.$attr_accessor);
 
     def.$autoload = function(const$, path) {
       var self = this;
@@ -1580,6 +1792,35 @@ Opal.modules["corelib/module"] = function(Opal) {
       autoloaders[const$] = path;
       return nil;
     ;
+    };
+
+    def.$class_variable_get = function(name) {
+      var $a, self = this;
+
+      name = $scope.get('Opal')['$coerce_to!'](name, $scope.get('String'), "to_str");
+      if ((($a = name.length < 3 || name.slice(0,2) !== '@@') !== nil && (!$a.$$is_boolean || $a == true))) {
+        self.$raise($scope.get('NameError'), "class vars should start with @@")};
+      
+      var value = Opal.cvars[name.slice(2)];
+      (function() {if ((($a = value == null) !== nil && (!$a.$$is_boolean || $a == true))) {
+        return self.$raise($scope.get('NameError'), "uninitialized class variable @@a in")
+        } else {
+        return nil
+      }; return nil; })()
+      return value;
+    
+    };
+
+    def.$class_variable_set = function(name, value) {
+      var $a, self = this;
+
+      name = $scope.get('Opal')['$coerce_to!'](name, $scope.get('String'), "to_str");
+      if ((($a = name.length < 3 || name.slice(0,2) !== '@@') !== nil && (!$a.$$is_boolean || $a == true))) {
+        self.$raise($scope.get('NameError'))};
+      
+      Opal.cvars[name.slice(2)] = value;
+      return value;
+    
     };
 
     def.$constants = function() {
@@ -1600,15 +1841,18 @@ Opal.modules["corelib/module"] = function(Opal) {
       };
       
       scopes = [self.$$scope];
+
       if (inherit || self === Opal.Object) {
         var parent = self.$$super;
+
         while (parent !== Opal.BasicObject) {
           scopes.push(parent.$$scope);
+
           parent = parent.$$super;
         }
       }
 
-      for (var i = 0, len = scopes.length; i < len; i++) {
+      for (var i = 0, length = scopes.length; i < length; i++) {
         if (scopes[i].hasOwnProperty(name)) {
           return true;
         }
@@ -1619,26 +1863,33 @@ Opal.modules["corelib/module"] = function(Opal) {
     };
 
     def.$const_get = function(name, inherit) {
-      var $a, self = this;
+      var $a, $b, TMP_2, self = this;
 
       if (inherit == null) {
         inherit = true
       }
+      if ((($a = ($b = name['$[]']("::"), $b !== false && $b !== nil ?name['$==']("::")['$!']() : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        return ($a = ($b = name.$split("::")).$inject, $a.$$p = (TMP_2 = function(o, c){var self = TMP_2.$$s || this;
+if (o == null) o = nil;if (c == null) c = nil;
+        return o.$const_get(c)}, TMP_2.$$s = self, TMP_2), $a).call($b, self)};
       if ((($a = name['$=~'](/^[A-Z]\w*$/)) !== nil && (!$a.$$is_boolean || $a == true))) {
         } else {
         self.$raise($scope.get('NameError'), "wrong constant name " + (name))
       };
       
       var scopes = [self.$$scope];
+
       if (inherit || self == Opal.Object) {
         var parent = self.$$super;
+
         while (parent !== Opal.BasicObject) {
           scopes.push(parent.$$scope);
+
           parent = parent.$$super;
         }
       }
 
-      for (var i = 0, len = scopes.length; i < len; i++) {
+      for (var i = 0, length = scopes.length; i < length; i++) {
         if (scopes[i].hasOwnProperty(name)) {
           return scopes[i][name];
         }
@@ -1648,21 +1899,21 @@ Opal.modules["corelib/module"] = function(Opal) {
     
     };
 
-    def.$const_missing = function(const$) {
+    def.$const_missing = function(name) {
       var self = this;
 
       
       if (self.$$autoload) {
-        var file = self.$$autoload[const$];
+        var file = self.$$autoload[name];
 
         if (file) {
           self.$require(file);
 
-          return self.$const_get(const$);
+          return self.$const_get(name);
         }
       }
-    ;
-      return self.$raise($scope.get('NameError'), "uninitialized constant " + (self) + "::" + (const$));
+    
+      return self.$raise($scope.get('NameError'), "uninitialized constant " + (self) + "::" + (name));
     };
 
     def.$const_set = function(name, value) {
@@ -1682,43 +1933,46 @@ Opal.modules["corelib/module"] = function(Opal) {
       return value;
     };
 
-    def.$define_method = TMP_2 = function(name, method) {
-      var self = this, $iter = TMP_2.$$p, block = $iter || nil;
+    def.$define_method = TMP_3 = function(name, method) {
+      var $a, $b, self = this, $iter = TMP_3.$$p, block = $iter || nil;
 
-      TMP_2.$$p = null;
+      if (method == null) {
+        method = nil
+      }
+      TMP_3.$$p = null;
+      if ((($a = ((($b = method) !== false && $b !== nil) ? $b : block)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        } else {
+        self.$raise($scope.get('ArgumentError'), "tried to create Proc object without a block")
+      };
+      if (method !== false && method !== nil) {
+        if ((($a = $scope.get('Proc')['$==='](method)) !== nil && (!$a.$$is_boolean || $a == true))) {
+          block = method
+          } else {
+          self.$raise($scope.get('TypeError'), "wrong argument type " + (method.$class()) + " (expected Proc/Method)")
+        }};
       
-      if (method) {
-        block = method.$to_proc();
-      }
+      var id = '$' + name;
 
-      if (block === nil) {
-        throw new Error("no block given");
-      }
-
-      var jsid    = '$' + name;
       block.$$jsid = name;
       block.$$s    = null;
       block.$$def  = block;
 
-      self.$$proto[jsid] = block;
-      Opal.donate(self, [jsid]);
+      if (self.$$is_singleton) {
+        self.$$proto[id] = block;
+      }
+      else {
+        Opal.defn(self, id, block);
+      }
 
       return name;
-    ;
+    
     };
 
     def.$remove_method = function(name) {
       var self = this;
 
-      
-      var jsid    = '$' + name;
-      var current = self.$$proto[jsid];
-      delete self.$$proto[jsid];
-
-      // Check if we need to reverse Opal.donate
-      // Opal.retire(self, [jsid]);
+      Opal.undef(self, '$' + name);
       return self;
-    
     };
 
     def.$include = function(mods) {
@@ -1744,7 +1998,7 @@ Opal.modules["corelib/module"] = function(Opal) {
       var self = this;
 
       
-      for (var cls = self; cls; cls = cls.parent) {
+      for (var cls = self; cls; cls = cls.$$super) {
         for (var i = 0; i != cls.$$inc.length; i++) {
           var mod2 = cls.$$inc[i];
           if (mod === mod2) {
@@ -1826,10 +2080,10 @@ Opal.modules["corelib/module"] = function(Opal) {
       return nil;
     };
 
-    def.$module_eval = TMP_3 = function() {
-      var self = this, $iter = TMP_3.$$p, block = $iter || nil;
+    def.$module_eval = TMP_4 = function() {
+      var self = this, $iter = TMP_4.$$p, block = $iter || nil;
 
-      TMP_3.$$p = null;
+      TMP_4.$$p = null;
       if (block !== false && block !== nil) {
         } else {
         self.$raise($scope.get('ArgumentError'), "no block given")
@@ -1848,10 +2102,10 @@ Opal.modules["corelib/module"] = function(Opal) {
 
     Opal.defn(self, '$class_eval', def.$module_eval);
 
-    def.$module_exec = TMP_4 = function() {
-      var self = this, $iter = TMP_4.$$p, block = $iter || nil;
+    def.$module_exec = TMP_5 = function() {
+      var self = this, $iter = TMP_5.$$p, block = $iter || nil;
 
-      TMP_4.$$p = null;
+      TMP_5.$$p = null;
       
       if (block === nil) {
         throw new Error("no block given");
@@ -2006,9 +2260,9 @@ Opal.modules["corelib/module"] = function(Opal) {
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/class"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$raise', '$allocate']);
@@ -2090,9 +2344,9 @@ Opal.modules["corelib/class"] = function(Opal) {
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/basic_object"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$raise', '$inspect']);
@@ -2209,50 +2463,52 @@ Opal.modules["corelib/basic_object"] = function(Opal) {
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/kernel"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $gvars = Opal.gvars;
 
-  Opal.add_stubs(['$raise', '$inspect', '$==', '$class', '$new', '$respond_to?', '$to_ary', '$to_a', '$allocate', '$copy_instance_variables', '$initialize_clone', '$initialize_copy', '$singleton_class', '$initialize_dup', '$for', '$to_proc', '$append_features', '$extended', '$to_i', '$to_s', '$to_f', '$*', '$__id__', '$===', '$empty?', '$ArgumentError', '$nan?', '$infinite?', '$to_int', '$>', '$length', '$print', '$format', '$puts', '$each', '$<=', '$[]', '$nil?', '$is_a?', '$rand', '$coerce_to', '$respond_to_missing?', '$expand_path', '$join', '$start_with?']);
+  Opal.add_stubs(['$raise', '$inspect', '$==', '$class', '$new', '$respond_to?', '$to_ary', '$to_a', '$<<', '$allocate', '$copy_instance_variables', '$initialize_clone', '$initialize_copy', '$singleton_class', '$initialize_dup', '$for', '$to_proc', '$each', '$reverse', '$append_features', '$extended', '$to_i', '$to_s', '$to_f', '$*', '$__id__', '$===', '$empty?', '$ArgumentError', '$nan?', '$infinite?', '$to_int', '$coerce_to!', '$>', '$length', '$print', '$format', '$puts', '$<=', '$[]', '$nil?', '$rand', '$coerce_to', '$respond_to_missing?', '$try_convert!', '$expand_path', '$join', '$start_with?']);
   return (function($base) {
     var self = $module($base, 'Kernel');
 
-    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5, TMP_6, TMP_7, TMP_9;
+    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5, TMP_6, TMP_7, TMP_8, TMP_10;
 
-    def.$method_missing = TMP_1 = function(symbol, args) {
+    Opal.defn(self, '$method_missing', TMP_1 = function(symbol, args) {
       var self = this, $iter = TMP_1.$$p, block = $iter || nil;
 
       args = $slice.call(arguments, 1);
       TMP_1.$$p = null;
       return self.$raise($scope.get('NoMethodError'), "undefined method `" + (symbol) + "' for " + (self.$inspect()));
-    };
+    });
 
-    def['$=~'] = function(obj) {
+    Opal.defn(self, '$=~', function(obj) {
       var self = this;
 
       return false;
-    };
+    });
 
-    def['$==='] = function(other) {
+    Opal.defn(self, '$===', function(other) {
       var self = this;
 
       return self['$=='](other);
-    };
+    });
 
-    def['$<=>'] = function(other) {
+    Opal.defn(self, '$<=>', function(other) {
       var self = this;
 
       
-      if (self['$=='](other)) {
+      var x = self['$=='](other);
+
+      if (x && x !== nil) {
         return 0;
       }
 
       return nil;
     ;
-    };
+    });
 
-    def.$method = function(name) {
+    Opal.defn(self, '$method', function(name) {
       var self = this;
 
       
@@ -2264,9 +2520,9 @@ Opal.modules["corelib/kernel"] = function(Opal) {
 
       return $scope.get('Method').$new(self, meth, name);
     
-    };
+    });
 
-    def.$methods = function(all) {
+    Opal.defn(self, '$methods', function(all) {
       var self = this;
 
       if (all == null) {
@@ -2290,9 +2546,9 @@ Opal.modules["corelib/kernel"] = function(Opal) {
 
       return methods;
     
-    };
+    });
 
-    def.$Array = TMP_2 = function(object, args) {
+    Opal.defn(self, '$Array', TMP_2 = function(object, args) {
       var self = this, $iter = TMP_2.$$p, block = $iter || nil;
 
       args = $slice.call(arguments, 1);
@@ -2311,21 +2567,30 @@ Opal.modules["corelib/kernel"] = function(Opal) {
         return [object];
       }
     ;
-    };
+    });
 
-    def.$caller = function() {
+    Opal.defn(self, '$at_exit', TMP_3 = function() {
+      var $a, self = this, $iter = TMP_3.$$p, block = $iter || nil;
+      if ($gvars.__at_exit__ == null) $gvars.__at_exit__ = nil;
+
+      TMP_3.$$p = null;
+      ((($a = $gvars.__at_exit__) !== false && $a !== nil) ? $a : $gvars.__at_exit__ = []);
+      return $gvars.__at_exit__['$<<'](block);
+    });
+
+    Opal.defn(self, '$caller', function() {
       var self = this;
 
       return [];
-    };
+    });
 
-    def.$class = function() {
+    Opal.defn(self, '$class', function() {
       var self = this;
 
       return self.$$class;
-    };
+    });
 
-    def.$copy_instance_variables = function(other) {
+    Opal.defn(self, '$copy_instance_variables', function(other) {
       var self = this;
 
       
@@ -2335,27 +2600,27 @@ Opal.modules["corelib/kernel"] = function(Opal) {
         }
       }
     
-    };
+    });
 
-    def.$clone = function() {
+    Opal.defn(self, '$clone', function() {
       var self = this, copy = nil;
 
       copy = self.$class().$allocate();
       copy.$copy_instance_variables(self);
       copy.$initialize_clone(self);
       return copy;
-    };
+    });
 
-    def.$initialize_clone = function(other) {
+    Opal.defn(self, '$initialize_clone', function(other) {
       var self = this;
 
       return self.$initialize_copy(other);
-    };
+    });
 
-    def.$define_singleton_method = TMP_3 = function(name) {
-      var self = this, $iter = TMP_3.$$p, body = $iter || nil;
+    Opal.defn(self, '$define_singleton_method', TMP_4 = function(name) {
+      var self = this, $iter = TMP_4.$$p, body = $iter || nil;
 
-      TMP_3.$$p = null;
+      TMP_4.$$p = null;
       if (body !== false && body !== nil) {
         } else {
         self.$raise($scope.get('ArgumentError'), "tried to create Proc object without a block")
@@ -2370,43 +2635,58 @@ Opal.modules["corelib/kernel"] = function(Opal) {
 
       return self;
     
-    };
+    });
 
-    def.$dup = function() {
+    Opal.defn(self, '$dup', function() {
       var self = this, copy = nil;
 
       copy = self.$class().$allocate();
       copy.$copy_instance_variables(self);
       copy.$initialize_dup(self);
       return copy;
-    };
+    });
 
-    def.$initialize_dup = function(other) {
+    Opal.defn(self, '$initialize_dup', function(other) {
       var self = this;
 
       return self.$initialize_copy(other);
-    };
+    });
 
-    def.$enum_for = TMP_4 = function(method, args) {
-      var $a, $b, self = this, $iter = TMP_4.$$p, block = $iter || nil;
+    Opal.defn(self, '$enum_for', TMP_5 = function(method, args) {
+      var $a, $b, self = this, $iter = TMP_5.$$p, block = $iter || nil;
 
       args = $slice.call(arguments, 1);
       if (method == null) {
         method = "each"
       }
-      TMP_4.$$p = null;
+      TMP_5.$$p = null;
       return ($a = ($b = $scope.get('Enumerator')).$for, $a.$$p = block.$to_proc(), $a).apply($b, [self, method].concat(args));
-    };
+    });
 
     Opal.defn(self, '$to_enum', def.$enum_for);
 
-    def['$equal?'] = function(other) {
+    Opal.defn(self, '$equal?', function(other) {
       var self = this;
 
       return self === other;
-    };
+    });
 
-    def.$extend = function(mods) {
+    Opal.defn(self, '$exit', function(status) {
+      var $a, $b, self = this;
+      if ($gvars.__at_exit__ == null) $gvars.__at_exit__ = nil;
+
+      if (status == null) {
+        status = true
+      }
+      if ((($a = $gvars.__at_exit__) !== nil && (!$a.$$is_boolean || $a == true))) {
+        ($a = ($b = $gvars.__at_exit__.$reverse()).$each, $a.$$p = "call".$to_proc(), $a).call($b)};
+      if ((($a = status === true) !== nil && (!$a.$$is_boolean || $a == true))) {
+        status = 0};
+      Opal.exit(status);
+      return nil;
+    });
+
+    Opal.defn(self, '$extend', function(mods) {
       var self = this;
 
       mods = $slice.call(arguments, 0);
@@ -2421,9 +2701,9 @@ Opal.modules["corelib/kernel"] = function(Opal) {
       }
     ;
       return self;
-    };
+    });
 
-    def.$format = function(format, args) {
+    Opal.defn(self, '$format', function(format, args) {
       var self = this;
 
       args = $slice.call(arguments, 1);
@@ -2553,53 +2833,53 @@ Opal.modules["corelib/kernel"] = function(Opal) {
         return result;
       });
     
-    };
+    });
 
-    def.$freeze = function() {
+    Opal.defn(self, '$freeze', function() {
       var self = this;
 
       self.___frozen___ = true;
       return self;
-    };
+    });
 
-    def['$frozen?'] = function() {
+    Opal.defn(self, '$frozen?', function() {
       var $a, self = this;
       if (self.___frozen___ == null) self.___frozen___ = nil;
 
       return ((($a = self.___frozen___) !== false && $a !== nil) ? $a : false);
-    };
+    });
 
-    def.$hash = function() {
+    Opal.defn(self, '$hash', function() {
       var self = this;
 
-      return [self.$$class.$$name,(self.$$class).$__id__(),self.$__id__()].join(':');
-    };
+      return "" + (self.$class()) + ":" + (self.$class().$__id__()) + ":" + (self.$__id__());
+    });
 
-    def.$initialize_copy = function(other) {
+    Opal.defn(self, '$initialize_copy', function(other) {
       var self = this;
 
       return nil;
-    };
+    });
 
-    def.$inspect = function() {
+    Opal.defn(self, '$inspect', function() {
       var self = this;
 
       return self.$to_s();
-    };
+    });
 
-    def['$instance_of?'] = function(klass) {
+    Opal.defn(self, '$instance_of?', function(klass) {
       var self = this;
 
       return self.$$class === klass;
-    };
+    });
 
-    def['$instance_variable_defined?'] = function(name) {
+    Opal.defn(self, '$instance_variable_defined?', function(name) {
       var self = this;
 
       return Opal.hasOwnProperty.call(self, name.substr(1));
-    };
+    });
 
-    def.$instance_variable_get = function(name) {
+    Opal.defn(self, '$instance_variable_get', function(name) {
       var self = this;
 
       
@@ -2607,15 +2887,15 @@ Opal.modules["corelib/kernel"] = function(Opal) {
 
       return ivar == null ? nil : ivar;
     
-    };
+    });
 
-    def.$instance_variable_set = function(name, value) {
+    Opal.defn(self, '$instance_variable_set', function(name, value) {
       var self = this;
 
       return self[name.substr(1)] = value;
-    };
+    });
 
-    def.$instance_variables = function() {
+    Opal.defn(self, '$instance_variables', function() {
       var self = this;
 
       
@@ -2631,9 +2911,9 @@ Opal.modules["corelib/kernel"] = function(Opal) {
 
       return result;
     
-    };
+    });
 
-    def.$Integer = function(value, base) {
+    Opal.defn(self, '$Integer', function(value, base) {
       var $a, $b, self = this, $case = nil;
 
       if (base == null) {
@@ -2654,9 +2934,9 @@ Opal.modules["corelib/kernel"] = function(Opal) {
         } else {
         return self.$raise($scope.get('TypeError'), "can't convert " + (value.$class()) + " into Integer")
       }}})();
-    };
+    });
 
-    def.$Float = function(value) {
+    Opal.defn(self, '$Float', function(value) {
       var $a, self = this;
 
       if ((($a = $scope.get('String')['$==='](value)) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -2666,34 +2946,35 @@ Opal.modules["corelib/kernel"] = function(Opal) {
         } else {
         return self.$raise($scope.get('TypeError'), "can't convert " + (value.$class()) + " into Float")
       };
-    };
+    });
 
-    def['$is_a?'] = function(klass) {
+    Opal.defn(self, '$is_a?', function(klass) {
       var self = this;
 
       return Opal.is_a(self, klass);
-    };
+    });
 
     Opal.defn(self, '$kind_of?', def['$is_a?']);
 
-    def.$lambda = TMP_5 = function() {
-      var self = this, $iter = TMP_5.$$p, block = $iter || nil;
-
-      TMP_5.$$p = null;
-      block.$$is_lambda = true;
-      return block;
-    };
-
-    def.$load = function(file) {
-      var self = this;
-
-      return Opal.load(Opal.normalize_loadable_path(file));
-    };
-
-    def.$loop = TMP_6 = function() {
+    Opal.defn(self, '$lambda', TMP_6 = function() {
       var self = this, $iter = TMP_6.$$p, block = $iter || nil;
 
       TMP_6.$$p = null;
+      block.$$is_lambda = true;
+      return block;
+    });
+
+    Opal.defn(self, '$load', function(file) {
+      var self = this;
+
+      file = $scope.get('Opal')['$coerce_to!'](file, $scope.get('String'), "to_str");
+      return Opal.load(Opal.normalize_loadable_path(file));
+    });
+
+    Opal.defn(self, '$loop', TMP_7 = function() {
+      var self = this, $iter = TMP_7.$$p, block = $iter || nil;
+
+      TMP_7.$$p = null;
       
       while (true) {
         if (block() === $breaker) {
@@ -2702,77 +2983,77 @@ Opal.modules["corelib/kernel"] = function(Opal) {
       }
     
       return self;
-    };
+    });
 
-    def['$nil?'] = function() {
+    Opal.defn(self, '$nil?', function() {
       var self = this;
 
       return false;
-    };
+    });
 
     Opal.defn(self, '$object_id', def.$__id__);
 
-    def.$printf = function(args) {
+    Opal.defn(self, '$printf', function(args) {
       var $a, self = this;
 
       args = $slice.call(arguments, 0);
       if (args.$length()['$>'](0)) {
         self.$print(($a = self).$format.apply($a, [].concat(args)))};
       return nil;
-    };
+    });
 
-    def.$private_methods = function() {
+    Opal.defn(self, '$private_methods', function() {
       var self = this;
 
       return [];
-    };
+    });
 
     Opal.defn(self, '$private_instance_methods', def.$private_methods);
 
-    def.$proc = TMP_7 = function() {
-      var self = this, $iter = TMP_7.$$p, block = $iter || nil;
+    Opal.defn(self, '$proc', TMP_8 = function() {
+      var self = this, $iter = TMP_8.$$p, block = $iter || nil;
 
-      TMP_7.$$p = null;
+      TMP_8.$$p = null;
       if (block !== false && block !== nil) {
         } else {
         self.$raise($scope.get('ArgumentError'), "tried to create Proc object without a block")
       };
       block.$$is_lambda = false;
       return block;
-    };
+    });
 
-    def.$puts = function(strs) {
+    Opal.defn(self, '$puts', function(strs) {
       var $a, self = this;
       if ($gvars.stdout == null) $gvars.stdout = nil;
 
       strs = $slice.call(arguments, 0);
       return ($a = $gvars.stdout).$puts.apply($a, [].concat(strs));
-    };
+    });
 
-    def.$p = function(args) {
-      var $a, $b, TMP_8, self = this;
+    Opal.defn(self, '$p', function(args) {
+      var $a, $b, TMP_9, self = this;
 
       args = $slice.call(arguments, 0);
-      ($a = ($b = args).$each, $a.$$p = (TMP_8 = function(obj){var self = TMP_8.$$s || this;
+      ($a = ($b = args).$each, $a.$$p = (TMP_9 = function(obj){var self = TMP_9.$$s || this;
         if ($gvars.stdout == null) $gvars.stdout = nil;
 if (obj == null) obj = nil;
-      return $gvars.stdout.$puts(obj.$inspect())}, TMP_8.$$s = self, TMP_8), $a).call($b);
+      return $gvars.stdout.$puts(obj.$inspect())}, TMP_9.$$s = self, TMP_9), $a).call($b);
       if (args.$length()['$<='](1)) {
         return args['$[]'](0)
         } else {
         return args
       };
-    };
+    });
 
-    def.$print = function(strs) {
+    Opal.defn(self, '$print', function(strs) {
       var $a, self = this;
       if ($gvars.stdout == null) $gvars.stdout = nil;
 
       strs = $slice.call(arguments, 0);
       return ($a = $gvars.stdout).$print.apply($a, [].concat(strs));
-    };
+    });
 
-    def.$warn = function(strs) {
+    Opal.defn(self, '$warn', function(strs) {
       var $a, $b, self = this;
       if ($gvars.VERBOSE == null) $gvars.VERBOSE = nil;
       if ($gvars.stderr == null) $gvars.stderr = nil;
@@ -2783,31 +3064,36 @@ if (obj == null) obj = nil;
         } else {
         return ($a = $gvars.stderr).$puts.apply($a, [].concat(strs))
       };
-    };
+    });
 
-    def.$raise = function(exception, string) {
+    Opal.defn(self, '$raise', function(exception, string) {
       var self = this;
       if ($gvars["!"] == null) $gvars["!"] = nil;
 
       
       if (exception == null && $gvars["!"]) {
-        exception = $gvars["!"];
+        throw $gvars["!"];
+      }
+
+      if (exception == null) {
+        exception = $scope.get('RuntimeError').$new();
       }
       else if (exception.$$is_string) {
         exception = $scope.get('RuntimeError').$new(exception);
       }
-      else if (!exception['$is_a?']($scope.get('Exception'))) {
+      else if (exception.$$is_class) {
         exception = exception.$new(string);
       }
 
       $gvars["!"] = exception;
+
       throw exception;
     ;
-    };
+    });
 
     Opal.defn(self, '$fail', def.$raise);
 
-    def.$rand = function(max) {
+    Opal.defn(self, '$rand', function(max) {
       var self = this;
 
       
@@ -2824,9 +3110,9 @@ if (obj == null) obj = nil;
           Math.abs($scope.get('Opal').$coerce_to(max, $scope.get('Integer'), "to_int")));
       }
     
-    };
+    });
 
-    def['$respond_to?'] = function(name, include_all) {
+    Opal.defn(self, '$respond_to?', function(name, include_all) {
       var $a, self = this;
 
       if (include_all == null) {
@@ -2842,28 +3128,30 @@ if (obj == null) obj = nil;
       }
     
       return false;
-    };
+    });
 
-    def['$respond_to_missing?'] = function(method_name) {
+    Opal.defn(self, '$respond_to_missing?', function(method_name) {
       var self = this;
 
       return false;
-    };
+    });
 
-    def.$require = function(file) {
+    Opal.defn(self, '$require', function(file) {
       var self = this;
 
+      file = $scope.get('Opal')['$coerce_to!'](file, $scope.get('String'), "to_str");
       return Opal.require(Opal.normalize_loadable_path(file));
-    };
+    });
 
-    def.$require_relative = function(file) {
+    Opal.defn(self, '$require_relative', function(file) {
       var self = this;
 
+      $scope.get('Opal')['$try_convert!'](file, $scope.get('String'), "to_str");
       file = $scope.get('File').$expand_path($scope.get('File').$join(Opal.current_file, "..", file));
       return Opal.require(Opal.normalize_loadable_path(file));
-    };
+    });
 
-    def.$require_tree = function(path) {
+    Opal.defn(self, '$require_tree', function(path) {
       var self = this;
 
       path = $scope.get('File').$expand_path(path);
@@ -2875,68 +3163,67 @@ if (obj == null) obj = nil;
       }
     ;
       return nil;
-    };
+    });
 
     Opal.defn(self, '$send', def.$__send__);
 
     Opal.defn(self, '$public_send', def.$__send__);
 
-    def.$singleton_class = function() {
+    Opal.defn(self, '$singleton_class', function() {
       var self = this;
 
       return Opal.get_singleton_class(self);
-    };
+    });
 
     Opal.defn(self, '$sprintf', def.$format);
 
     Opal.defn(self, '$srand', def.$rand);
 
-    def.$String = function(str) {
+    Opal.defn(self, '$String', function(str) {
       var self = this;
 
       return String(str);
-    };
+    });
 
-    def.$taint = function() {
+    Opal.defn(self, '$taint', function() {
       var self = this;
 
       return self;
-    };
+    });
 
-    def['$tainted?'] = function() {
+    Opal.defn(self, '$tainted?', function() {
       var self = this;
 
       return false;
-    };
+    });
 
-    def.$tap = TMP_9 = function() {
-      var self = this, $iter = TMP_9.$$p, block = $iter || nil;
+    Opal.defn(self, '$tap', TMP_10 = function() {
+      var self = this, $iter = TMP_10.$$p, block = $iter || nil;
 
-      TMP_9.$$p = null;
+      TMP_10.$$p = null;
       if (Opal.yield1(block, self) === $breaker) return $breaker.$v;
       return self;
-    };
+    });
 
-    def.$to_proc = function() {
+    Opal.defn(self, '$to_proc', function() {
       var self = this;
 
       return self;
-    };
+    });
 
-    def.$to_s = function() {
+    Opal.defn(self, '$to_s', function() {
       var self = this;
 
       return "#<" + (self.$class()) + ":0x" + (self.$__id__().$to_s(16)) + ">";
-    };
+    });
 
     Opal.defn(self, '$untaint', def.$taint);
-        ;Opal.donate(self, ["$method_missing", "$=~", "$===", "$<=>", "$method", "$methods", "$Array", "$caller", "$class", "$copy_instance_variables", "$clone", "$initialize_clone", "$define_singleton_method", "$dup", "$initialize_dup", "$enum_for", "$to_enum", "$equal?", "$extend", "$format", "$freeze", "$frozen?", "$hash", "$initialize_copy", "$inspect", "$instance_of?", "$instance_variable_defined?", "$instance_variable_get", "$instance_variable_set", "$instance_variables", "$Integer", "$Float", "$is_a?", "$kind_of?", "$lambda", "$load", "$loop", "$nil?", "$object_id", "$printf", "$private_methods", "$private_instance_methods", "$proc", "$puts", "$p", "$print", "$warn", "$raise", "$fail", "$rand", "$respond_to?", "$respond_to_missing?", "$require", "$require_relative", "$require_tree", "$send", "$public_send", "$singleton_class", "$sprintf", "$srand", "$String", "$taint", "$tainted?", "$tap", "$to_proc", "$to_s", "$untaint"]);
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/nil_class"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$raise']);
@@ -3029,9 +3316,9 @@ Opal.modules["corelib/nil_class"] = function(Opal) {
   return Opal.cdecl($scope, 'NIL', nil);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/boolean"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$undef_method']);
@@ -3042,6 +3329,14 @@ Opal.modules["corelib/boolean"] = function(Opal) {
     var def = self.$$proto, $scope = self.$$scope;
 
     def.$$is_boolean = true;
+
+    def.$__id__ = function() {
+      var self = this;
+
+      return self.valueOf() ? 2 : 0;
+    };
+
+    Opal.defn(self, '$object_id', def.$__id__);
 
     (function(self) {
       var $scope = self.$$scope, def = self.$$proto;
@@ -3095,9 +3390,9 @@ Opal.modules["corelib/boolean"] = function(Opal) {
   return Opal.cdecl($scope, 'FALSE', false);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/error"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $module = Opal.module;
 
   Opal.add_stubs(['$attr_reader', '$class']);
@@ -3195,6 +3490,30 @@ Opal.modules["corelib/error"] = function(Opal) {
   (function($base, $super) {
     function $SystemExit(){};
     var self = $SystemExit = $klass($base, $super, 'SystemExit', $SystemExit);
+
+    var def = self.$$proto, $scope = self.$$scope;
+
+    return nil;
+  })(self, $scope.get('Exception'));
+  (function($base, $super) {
+    function $NoMemoryError(){};
+    var self = $NoMemoryError = $klass($base, $super, 'NoMemoryError', $NoMemoryError);
+
+    var def = self.$$proto, $scope = self.$$scope;
+
+    return nil;
+  })(self, $scope.get('Exception'));
+  (function($base, $super) {
+    function $SignalException(){};
+    var self = $SignalException = $klass($base, $super, 'SignalException', $SignalException);
+
+    var def = self.$$proto, $scope = self.$$scope;
+
+    return nil;
+  })(self, $scope.get('Exception'));
+  (function($base, $super) {
+    function $Interrupt(){};
+    var self = $Interrupt = $klass($base, $super, 'Interrupt', $Interrupt);
 
     var def = self.$$proto, $scope = self.$$scope;
 
@@ -3330,13 +3649,12 @@ Opal.modules["corelib/error"] = function(Opal) {
         return Opal.find_super_dispatcher(self, 'new', TMP_1, null, $EINVAL).apply(self, ["Invalid argument"]);
       }), nil) && 'new'
     })(self, $scope.get('SystemCallError'))
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/regexp"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars;
 
   Opal.add_stubs(['$nil?', '$[]', '$respond_to?', '$to_str', '$to_s', '$coerce_to', '$new', '$raise', '$class', '$call']);
@@ -3355,7 +3673,7 @@ Opal.modules["corelib/regexp"] = function(Opal) {
         var self = this;
 
         
-        return string.replace(/([-[\]/{}()*+?.^$\\| ])/g, '\\$1')
+        return string.replace(/([-[\]\/{}()*+?.^$\\| ])/g, '\\$1')
                      .replace(/[\n]/g, '\\n')
                      .replace(/[\r]/g, '\\r')
                      .replace(/[\f]/g, '\\f')
@@ -3504,9 +3822,9 @@ Opal.modules["corelib/regexp"] = function(Opal) {
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/comparable"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module;
 
   Opal.add_stubs(['$===', '$>', '$<', '$equal?', '$<=>', '$normalize', '$raise', '$class']);
@@ -3527,7 +3845,7 @@ Opal.modules["corelib/comparable"] = function(Opal) {
       return 0;
     });
 
-    def['$=='] = function(other) {
+    Opal.defn(self, '$==', function(other) {
       var $a, self = this, cmp = nil;
 
       try {
@@ -3542,9 +3860,9 @@ Opal.modules["corelib/comparable"] = function(Opal) {
         return false
         }else { throw $err; }
       };
-    };
+    });
 
-    def['$>'] = function(other) {
+    Opal.defn(self, '$>', function(other) {
       var $a, self = this, cmp = nil;
 
       if ((($a = cmp = (self['$<=>'](other))) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -3552,9 +3870,9 @@ Opal.modules["corelib/comparable"] = function(Opal) {
         self.$raise($scope.get('ArgumentError'), "comparison of " + (self.$class()) + " with " + (other.$class()) + " failed")
       };
       return $scope.get('Comparable').$normalize(cmp) > 0;
-    };
+    });
 
-    def['$>='] = function(other) {
+    Opal.defn(self, '$>=', function(other) {
       var $a, self = this, cmp = nil;
 
       if ((($a = cmp = (self['$<=>'](other))) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -3562,9 +3880,9 @@ Opal.modules["corelib/comparable"] = function(Opal) {
         self.$raise($scope.get('ArgumentError'), "comparison of " + (self.$class()) + " with " + (other.$class()) + " failed")
       };
       return $scope.get('Comparable').$normalize(cmp) >= 0;
-    };
+    });
 
-    def['$<'] = function(other) {
+    Opal.defn(self, '$<', function(other) {
       var $a, self = this, cmp = nil;
 
       if ((($a = cmp = (self['$<=>'](other))) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -3572,9 +3890,9 @@ Opal.modules["corelib/comparable"] = function(Opal) {
         self.$raise($scope.get('ArgumentError'), "comparison of " + (self.$class()) + " with " + (other.$class()) + " failed")
       };
       return $scope.get('Comparable').$normalize(cmp) < 0;
-    };
+    });
 
-    def['$<='] = function(other) {
+    Opal.defn(self, '$<=', function(other) {
       var $a, self = this, cmp = nil;
 
       if ((($a = cmp = (self['$<=>'](other))) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -3582,9 +3900,9 @@ Opal.modules["corelib/comparable"] = function(Opal) {
         self.$raise($scope.get('ArgumentError'), "comparison of " + (self.$class()) + " with " + (other.$class()) + " failed")
       };
       return $scope.get('Comparable').$normalize(cmp) <= 0;
-    };
+    });
 
-    def['$between?'] = function(min, max) {
+    Opal.defn(self, '$between?', function(min, max) {
       var self = this;
 
       if (self['$<'](min)) {
@@ -3592,23 +3910,22 @@ Opal.modules["corelib/comparable"] = function(Opal) {
       if (self['$>'](max)) {
         return false};
       return true;
-    };
-        ;Opal.donate(self, ["$==", "$>", "$>=", "$<", "$<=", "$between?"]);
+    });
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/enumerable"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module;
 
-  Opal.add_stubs(['$raise', '$enum_for', '$flatten', '$map', '$==', '$destructure', '$nil?', '$coerce_to!', '$coerce_to', '$===', '$new', '$<<', '$[]', '$[]=', '$inspect', '$__send__', '$yield', '$enumerator_size', '$respond_to?', '$size', '$private', '$compare', '$<=>', '$dup', '$sort', '$call', '$first', '$zip', '$to_a']);
+  Opal.add_stubs(['$raise', '$enum_for', '$flatten', '$map', '$==', '$destructure', '$nil?', '$coerce_to!', '$coerce_to', '$===', '$new', '$<<', '$[]', '$[]=', '$inspect', '$__send__', '$yield', '$enumerator_size', '$respond_to?', '$size', '$private', '$compare', '$<=>', '$dup', '$to_a', '$lambda', '$sort', '$call', '$first', '$zip']);
   return (function($base) {
     var self = $module($base, 'Enumerable');
 
-    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5, TMP_7, TMP_8, TMP_9, TMP_10, TMP_11, TMP_12, TMP_13, TMP_14, TMP_15, TMP_16, TMP_17, TMP_18, TMP_19, TMP_20, TMP_22, TMP_23, TMP_24, TMP_25, TMP_26, TMP_27, TMP_28, TMP_29, TMP_30, TMP_31, TMP_32, TMP_33, TMP_35, TMP_36, TMP_40, TMP_41;
+    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5, TMP_7, TMP_8, TMP_9, TMP_10, TMP_11, TMP_12, TMP_13, TMP_14, TMP_15, TMP_16, TMP_17, TMP_18, TMP_19, TMP_20, TMP_22, TMP_23, TMP_24, TMP_25, TMP_26, TMP_27, TMP_28, TMP_29, TMP_30, TMP_31, TMP_32, TMP_33, TMP_35, TMP_37, TMP_41, TMP_42;
 
-    def['$all?'] = TMP_1 = function() {
+    Opal.defn(self, '$all?', TMP_1 = function() {
       var $a, self = this, $iter = TMP_1.$$p, block = $iter || nil;
 
       TMP_1.$$p = null;
@@ -3628,7 +3945,7 @@ Opal.modules["corelib/enumerable"] = function(Opal) {
             result = false;
             return $breaker;
           }
-        }
+        };
       }
       else {
         self.$each.$$p = function(obj) {
@@ -3636,16 +3953,16 @@ Opal.modules["corelib/enumerable"] = function(Opal) {
             result = false;
             return $breaker;
           }
-        }
+        };
       }
 
       self.$each();
 
       return result;
     
-    };
+    });
 
-    def['$any?'] = TMP_2 = function() {
+    Opal.defn(self, '$any?', TMP_2 = function() {
       var $a, self = this, $iter = TMP_2.$$p, block = $iter || nil;
 
       TMP_2.$$p = null;
@@ -3680,16 +3997,16 @@ Opal.modules["corelib/enumerable"] = function(Opal) {
 
       return result;
     
-    };
+    });
 
-    def.$chunk = TMP_3 = function(state) {
+    Opal.defn(self, '$chunk', TMP_3 = function(state) {
       var self = this, $iter = TMP_3.$$p, block = $iter || nil;
 
       TMP_3.$$p = null;
       return self.$raise($scope.get('NotImplementedError'));
-    };
+    });
 
-    def.$collect = TMP_4 = function() {
+    Opal.defn(self, '$collect', TMP_4 = function() {
       var self = this, $iter = TMP_4.$$p, block = $iter || nil;
 
       TMP_4.$$p = null;
@@ -3715,9 +4032,9 @@ Opal.modules["corelib/enumerable"] = function(Opal) {
 
       return result;
     
-    };
+    });
 
-    def.$collect_concat = TMP_5 = function() {
+    Opal.defn(self, '$collect_concat', TMP_5 = function() {
       var $a, $b, TMP_6, self = this, $iter = TMP_5.$$p, block = $iter || nil;
 
       TMP_5.$$p = null;
@@ -3728,9 +4045,9 @@ Opal.modules["corelib/enumerable"] = function(Opal) {
       return ($a = ($b = self).$map, $a.$$p = (TMP_6 = function(item){var self = TMP_6.$$s || this, $a;
 if (item == null) item = nil;
       return $a = Opal.yield1(block, item), $a === $breaker ? $a : $a}, TMP_6.$$s = self, TMP_6), $a).call($b).$flatten(1);
-    };
+    });
 
-    def.$count = TMP_7 = function(object) {
+    Opal.defn(self, '$count', TMP_7 = function(object) {
       var $a, self = this, $iter = TMP_7.$$p, block = $iter || nil;
 
       TMP_7.$$p = null;
@@ -3763,9 +4080,9 @@ if (item == null) item = nil;
 
       return result;
     
-    };
+    });
 
-    def.$cycle = TMP_8 = function(n) {
+    Opal.defn(self, '$cycle', TMP_8 = function(n) {
       var $a, self = this, $iter = TMP_8.$$p, block = $iter || nil;
 
       if (n == null) {
@@ -3835,9 +4152,9 @@ if (item == null) item = nil;
         }
       
       };
-    };
+    });
 
-    def.$detect = TMP_9 = function(ifnone) {
+    Opal.defn(self, '$detect', TMP_9 = function(ifnone) {
       var $a, self = this, $iter = TMP_9.$$p, block = $iter || nil;
 
       TMP_9.$$p = null;
@@ -3876,9 +4193,9 @@ if (item == null) item = nil;
 
       return result === undefined ? nil : result;
     
-    };
+    });
 
-    def.$drop = function(number) {
+    Opal.defn(self, '$drop', function(number) {
       var $a, self = this;
 
       number = $scope.get('Opal').$coerce_to(number, $scope.get('Integer'), "to_int");
@@ -3900,9 +4217,9 @@ if (item == null) item = nil;
 
       return result;
     
-    };
+    });
 
-    def.$drop_while = TMP_10 = function() {
+    Opal.defn(self, '$drop_while', TMP_10 = function() {
       var $a, self = this, $iter = TMP_10.$$p, block = $iter || nil;
 
       TMP_10.$$p = null;
@@ -3939,23 +4256,23 @@ if (item == null) item = nil;
 
       return result;
     
-    };
+    });
 
-    def.$each_cons = TMP_11 = function(n) {
+    Opal.defn(self, '$each_cons', TMP_11 = function(n) {
       var self = this, $iter = TMP_11.$$p, block = $iter || nil;
 
       TMP_11.$$p = null;
       return self.$raise($scope.get('NotImplementedError'));
-    };
+    });
 
-    def.$each_entry = TMP_12 = function() {
+    Opal.defn(self, '$each_entry', TMP_12 = function() {
       var self = this, $iter = TMP_12.$$p, block = $iter || nil;
 
       TMP_12.$$p = null;
       return self.$raise($scope.get('NotImplementedError'));
-    };
+    });
 
-    def.$each_slice = TMP_13 = function(n) {
+    Opal.defn(self, '$each_slice', TMP_13 = function(n) {
       var $a, self = this, $iter = TMP_13.$$p, block = $iter || nil;
 
       TMP_13.$$p = null;
@@ -3999,9 +4316,9 @@ if (item == null) item = nil;
       }
     ;
       return nil;
-    };
+    });
 
-    def.$each_with_index = TMP_14 = function(args) {
+    Opal.defn(self, '$each_with_index', TMP_14 = function(args) {
       var $a, self = this, $iter = TMP_14.$$p, block = $iter || nil;
 
       args = $slice.call(arguments, 0);
@@ -4033,9 +4350,9 @@ if (item == null) item = nil;
       }
     
       return self;
-    };
+    });
 
-    def.$each_with_object = TMP_15 = function(object) {
+    Opal.defn(self, '$each_with_object', TMP_15 = function(object) {
       var self = this, $iter = TMP_15.$$p, block = $iter || nil;
 
       TMP_15.$$p = null;
@@ -4063,9 +4380,9 @@ if (item == null) item = nil;
       }
     
       return object;
-    };
+    });
 
-    def.$entries = function(args) {
+    Opal.defn(self, '$entries', function(args) {
       var self = this;
 
       args = $slice.call(arguments, 0);
@@ -4080,11 +4397,11 @@ if (item == null) item = nil;
 
       return result;
     
-    };
+    });
 
     Opal.defn(self, '$find', def.$detect);
 
-    def.$find_all = TMP_16 = function() {
+    Opal.defn(self, '$find_all', TMP_16 = function() {
       var $a, self = this, $iter = TMP_16.$$p, block = $iter || nil;
 
       TMP_16.$$p = null;
@@ -4113,9 +4430,9 @@ if (item == null) item = nil;
 
       return result;
     
-    };
+    });
 
-    def.$find_index = TMP_17 = function(object) {
+    Opal.defn(self, '$find_index', TMP_17 = function(object) {
       var $a, self = this, $iter = TMP_17.$$p, block = $iter || nil;
 
       TMP_17.$$p = null;
@@ -4159,9 +4476,9 @@ if (item == null) item = nil;
 
       return result;
     
-    };
+    });
 
-    def.$first = function(number) {
+    Opal.defn(self, '$first', function(number) {
       var $a, self = this, result = nil;
 
       if ((($a = number === undefined) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -4198,11 +4515,11 @@ if (item == null) item = nil;
       ;
       };
       return result;
-    };
+    });
 
     Opal.defn(self, '$flat_map', def.$collect_concat);
 
-    def.$grep = TMP_18 = function(pattern) {
+    Opal.defn(self, '$grep', TMP_18 = function(pattern) {
       var $a, self = this, $iter = TMP_18.$$p, block = $iter || nil;
 
       TMP_18.$$p = null;
@@ -4241,9 +4558,9 @@ if (item == null) item = nil;
 
       return result;
     ;
-    };
+    });
 
-    def.$group_by = TMP_19 = function() {
+    Opal.defn(self, '$group_by', TMP_19 = function() {
       var $a, $b, $c, self = this, $iter = TMP_19.$$p, block = $iter || nil, hash = nil;
 
       TMP_19.$$p = null;
@@ -4274,9 +4591,9 @@ if (item == null) item = nil;
       }
     
       return hash;
-    };
+    });
 
-    def['$include?'] = function(obj) {
+    Opal.defn(self, '$include?', function(obj) {
       var self = this;
 
       
@@ -4295,9 +4612,9 @@ if (item == null) item = nil;
 
       return result;
     
-    };
+    });
 
-    def.$inject = TMP_20 = function(object, sym) {
+    Opal.defn(self, '$inject', TMP_20 = function(object, sym) {
       var self = this, $iter = TMP_20.$$p, block = $iter || nil;
 
       TMP_20.$$p = null;
@@ -4349,17 +4666,17 @@ if (item == null) item = nil;
 
       return result == undefined ? nil : result;
     ;
-    };
+    });
 
-    def.$lazy = function() {
+    Opal.defn(self, '$lazy', function() {
       var $a, $b, TMP_21, self = this;
 
       return ($a = ($b = (($scope.get('Enumerator')).$$scope.get('Lazy'))).$new, $a.$$p = (TMP_21 = function(enum$, args){var self = TMP_21.$$s || this, $a;
 if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
       return ($a = enum$).$yield.apply($a, [].concat(args))}, TMP_21.$$s = self, TMP_21), $a).call($b, self, self.$enumerator_size());
-    };
+    });
 
-    def.$enumerator_size = function() {
+    Opal.defn(self, '$enumerator_size', function() {
       var $a, self = this;
 
       if ((($a = self['$respond_to?']("size")) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -4367,13 +4684,13 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
         } else {
         return nil
       };
-    };
+    });
 
     self.$private("enumerator_size");
 
     Opal.defn(self, '$map', def.$collect);
 
-    def.$max = TMP_22 = function() {
+    Opal.defn(self, '$max', TMP_22 = function() {
       var self = this, $iter = TMP_22.$$p, block = $iter || nil;
 
       TMP_22.$$p = null;
@@ -4424,9 +4741,9 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result === undefined ? nil : result;
     
-    };
+    });
 
-    def.$max_by = TMP_23 = function() {
+    Opal.defn(self, '$max_by', TMP_23 = function() {
       var self = this, $iter = TMP_23.$$p, block = $iter || nil;
 
       TMP_23.$$p = null;
@@ -4463,11 +4780,11 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result === undefined ? nil : result;
     
-    };
+    });
 
     Opal.defn(self, '$member?', def['$include?']);
 
-    def.$min = TMP_24 = function() {
+    Opal.defn(self, '$min', TMP_24 = function() {
       var self = this, $iter = TMP_24.$$p, block = $iter || nil;
 
       TMP_24.$$p = null;
@@ -4518,9 +4835,9 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result === undefined ? nil : result;
     
-    };
+    });
 
-    def.$min_by = TMP_25 = function() {
+    Opal.defn(self, '$min_by', TMP_25 = function() {
       var self = this, $iter = TMP_25.$$p, block = $iter || nil;
 
       TMP_25.$$p = null;
@@ -4557,23 +4874,23 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result === undefined ? nil : result;
     
-    };
+    });
 
-    def.$minmax = TMP_26 = function() {
+    Opal.defn(self, '$minmax', TMP_26 = function() {
       var self = this, $iter = TMP_26.$$p, block = $iter || nil;
 
       TMP_26.$$p = null;
       return self.$raise($scope.get('NotImplementedError'));
-    };
+    });
 
-    def.$minmax_by = TMP_27 = function() {
+    Opal.defn(self, '$minmax_by', TMP_27 = function() {
       var self = this, $iter = TMP_27.$$p, block = $iter || nil;
 
       TMP_27.$$p = null;
       return self.$raise($scope.get('NotImplementedError'));
-    };
+    });
 
-    def['$none?'] = TMP_28 = function() {
+    Opal.defn(self, '$none?', TMP_28 = function() {
       var $a, self = this, $iter = TMP_28.$$p, block = $iter || nil;
 
       TMP_28.$$p = null;
@@ -4610,9 +4927,9 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result;
     
-    };
+    });
 
-    def['$one?'] = TMP_29 = function() {
+    Opal.defn(self, '$one?', TMP_29 = function() {
       var $a, self = this, $iter = TMP_29.$$p, block = $iter || nil;
 
       TMP_29.$$p = null;
@@ -4657,9 +4974,9 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result;
     
-    };
+    });
 
-    def.$partition = TMP_30 = function() {
+    Opal.defn(self, '$partition', TMP_30 = function() {
       var $a, self = this, $iter = TMP_30.$$p, block = $iter || nil;
 
       TMP_30.$$p = null;
@@ -4691,11 +5008,11 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return [truthy, falsy];
     
-    };
+    });
 
     Opal.defn(self, '$reduce', def.$inject);
 
-    def.$reject = TMP_31 = function() {
+    Opal.defn(self, '$reject', TMP_31 = function() {
       var $a, self = this, $iter = TMP_31.$$p, block = $iter || nil;
 
       TMP_31.$$p = null;
@@ -4724,9 +5041,9 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result;
     
-    };
+    });
 
-    def.$reverse_each = TMP_32 = function() {
+    Opal.defn(self, '$reverse_each', TMP_32 = function() {
       var self = this, $iter = TMP_32.$$p, block = $iter || nil;
 
       TMP_32.$$p = null;
@@ -4749,11 +5066,11 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
 
       return result;
     
-    };
+    });
 
     Opal.defn(self, '$select', def.$find_all);
 
-    def.$slice_before = TMP_33 = function(pattern) {
+    Opal.defn(self, '$slice_before', TMP_33 = function(pattern) {
       var $a, $b, TMP_34, self = this, $iter = TMP_33.$$p, block = $iter || nil;
 
       TMP_33.$$p = null;
@@ -4812,43 +5129,50 @@ if (e == null) e = nil;
           e['$<<'](slice);
         }
       ;}, TMP_34.$$s = self, TMP_34), $a).call($b);
-    };
+    });
 
-    def.$sort = TMP_35 = function() {
-      var self = this, $iter = TMP_35.$$p, block = $iter || nil;
+    Opal.defn(self, '$sort', TMP_35 = function() {
+      var $a, $b, TMP_36, self = this, $iter = TMP_35.$$p, block = $iter || nil, ary = nil;
 
       TMP_35.$$p = null;
-      return self.$raise($scope.get('NotImplementedError'));
-    };
+      ary = self.$to_a();
+      if ((block !== nil)) {
+        } else {
+        block = ($a = ($b = self).$lambda, $a.$$p = (TMP_36 = function(a, b){var self = TMP_36.$$s || this;
+if (a == null) a = nil;if (b == null) b = nil;
+        return a['$<=>'](b)}, TMP_36.$$s = self, TMP_36), $a).call($b)
+      };
+      return ary.sort(block);
+    });
 
-    def.$sort_by = TMP_36 = function() {
-      var $a, $b, TMP_37, $c, $d, TMP_38, $e, $f, TMP_39, self = this, $iter = TMP_36.$$p, block = $iter || nil;
+    Opal.defn(self, '$sort_by', TMP_37 = function() {
+      var $a, $b, TMP_38, $c, $d, TMP_39, $e, $f, TMP_40, self = this, $iter = TMP_37.$$p, block = $iter || nil;
 
-      TMP_36.$$p = null;
+      TMP_37.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("sort_by")
       };
-      return ($a = ($b = ($c = ($d = ($e = ($f = self).$map, $e.$$p = (TMP_39 = function(){var self = TMP_39.$$s || this;
+      return ($a = ($b = ($c = ($d = ($e = ($f = self).$map, $e.$$p = (TMP_40 = function(){var self = TMP_40.$$s || this;
 
       arg = $scope.get('Opal').$destructure(arguments);
-        return [block.$call(arg), arg];}, TMP_39.$$s = self, TMP_39), $e).call($f)).$sort, $c.$$p = (TMP_38 = function(a, b){var self = TMP_38.$$s || this;
+        return [block.$call(arg), arg];}, TMP_40.$$s = self, TMP_40), $e).call($f)).$sort, $c.$$p = (TMP_39 = function(a, b){var self = TMP_39.$$s || this;
 if (a == null) a = nil;if (b == null) b = nil;
-      return a['$[]'](0)['$<=>'](b['$[]'](0))}, TMP_38.$$s = self, TMP_38), $c).call($d)).$map, $a.$$p = (TMP_37 = function(arg){var self = TMP_37.$$s || this;
+      return a['$[]'](0)['$<=>'](b['$[]'](0))}, TMP_39.$$s = self, TMP_39), $c).call($d)).$map, $a.$$p = (TMP_38 = function(arg){var self = TMP_38.$$s || this;
 if (arg == null) arg = nil;
-      return arg[1];}, TMP_37.$$s = self, TMP_37), $a).call($b);
-    };
+      return arg[1];}, TMP_38.$$s = self, TMP_38), $a).call($b);
+    });
 
-    def.$take = function(num) {
+    Opal.defn(self, '$take', function(num) {
       var self = this;
 
       return self.$first(num);
-    };
+    });
 
-    def.$take_while = TMP_40 = function() {
-      var $a, self = this, $iter = TMP_40.$$p, block = $iter || nil;
+    Opal.defn(self, '$take_while', TMP_41 = function() {
+      var $a, self = this, $iter = TMP_41.$$p, block = $iter || nil;
 
-      TMP_40.$$p = null;
+      TMP_41.$$p = null;
       if (block !== false && block !== nil) {
         } else {
         return self.$enum_for("take_while")
@@ -4876,24 +5200,23 @@ if (arg == null) arg = nil;
 
       return result;
     
-    };
+    });
 
     Opal.defn(self, '$to_a', def.$entries);
 
-    def.$zip = TMP_41 = function(others) {
-      var $a, self = this, $iter = TMP_41.$$p, block = $iter || nil;
+    Opal.defn(self, '$zip', TMP_42 = function(others) {
+      var $a, self = this, $iter = TMP_42.$$p, block = $iter || nil;
 
       others = $slice.call(arguments, 0);
-      TMP_41.$$p = null;
+      TMP_42.$$p = null;
       return ($a = self.$to_a()).$zip.apply($a, [].concat(others));
-    };
-        ;Opal.donate(self, ["$all?", "$any?", "$chunk", "$collect", "$collect_concat", "$count", "$cycle", "$detect", "$drop", "$drop_while", "$each_cons", "$each_entry", "$each_slice", "$each_with_index", "$each_with_object", "$entries", "$find", "$find_all", "$find_index", "$first", "$flat_map", "$grep", "$group_by", "$include?", "$inject", "$lazy", "$enumerator_size", "$map", "$max", "$max_by", "$member?", "$min", "$min_by", "$minmax", "$minmax_by", "$none?", "$one?", "$partition", "$reduce", "$reject", "$reverse_each", "$select", "$slice_before", "$sort", "$sort_by", "$take", "$take_while", "$to_a", "$zip"]);
+    });
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/enumerator"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$include', '$allocate', '$new', '$to_proc', '$coerce_to', '$nil?', '$empty?', '$+', '$class', '$__send__', '$===', '$call', '$enum_for', '$destructure', '$inspect', '$[]', '$raise', '$yield', '$each', '$enumerator_size', '$respond_to?', '$try_convert', '$<', '$for']);
@@ -5441,18 +5764,18 @@ if (enum$ == null) enum$ = nil;args = $slice.call(arguments, 1);
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/array"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars, $range = Opal.range;
 
-  Opal.add_stubs(['$require', '$include', '$new', '$class', '$raise', '$===', '$to_a', '$respond_to?', '$to_ary', '$coerce_to', '$coerce_to?', '$==', '$to_str', '$clone', '$hash', '$<=>', '$inspect', '$empty?', '$enum_for', '$nil?', '$coerce_to!', '$initialize_clone', '$initialize_dup', '$replace', '$eql?', '$length', '$begin', '$end', '$exclude_end?', '$flatten', '$__id__', '$[]', '$to_s', '$join', '$delete_if', '$to_proc', '$each', '$reverse', '$!', '$map', '$rand', '$keep_if', '$shuffle!', '$>', '$<', '$sort', '$times', '$[]=', '$<<', '$at']);
+  Opal.add_stubs(['$require', '$include', '$new', '$class', '$raise', '$===', '$to_a', '$respond_to?', '$to_ary', '$coerce_to', '$coerce_to?', '$==', '$to_str', '$clone', '$hash', '$<=>', '$object_id', '$inspect', '$empty?', '$enum_for', '$nil?', '$coerce_to!', '$initialize_clone', '$initialize_dup', '$replace', '$eql?', '$length', '$begin', '$end', '$exclude_end?', '$flatten', '$__id__', '$[]', '$to_s', '$join', '$delete_if', '$to_proc', '$each', '$reverse', '$!', '$map', '$rand', '$keep_if', '$shuffle!', '$>', '$<', '$sort', '$times', '$[]=', '$<<', '$at']);
   self.$require("corelib/enumerable");
   return (function($base, $super) {
     function $Array(){};
     var self = $Array = $klass($base, $super, 'Array', $Array);
 
-    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5, TMP_6, TMP_7, TMP_8, TMP_9, TMP_10, TMP_11, TMP_12, TMP_13, TMP_14, TMP_15, TMP_17, TMP_18, TMP_19, TMP_20, TMP_21, TMP_24;
+    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5, TMP_6, TMP_7, TMP_8, TMP_9, TMP_10, TMP_11, TMP_12, TMP_13, TMP_14, TMP_15, TMP_16, TMP_17, TMP_19, TMP_20, TMP_21, TMP_22, TMP_23, TMP_26;
 
     def.length = nil;
     self.$include($scope.get('Enumerable'));
@@ -5694,38 +6017,54 @@ Opal.modules["corelib/array"] = function(Opal) {
     };
 
     def['$=='] = function(other) {
-      var $a, self = this;
+      var self = this;
 
-      if ((($a = self === other) !== nil && (!$a.$$is_boolean || $a == true))) {
-        return true};
-      if ((($a = $scope.get('Array')['$==='](other)) !== nil && (!$a.$$is_boolean || $a == true))) {
-        } else {
-        if ((($a = other['$respond_to?']("to_ary")) !== nil && (!$a.$$is_boolean || $a == true))) {
-          } else {
-          return false
-        };
-        return other['$=='](self);
-      };
-      other = other.$to_a();
-      if ((($a = self.length === other.length) !== nil && (!$a.$$is_boolean || $a == true))) {
-        } else {
-        return false
-      };
       
-      for (var i = 0, length = self.length; i < length; i++) {
-        var a = self[i],
-            b = other[i];
+      var recursed = {};
 
-        if (a.$$is_array && b.$$is_array && (a === self)) {
-          continue;
+      function _eqeq(array, other) {
+        var i, length, a, b;
+
+        if (!other.$$is_array) {
+          if ($scope.get('Opal')['$respond_to?'](other, "to_ary")) {
+            return (other)['$=='](array);
+          } else {
+            return false;
+          }
         }
 
-        if (!(a)['$=='](b)) {
+        other = other.$to_a();
+
+        if (array.length !== other.length) {
           return false;
         }
+
+        recursed[(array).$object_id()] = true;
+
+        for (i = 0, length = array.length; i < length; i++) {
+          a = array[i];
+          b = other[i];
+          if (a.$$is_array) {
+            if (b.$$is_array && b.length !== a.length) {
+              return false;
+            }
+            if (!recursed.hasOwnProperty((a).$object_id())) {
+              if (!_eqeq(a, b)) {
+                return false;
+              }
+            }
+          } else {
+            if (!(a)['$=='](b)) {
+              return false;
+            }
+          }
+        }
+
+        return true;
       }
-    
-      return true;
+
+      return _eqeq(self, other);
+    ;
     };
 
     def['$[]'] = function(index, length) {
@@ -6102,9 +6441,10 @@ Opal.modules["corelib/array"] = function(Opal) {
       return self;
     };
 
-    def.$delete = function(object) {
-      var self = this;
+    def.$delete = TMP_5 = function(object) {
+      var $a, self = this, $iter = TMP_5.$$p, $yield = $iter || nil;
 
+      TMP_5.$$p = null;
       
       var original = self.length;
 
@@ -6117,8 +6457,14 @@ Opal.modules["corelib/array"] = function(Opal) {
         }
       }
 
-      return self.length === original ? nil : object;
-    
+      if (self.length === original) {
+        if (($yield !== nil)) {
+          return ((($a = Opal.yieldX($yield, [])) === $breaker) ? $breaker.$v : $a);
+        }
+        return nil;
+      }
+      return object;
+    ;
     };
 
     def.$delete_at = function(index) {
@@ -6143,10 +6489,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     ;
     };
 
-    def.$delete_if = TMP_5 = function() {
-      var self = this, $iter = TMP_5.$$p, block = $iter || nil;
+    def.$delete_if = TMP_6 = function() {
+      var self = this, $iter = TMP_6.$$p, block = $iter || nil;
 
-      TMP_5.$$p = null;
+      TMP_6.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("delete_if")
@@ -6182,10 +6528,10 @@ Opal.modules["corelib/array"] = function(Opal) {
 
     Opal.defn(self, '$dup', def.$clone);
 
-    def.$each = TMP_6 = function() {
-      var self = this, $iter = TMP_6.$$p, block = $iter || nil;
+    def.$each = TMP_7 = function() {
+      var self = this, $iter = TMP_7.$$p, block = $iter || nil;
 
-      TMP_6.$$p = null;
+      TMP_7.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("each")
@@ -6202,10 +6548,10 @@ Opal.modules["corelib/array"] = function(Opal) {
       return self;
     };
 
-    def.$each_index = TMP_7 = function() {
-      var self = this, $iter = TMP_7.$$p, block = $iter || nil;
+    def.$each_index = TMP_8 = function() {
+      var self = this, $iter = TMP_8.$$p, block = $iter || nil;
 
-      TMP_7.$$p = null;
+      TMP_8.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("each_index")
@@ -6229,40 +6575,56 @@ Opal.modules["corelib/array"] = function(Opal) {
     };
 
     def['$eql?'] = function(other) {
-      var $a, self = this;
+      var self = this;
 
-      if ((($a = self === other) !== nil && (!$a.$$is_boolean || $a == true))) {
-        return true};
-      if ((($a = $scope.get('Array')['$==='](other)) !== nil && (!$a.$$is_boolean || $a == true))) {
-        } else {
-        return false
-      };
-      other = other.$to_a();
-      if ((($a = self.length === other.length) !== nil && (!$a.$$is_boolean || $a == true))) {
-        } else {
-        return false
-      };
       
-      for (var i = 0, length = self.length; i < length; i++) {
-        var a = self[i],
-            b = other[i];
+      var recursed = {};
 
-        if (a.$$is_array && b.$$is_array && (a === self)) {
-          continue;
-        }
+      function _eql(array, other) {
+        var i, length, a, b;
 
-        if (!(a)['$eql?'](b)) {
+        if (!other.$$is_array) {
           return false;
         }
+
+        other = other.$to_a();
+
+        if (array.length !== other.length) {
+          return false;
+        }
+
+        recursed[(array).$object_id()] = true;
+
+        for (i = 0, length = array.length; i < length; i++) {
+          a = array[i];
+          b = other[i];
+          if (a.$$is_array) {
+            if (b.$$is_array && b.length !== a.length) {
+              return false;
+            }
+            if (!recursed.hasOwnProperty((a).$object_id())) {
+              if (!_eql(a, b)) {
+                return false;
+              }
+            }
+          } else {
+            if (!(a)['$eql?'](b)) {
+              return false;
+            }
+          }
+        }
+
+        return true;
       }
+
+      return _eql(self, other);
     
-      return true;
     };
 
-    def.$fetch = TMP_8 = function(index, defaults) {
-      var self = this, $iter = TMP_8.$$p, block = $iter || nil;
+    def.$fetch = TMP_9 = function(index, defaults) {
+      var self = this, $iter = TMP_9.$$p, block = $iter || nil;
 
-      TMP_8.$$p = null;
+      TMP_9.$$p = null;
       
       var original = index;
 
@@ -6293,11 +6655,11 @@ Opal.modules["corelib/array"] = function(Opal) {
     ;
     };
 
-    def.$fill = TMP_9 = function(args) {
-      var $a, self = this, $iter = TMP_9.$$p, block = $iter || nil, one = nil, two = nil, obj = nil, left = nil, right = nil;
+    def.$fill = TMP_10 = function(args) {
+      var $a, self = this, $iter = TMP_10.$$p, block = $iter || nil, one = nil, two = nil, obj = nil, left = nil, right = nil;
 
       args = $slice.call(arguments, 0);
-      TMP_9.$$p = null;
+      TMP_10.$$p = null;
       if (block !== false && block !== nil) {
         if ((($a = args.length > 2) !== nil && (!$a.$$is_boolean || $a == true))) {
           self.$raise($scope.get('ArgumentError'), "wrong number of arguments (" + (args.$length()) + " for 0..2)")};
@@ -6396,30 +6758,56 @@ Opal.modules["corelib/array"] = function(Opal) {
       var self = this;
 
       
-      var result = [];
+      var object_id = (self).$object_id();
 
-      for (var i = 0, length = self.length; i < length; i++) {
-        var item = self[i];
+      function _flatten(array, level) {
+        var array = (array).$to_a(),
+            result = [],
+            i, length,
+            item, ary;
 
-        if ($scope.get('Opal')['$respond_to?'](item, "to_ary")) {
-          item = (item).$to_ary();
+        for (i = 0, length = array.length; i < length; i++) {
+          item = array[i];
 
-          if (level == null) {
-            result.push.apply(result, (item).$flatten().$to_a());
-          }
-          else if (level == 0) {
+          if (!$scope.get('Opal')['$respond_to?'](item, "to_ary")) {
             result.push(item);
+            continue;
           }
-          else {
-            result.push.apply(result, (item).$flatten(level - 1).$to_a());
+
+          ary = (item).$to_ary();
+
+          if (ary === nil) {
+            result.push(item);
+            continue;
+          }
+
+          if (!ary.$$is_array) {
+            self.$raise($scope.get('TypeError'));
+          }
+
+          if (object_id === (ary).$object_id()) {
+            self.$raise($scope.get('ArgumentError'));
+          }
+
+          switch (level) {
+          case undefined:
+            result.push.apply(result, _flatten(ary));
+            break;
+          case 0:
+            result.push(ary);
+            break;
+          default:
+            result.push.apply(result, _flatten(ary, level - 1));
           }
         }
-        else {
-          result.push(item);
-        }
+        return result;
       }
 
-      return result;
+      if (level !== undefined) {
+        level = $scope.get('Opal').$coerce_to(level, $scope.get('Integer'), "to_int");
+      }
+
+      return _flatten(self, level);
     ;
     };
 
@@ -6450,12 +6838,15 @@ Opal.modules["corelib/array"] = function(Opal) {
       var self = this;
 
       
-      var hash = ['A'], item, item_hash;
+      var hash = ['A'],
+          item;
       for (var i = 0, length = self.length; i < length; i++) {
         item = self[i];
-        // Guard against recursion
-        item_hash = self === item ? 'self' : item.$hash();
-        hash.push(item_hash);
+        if (item.$$is_array && (self)['$eql?'](item)) {
+          hash.push('self');
+        } else {
+          hash.push(item.$hash());
+        }
       }
       return hash.join(',');
     
@@ -6475,10 +6866,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     
     };
 
-    def.$index = TMP_10 = function(object) {
-      var self = this, $iter = TMP_10.$$p, block = $iter || nil;
+    def.$index = TMP_11 = function(object) {
+      var self = this, $iter = TMP_11.$$p, block = $iter || nil;
 
-      TMP_10.$$p = null;
+      TMP_11.$$p = null;
       
       if (object != null) {
         for (var i = 0, length = self.length; i < length; i++) {
@@ -6568,6 +6959,7 @@ Opal.modules["corelib/array"] = function(Opal) {
         sep = $gvars[","]};
       
       var result = [];
+      var object_id = (self).$object_id();
 
       for (var i = 0, length = self.length; i < length; i++) {
         var item = self[i];
@@ -6584,6 +6976,10 @@ Opal.modules["corelib/array"] = function(Opal) {
 
         if ($scope.get('Opal')['$respond_to?'](item, "to_ary")) {
           var tmp = (item).$to_ary();
+
+          if (object_id === (tmp).$object_id()) {
+            self.$raise($scope.get('ArgumentError'));
+          }
 
           if (tmp !== nil) {
             result.push((tmp).$join(sep));
@@ -6614,10 +7010,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     ;
     };
 
-    def.$keep_if = TMP_11 = function() {
-      var self = this, $iter = TMP_11.$$p, block = $iter || nil;
+    def.$keep_if = TMP_12 = function() {
+      var self = this, $iter = TMP_12.$$p, block = $iter || nil;
 
-      TMP_11.$$p = null;
+      TMP_12.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("keep_if")
@@ -6690,6 +7086,60 @@ Opal.modules["corelib/array"] = function(Opal) {
       };
     };
 
+    def.$product = TMP_13 = function(args) {
+      var $a, self = this, $iter = TMP_13.$$p, block = $iter || nil;
+
+      args = $slice.call(arguments, 0);
+      TMP_13.$$p = null;
+      
+      var result = (block !== nil) ? null : [],
+          n = args.length + 1,
+          counters = new Array(n),
+          lengths  = new Array(n),
+          arrays   = new Array(n),
+          i, m, subarray, len, resultlen = 1;
+
+      arrays[0] = self;
+      for (i = 1; i < n; i++) {
+        arrays[i] = $scope.get('Opal').$coerce_to(args[i - 1], $scope.get('Array'), "to_ary");
+      }
+
+      for (i = 0; i < n; i++) {
+        len = arrays[i].length;
+        if (len === 0) {
+          return result || self;
+        }
+        resultlen *= len;
+        if (resultlen > 2147483647) {
+          self.$raise($scope.get('RangeError'), "too big to product")
+        }
+        lengths[i] = len;
+        counters[i] = 0;
+      }
+
+      outer_loop: for (;;) {
+        subarray = [];
+        for (i = 0; i < n; i++) {
+          subarray.push(arrays[i][counters[i]]);
+        }
+        if (result) {
+          result.push(subarray);
+        } else {
+          ((($a = Opal.yield1(block, subarray)) === $breaker) ? $breaker.$v : $a)
+        }
+        m = n - 1;
+        counters[m]++;
+        while (counters[m] === lengths[m]) {
+          counters[m] = 0;
+          if (--m < 0) break outer_loop;
+          counters[m]++;
+        }
+      }
+
+      return result || self;
+    ;
+    };
+
     def.$push = function(objects) {
       var self = this;
 
@@ -6720,10 +7170,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     
     };
 
-    def.$reject = TMP_12 = function() {
-      var self = this, $iter = TMP_12.$$p, block = $iter || nil;
+    def.$reject = TMP_14 = function() {
+      var self = this, $iter = TMP_14.$$p, block = $iter || nil;
 
-      TMP_12.$$p = null;
+      TMP_14.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("reject")
@@ -6744,10 +7194,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     
     };
 
-    def['$reject!'] = TMP_13 = function() {
-      var $a, $b, self = this, $iter = TMP_13.$$p, block = $iter || nil, original = nil;
+    def['$reject!'] = TMP_15 = function() {
+      var $a, $b, self = this, $iter = TMP_15.$$p, block = $iter || nil, original = nil;
 
-      TMP_13.$$p = null;
+      TMP_15.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("reject!")
@@ -6788,10 +7238,10 @@ Opal.modules["corelib/array"] = function(Opal) {
       return self.reverse();
     };
 
-    def.$reverse_each = TMP_14 = function() {
-      var $a, $b, self = this, $iter = TMP_14.$$p, block = $iter || nil;
+    def.$reverse_each = TMP_16 = function() {
+      var $a, $b, self = this, $iter = TMP_16.$$p, block = $iter || nil;
 
-      TMP_14.$$p = null;
+      TMP_16.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("reverse_each")
@@ -6800,10 +7250,10 @@ Opal.modules["corelib/array"] = function(Opal) {
       return self;
     };
 
-    def.$rindex = TMP_15 = function(object) {
-      var self = this, $iter = TMP_15.$$p, block = $iter || nil;
+    def.$rindex = TMP_17 = function(object) {
+      var self = this, $iter = TMP_17.$$p, block = $iter || nil;
 
-      TMP_15.$$p = null;
+      TMP_17.$$p = null;
       
       if (object != null) {
         for (var i = self.length - 1; i >= 0; i--) {
@@ -6832,7 +7282,7 @@ Opal.modules["corelib/array"] = function(Opal) {
     };
 
     def.$sample = function(n) {
-      var $a, $b, TMP_16, self = this;
+      var $a, $b, TMP_18, self = this;
 
       if (n == null) {
         n = nil
@@ -6842,18 +7292,18 @@ Opal.modules["corelib/array"] = function(Opal) {
       if ((($a = (($b = n !== false && n !== nil) ? self['$empty?']() : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
         return []};
       if (n !== false && n !== nil) {
-        return ($a = ($b = ($range(1, n, false))).$map, $a.$$p = (TMP_16 = function(){var self = TMP_16.$$s || this;
+        return ($a = ($b = ($range(1, n, false))).$map, $a.$$p = (TMP_18 = function(){var self = TMP_18.$$s || this;
 
-        return self['$[]'](self.$rand(self.$length()))}, TMP_16.$$s = self, TMP_16), $a).call($b)
+        return self['$[]'](self.$rand(self.$length()))}, TMP_18.$$s = self, TMP_18), $a).call($b)
         } else {
         return self['$[]'](self.$rand(self.$length()))
       };
     };
 
-    def.$select = TMP_17 = function() {
-      var self = this, $iter = TMP_17.$$p, block = $iter || nil;
+    def.$select = TMP_19 = function() {
+      var self = this, $iter = TMP_19.$$p, block = $iter || nil;
 
-      TMP_17.$$p = null;
+      TMP_19.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("select")
@@ -6877,10 +7327,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     
     };
 
-    def['$select!'] = TMP_18 = function() {
-      var $a, $b, self = this, $iter = TMP_18.$$p, block = $iter || nil;
+    def['$select!'] = TMP_20 = function() {
+      var $a, $b, self = this, $iter = TMP_20.$$p, block = $iter || nil;
 
-      TMP_18.$$p = null;
+      TMP_20.$$p = null;
       if ((block !== nil)) {
         } else {
         return self.$enum_for("select!")
@@ -6952,10 +7402,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     
     };
 
-    def.$sort = TMP_19 = function() {
-      var $a, self = this, $iter = TMP_19.$$p, block = $iter || nil;
+    def.$sort = TMP_21 = function() {
+      var $a, self = this, $iter = TMP_21.$$p, block = $iter || nil;
 
-      TMP_19.$$p = null;
+      TMP_21.$$p = null;
       if ((($a = self.length > 1) !== nil && (!$a.$$is_boolean || $a == true))) {
         } else {
         return self
@@ -6992,10 +7442,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     ;
     };
 
-    def['$sort!'] = TMP_20 = function() {
-      var $a, $b, self = this, $iter = TMP_20.$$p, block = $iter || nil;
+    def['$sort!'] = TMP_22 = function() {
+      var $a, $b, self = this, $iter = TMP_22.$$p, block = $iter || nil;
 
-      TMP_20.$$p = null;
+      TMP_22.$$p = null;
       
       var result;
 
@@ -7027,10 +7477,10 @@ Opal.modules["corelib/array"] = function(Opal) {
     ;
     };
 
-    def.$take_while = TMP_21 = function() {
-      var self = this, $iter = TMP_21.$$p, block = $iter || nil;
+    def.$take_while = TMP_23 = function() {
+      var self = this, $iter = TMP_23.$$p, block = $iter || nil;
 
-      TMP_21.$$p = null;
+      TMP_23.$$p = null;
       
       var result = [];
 
@@ -7063,13 +7513,13 @@ Opal.modules["corelib/array"] = function(Opal) {
     Opal.defn(self, '$to_s', def.$inspect);
 
     def.$transpose = function() {
-      var $a, $b, TMP_22, self = this, result = nil, max = nil;
+      var $a, $b, TMP_24, self = this, result = nil, max = nil;
 
       if ((($a = self['$empty?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
         return []};
       result = [];
       max = nil;
-      ($a = ($b = self).$each, $a.$$p = (TMP_22 = function(row){var self = TMP_22.$$s || this, $a, $b, TMP_23;
+      ($a = ($b = self).$each, $a.$$p = (TMP_24 = function(row){var self = TMP_24.$$s || this, $a, $b, TMP_25;
 if (row == null) row = nil;
       if ((($a = $scope.get('Array')['$==='](row)) !== nil && (!$a.$$is_boolean || $a == true))) {
           row = row.$to_a()
@@ -7079,10 +7529,10 @@ if (row == null) row = nil;
         ((($a = max) !== false && $a !== nil) ? $a : max = row.length);
         if ((($a = (row.length)['$=='](max)['$!']()) !== nil && (!$a.$$is_boolean || $a == true))) {
           self.$raise($scope.get('IndexError'), "element size differs (" + (row.length) + " should be " + (max))};
-        return ($a = ($b = (row.length)).$times, $a.$$p = (TMP_23 = function(i){var self = TMP_23.$$s || this, $a, $b, $c, entry = nil;
+        return ($a = ($b = (row.length)).$times, $a.$$p = (TMP_25 = function(i){var self = TMP_25.$$s || this, $a, $b, $c, entry = nil;
 if (i == null) i = nil;
         entry = (($a = i, $b = result, ((($c = $b['$[]']($a)) !== false && $c !== nil) ? $c : $b['$[]=']($a, []))));
-          return entry['$<<'](row.$at(i));}, TMP_23.$$s = self, TMP_23), $a).call($b);}, TMP_22.$$s = self, TMP_22), $a).call($b);
+          return entry['$<<'](row.$at(i));}, TMP_25.$$s = self, TMP_25), $a).call($b);}, TMP_24.$$s = self, TMP_24), $a).call($b);
       return result;
     };
 
@@ -7146,11 +7596,11 @@ if (i == null) i = nil;
       return self;
     };
 
-    return (def.$zip = TMP_24 = function(others) {
-      var self = this, $iter = TMP_24.$$p, block = $iter || nil;
+    return (def.$zip = TMP_26 = function(others) {
+      var self = this, $iter = TMP_26.$$p, block = $iter || nil;
 
       others = $slice.call(arguments, 0);
-      TMP_24.$$p = null;
+      TMP_26.$$p = null;
       
       var result = [], size = self.length, part, o;
 
@@ -7184,12 +7634,12 @@ if (i == null) i = nil;
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/array/inheritance"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
-  Opal.add_stubs(['$new', '$allocate', '$initialize', '$to_proc', '$__send__', '$clone', '$respond_to?', '$==', '$eql?', '$inspect', '$*', '$class', '$slice', '$uniq', '$flatten']);
+  Opal.add_stubs(['$new', '$allocate', '$initialize', '$to_proc', '$__send__', '$clone', '$respond_to?', '$==', '$eql?', '$inspect', '$hash', '$*', '$class', '$slice', '$uniq', '$flatten']);
   (function($base, $super) {
     function $Array(){};
     var self = $Array = $klass($base, $super, 'Array', $Array);
@@ -7219,6 +7669,8 @@ Opal.modules["corelib/array/inheritance"] = function(Opal) {
     var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5;
 
     def.literal = nil;
+    def.$$is_array = true;
+
     Opal.defs(self, '$allocate', TMP_1 = function(array) {
       var self = this, $iter = TMP_1.$$p, $yield = $iter || nil, obj = nil;
 
@@ -7312,6 +7764,12 @@ Opal.modules["corelib/array/inheritance"] = function(Opal) {
       return self.literal.$inspect();
     };
 
+    def.$hash = function() {
+      var self = this;
+
+      return self.literal.$hash();
+    };
+
     def['$*'] = function(other) {
       var self = this;
 
@@ -7358,12 +7816,12 @@ Opal.modules["corelib/array/inheritance"] = function(Opal) {
   })($scope.get('Array'), null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/hash"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
-  Opal.add_stubs(['$require', '$include', '$!', '$==', '$call', '$coerce_to!', '$lambda?', '$abs', '$arity', '$raise', '$enum_for', '$flatten', '$eql?', '$object_id', '$===', '$clone', '$merge!', '$to_proc', '$alias_method']);
+  Opal.add_stubs(['$require', '$include', '$!', '$==', '$call', '$coerce_to!', '$lambda?', '$abs', '$arity', '$raise', '$enum_for', '$flatten', '$eql?', '$===', '$clone', '$merge!', '$to_proc', '$alias_method']);
   self.$require("corelib/enumerable");
   return (function($base, $super) {
     function $Hash(){};
@@ -7373,6 +7831,8 @@ Opal.modules["corelib/hash"] = function(Opal) {
 
     def.proc = def.none = nil;
     self.$include($scope.get('Enumerable'));
+
+    def.$$is_hash = true;
 
     Opal.defs(self, '$[]', function(objs) {
       var self = this;
@@ -7934,6 +8394,47 @@ Opal.modules["corelib/hash"] = function(Opal) {
     ;
     };
 
+    var hash_ids = null;
+
+    def.$hash = function() {
+      var self = this;
+
+      
+      var top = (hash_ids === null);
+      try {
+        var key, value,
+            hash = ['Hash'],
+            keys = self.keys,
+            id = self.$object_id(),
+            counter = 0;
+
+        if (top) {
+          hash_ids = {}
+        }
+
+        if (hash_ids.hasOwnProperty(id)) {
+          return 'self';
+        }
+
+        hash_ids[id] = true;
+
+        for (var i = 0, length = keys.length; i < length; i++) {
+          key   = keys[i];
+          value = key.$$is_string ? self.smap[key] : self.map[key.$hash()];
+          key   = key.$hash();
+          value = (typeof(value) === 'undefined') ? '' : value.$hash();
+          hash.push([key,value]);
+        }
+
+        return hash.sort().join();
+      } finally {
+        if (top) {
+          hash_ids = null;
+        }
+      }
+    
+    };
+
     Opal.defn(self, '$include?', def['$has_key?']);
 
     def.$index = function(object) {
@@ -8010,11 +8511,12 @@ Opal.modules["corelib/hash"] = function(Opal) {
       
       var top = (inspect_ids === null);
       try {
-        var inspect = [],
+
+        var key, value,
+            inspect = [],
             keys = self.keys
-            _map = self.map,
-            smap = self.smap,
-            id = self.$object_id();
+            id = self.$object_id(),
+            counter = 0;
 
         if (top) {
           inspect_ids = {}
@@ -8027,12 +8529,11 @@ Opal.modules["corelib/hash"] = function(Opal) {
         inspect_ids[id] = true;
 
         for (var i = 0, length = keys.length; i < length; i++) {
-          var key = keys[i],
-              value = key.$$is_string ? smap[key] : _map[key.$hash()];
-
-          value = value;
-          key = key;
-          inspect.push(key.$inspect() + '=>' + value.$inspect());
+          key   = keys[i];
+          value = key.$$is_string ? self.smap[key] : self.map[key.$hash()];
+          key   = key.$inspect();
+          value = value.$inspect();
+          inspect.push(key + '=>' + value);
         }
 
         return '{' + inspect.join(', ') + '}';
@@ -8564,12 +9065,12 @@ Opal.modules["corelib/hash"] = function(Opal) {
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/string"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars;
 
-  Opal.add_stubs(['$require', '$include', '$to_str', '$===', '$format', '$coerce_to', '$to_s', '$respond_to?', '$<=>', '$raise', '$=~', '$empty?', '$ljust', '$ceil', '$/', '$+', '$rjust', '$floor', '$to_a', '$each_char', '$to_proc', '$coerce_to!', '$initialize_clone', '$initialize_dup', '$enum_for', '$split', '$chomp', '$escape', '$class', '$to_i', '$!', '$each_line', '$match', '$new', '$try_convert', '$chars', '$&', '$join', '$is_a?', '$[]', '$str', '$value', '$proc', '$shift', '$send']);
+  Opal.add_stubs(['$require', '$include', '$to_str', '$===', '$format', '$coerce_to', '$to_s', '$respond_to?', '$<=>', '$raise', '$==', '$=~', '$new', '$empty?', '$ljust', '$ceil', '$/', '$+', '$rjust', '$floor', '$to_a', '$each_char', '$to_proc', '$coerce_to!', '$initialize_clone', '$initialize_dup', '$enum_for', '$split', '$chomp', '$escape', '$class', '$to_i', '$!', '$each_line', '$match', '$captures', '$try_convert', '$is_a?', '$[]', '$str', '$value', '$proc', '$shift', '$__send__']);
   self.$require("corelib/comparable");
   (function($base, $super) {
     function $String(){};
@@ -8581,6 +9082,14 @@ Opal.modules["corelib/string"] = function(Opal) {
     self.$include($scope.get('Comparable'));
 
     def.$$is_string = true;
+
+    def.$__id__ = function() {
+      var self = this;
+
+      return self.toString();
+    };
+
+    Opal.defn(self, '$object_id', def.$__id__);
 
     Opal.defs(self, '$try_convert', function(what) {
       var self = this;
@@ -8666,17 +9175,21 @@ Opal.modules["corelib/string"] = function(Opal) {
     def['$<<'] = function(other) {
       var self = this;
 
-      return self.$raise($scope.get('NotImplementedError'), "Mutable String methods are not supported in Opal.");
+      return self.$raise($scope.get('NotImplementedError'), "#<< not supported. Mutable String methods are not supported in Opal.");
     };
 
     def['$=='] = function(other) {
-      var $a, self = this;
+      var self = this;
 
-      if ((($a = $scope.get('String')['$==='](other)) !== nil && (!$a.$$is_boolean || $a == true))) {
-        } else {
-        return false
-      };
-      return self.$to_s() == other.$to_s();
+      
+      if (other.$$is_string) {
+        return self.toString() === other.toString();
+      }
+      if ($scope.get('Opal')['$respond_to?'](other, "to_str")) {
+        return other['$=='](self);
+      }
+      return false;
+    ;
     };
 
     Opal.defn(self, '$eql?', def['$==']);
@@ -8703,8 +9216,12 @@ Opal.modules["corelib/string"] = function(Opal) {
 
       if (index.$$is_range) {
         var exclude = index.exclude,
-            length  = index.end,
-            index   = index.begin;
+            length  = $scope.get('Opal').$coerce_to(index.end, $scope.get('Integer'), "to_int"),
+            index   = $scope.get('Opal').$coerce_to(index.begin, $scope.get('Integer'), "to_int");
+
+        if (Math.abs(index) > size) {
+          return nil;
+        }
 
         if (index < 0) {
           index += size;
@@ -8718,10 +9235,6 @@ Opal.modules["corelib/string"] = function(Opal) {
           length += 1;
         }
 
-        if (index > size) {
-          return nil;
-        }
-
         length = length - index;
 
         if (length < 0) {
@@ -8731,24 +9244,68 @@ Opal.modules["corelib/string"] = function(Opal) {
         return self.substr(index, length);
       }
 
-      if (index < 0) {
-        index += self.length;
+
+      if (index.$$is_string) {
+        if (length != null) {
+          self.$raise($scope.get('TypeError'))
+        }
+        return self.indexOf(index) !== -1 ? index : nil;
       }
 
-      if (length == null) {
-        if (index >= self.length || index < 0) {
+
+      if (index.$$is_regexp) {
+        var match = self.match(index);
+
+        if (match === null) {
+          $gvars["~"] = nil
           return nil;
         }
 
+        $gvars["~"] = $scope.get('MatchData').$new(index, match)
+
+        if (length == null) {
+          return match[0];
+        }
+
+        length = $scope.get('Opal').$coerce_to(length, $scope.get('Integer'), "to_int");
+
+        if (length < 0 && -length < match.length) {
+          return match[length += match.length];
+        }
+
+        if (length >= 0 && length < match.length) {
+          return match[length];
+        }
+
+        return nil;
+      }
+
+
+      index = $scope.get('Opal').$coerce_to(index, $scope.get('Integer'), "to_int");
+
+      if (index < 0) {
+        index += size;
+      }
+
+      if (length == null) {
+        if (index >= size || index < 0) {
+          return nil;
+        }
         return self.substr(index, 1);
       }
 
-      if (index > self.length || index < 0) {
+      length = $scope.get('Opal').$coerce_to(length, $scope.get('Integer'), "to_int");
+
+      if (length < 0) {
+        return nil;
+      }
+
+      if (index > size || index < 0) {
         return nil;
       }
 
       return self.substr(index, length);
-    
+    ;
     };
 
     def.$capitalize = function() {
@@ -9142,7 +9699,7 @@ Opal.modules["corelib/string"] = function(Opal) {
 
       TMP_5.$$p = null;
       if ((($a = ((($b = $scope.get('String')['$==='](pattern)) !== false && $b !== nil) ? $b : pattern['$respond_to?']("to_str"))) !== nil && (!$a.$$is_boolean || $a == true))) {
-        pattern = (new RegExp("" + $scope.get('Regexp').$escape(pattern.$to_str())))};
+        pattern = $scope.get('Regexp').$new(pattern.$to_str())};
       if ((($a = $scope.get('Regexp')['$==='](pattern)) !== nil && (!$a.$$is_boolean || $a == true))) {
         } else {
         self.$raise($scope.get('TypeError'), "wrong argument type " + (pattern.$class()) + " (expected Regexp)")
@@ -9154,14 +9711,71 @@ Opal.modules["corelib/string"] = function(Opal) {
       var self = this;
 
       
-      if (self.length === 0) {
-        return "";
+      var i = self.length;
+      if (i === 0) {
+        return '';
       }
-
-      var initial = self.substr(0, self.length - 1);
-      var last    = String.fromCharCode(self.charCodeAt(self.length - 1) + 1);
-
-      return initial + last;
+      var result = self;
+      var first_alphanum_char_index = self.search(/[a-zA-Z0-9]/);
+      var carry = false;
+      var code;
+      while (i--) {
+        code = self.charCodeAt(i);
+        if ((code >= 48 && code <= 57) ||
+          (code >= 65 && code <= 90) ||
+          (code >= 97 && code <= 122)) {
+          switch (code) {
+          case 57:
+            carry = true;
+            code = 48;
+            break;
+          case 90:
+            carry = true;
+            code = 65;
+            break;
+          case 122:
+            carry = true;
+            code = 97;
+            break;
+          default:
+            carry = false;
+            code += 1;
+          }
+        } else {
+          if (first_alphanum_char_index === -1) {
+            if (code === 255) {
+              carry = true;
+              code = 0;
+            } else {
+              carry = false;
+              code += 1;
+            }
+          } else {
+            carry = true;
+          }
+        }
+        result = result.slice(0, i) + String.fromCharCode(code) + result.slice(i + 1);
+        if (carry && (i === 0 || i === first_alphanum_char_index)) {
+          switch (code) {
+          case 65:
+            break;
+          case 97:
+            break;
+          default:
+            code += 1;
+          }
+          if (i === 0) {
+            result = String.fromCharCode(code) + result;
+          } else {
+            result = result.slice(0, i) + String.fromCharCode(code) + result.slice(i);
+          }
+          carry = false;
+        }
+        if (!carry) {
+          break;
+        }
+      }
+      return result;
     
     };
 
@@ -9263,7 +9877,7 @@ Opal.modules["corelib/string"] = function(Opal) {
     def.$rstrip = function() {
       var self = this;
 
-      return self.replace(/\s*$/, '');
+      return self.replace(/[\s\u0000]*$/, '');
     };
 
     def.$scan = TMP_6 = function(pattern) {
@@ -9286,10 +9900,9 @@ Opal.modules["corelib/string"] = function(Opal) {
       while ((match = pattern.exec(self)) != null) {
         var match_data = $scope.get('MatchData').$new(pattern, match);
         if (block === nil) {
-          match.length == 1 ? result.push(match[0]) : result.push(match.slice(1));
-        }
-        else {
-          match.length == 1 ? block(match[0]) : block.apply(self, match.slice(1));
+          match.length == 1 ? result.push(match[0]) : result.push((match_data).$captures());
+        } else {
+          match.length == 1 ? block(match[0]) : block.apply(self, (match_data).$captures());
         }
       }
 
@@ -9439,23 +10052,91 @@ Opal.modules["corelib/string"] = function(Opal) {
 
       sets = $slice.call(arguments, 0);
       
+      function explode_sequences_in_character_set(set) {
+        var result = '',
+            i, len = set.length,
+            curr_char,
+            skip_next_dash,
+            char_code_from,
+            char_code_upto,
+            char_code;
+        for (i = 0; i < len; i++) {
+          curr_char = set.charAt(i);
+          if (curr_char === '-' && i > 0 && i < (len - 1) && !skip_next_dash) {
+            char_code_from = set.charCodeAt(i - 1);
+            char_code_upto = set.charCodeAt(i + 1);
+            if (char_code_from > char_code_upto) {
+              self.$raise($scope.get('ArgumentError'), "invalid range \"" + (char_code_from) + "-" + (char_code_upto) + "\" in string transliteration")
+            }
+            for (char_code = char_code_from + 1; char_code < char_code_upto + 1; char_code++) {
+              result += String.fromCharCode(char_code);
+            }
+            skip_next_dash = true;
+            i++;
+          } else {
+            skip_next_dash = false;
+            result += curr_char;
+          }
+        }
+        return result;
+      }
+
+      function intersection(setA, setB) {
+        if (setA.length === 0) {
+          return setB;
+        }
+        var result = '',
+            i, len = setA.length,
+            chr;
+        for (i = 0; i < len; i++) {
+          chr = setA.charAt(i);
+          if (setB.indexOf(chr) !== -1) {
+            result += chr;
+          }
+        }
+        return result;
+      }
+
       if (sets.length === 0) {
         return self.replace(/(.)\1+/g, '$1');
       }
+
+      var i, len, set, neg, chr, tmp,
+          pos_intersection = '',
+          neg_intersection = '';
+
+      for (i = 0, len = sets.length; i < len; i++) {
+        set = $scope.get('Opal').$coerce_to(sets[i], $scope.get('String'), "to_str");
+        neg = (set.charAt(0) === '^');
+        set = explode_sequences_in_character_set(neg ? set.slice(1) : set);
+        if (neg) {
+          neg_intersection = intersection(neg_intersection, set);
+        } else {
+          pos_intersection = intersection(pos_intersection, set);
+        }
+      }
+
+      if (pos_intersection.length > 0 && neg_intersection.length > 0) {
+        tmp = '';
+        for (i = 0, len = pos_intersection.length; i < len; i++) {
+          chr = pos_intersection.charAt(i);
+          if (neg_intersection.indexOf(chr) === -1) {
+            tmp += chr;
+          }
+        }
+        pos_intersection = tmp;
+      }
+
+      if (pos_intersection.length > 0) {
+        return self.replace(new RegExp('([' + $scope.get('Regexp').$escape(pos_intersection) + '])\\1+', 'g'), '$1');
+      }
+
+      if (neg_intersection.length > 0) {
+        return self.replace(new RegExp('([^' + $scope.get('Regexp').$escape(neg_intersection) + '])\\1+', 'g'), '$1');
+      }
+
+      return self;
     
-      
-      var set = $scope.get('Opal').$coerce_to(sets[0], $scope.get('String'), "to_str").$chars();
-
-      for (var i = 1, length = sets.length; i < length; i++) {
-        set = (set)['$&']($scope.get('Opal').$coerce_to(sets[i], $scope.get('String'), "to_str").$chars());
-      }
-
-      if (set.length === 0) {
-        return self;
-      }
-
-      return self.replace(new RegExp("([" + $scope.get('Regexp').$escape((set).$join()) + "])\\1+", "g"), "$1");
-    ;
     };
 
     Opal.defn(self, '$squeeze!', def['$<<']);
@@ -9480,7 +10161,7 @@ Opal.modules["corelib/string"] = function(Opal) {
     def.$strip = function() {
       var self = this;
 
-      return self.replace(/^\s*/, '').replace(/\s*$/, '');
+      return self.replace(/^\s*/, '').replace(/[\s\u0000]*$/, '');
     };
 
     Opal.defn(self, '$strip!', def['$<<']);
@@ -9625,7 +10306,11 @@ Opal.modules["corelib/string"] = function(Opal) {
         base = 10
       }
       
-      var result = parseInt(self, base);
+      if (self.charAt(0) === '_') {
+        return 0;
+      }
+
+      var result = parseInt(self.replace(/_(?!_)/g, ''), base);
 
       if (isNaN(result)) {
         return 0;
@@ -9645,7 +10330,7 @@ args = $slice.call(arguments, 0);
       if ((($a = args['$empty?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
           self.$raise($scope.get('ArgumentError'), "no receiver given")};
         obj = args.$shift();
-        return ($a = ($b = obj).$send, $a.$$p = block.$to_proc(), $a).apply($b, [sym].concat(args));}, TMP_8.$$s = self, TMP_8), $a).call($b);
+        return ($a = ($b = obj).$__send__, $a.$$p = block.$to_proc(), $a).apply($b, [sym].concat(args));}, TMP_8.$$s = self, TMP_8), $a).call($b);
     };
 
     def.$to_s = function() {
@@ -9977,9 +10662,9 @@ args = $slice.call(arguments, 0);
   return Opal.cdecl($scope, 'Symbol', $scope.get('String'));
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/string/inheritance"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$new', '$allocate', '$initialize', '$to_proc', '$__send__', '$class', '$clone', '$respond_to?', '$==', '$inspect']);
@@ -10011,6 +10696,8 @@ Opal.modules["corelib/string/inheritance"] = function(Opal) {
     var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4;
 
     def.literal = nil;
+    def.$$is_string = true;
+
     Opal.defs(self, '$allocate', TMP_1 = function(string) {
       var self = this, $iter = TMP_1.$$p, $yield = $iter || nil, obj = nil;
 
@@ -10095,11 +10782,7 @@ Opal.modules["corelib/string/inheritance"] = function(Opal) {
       return self.literal;
     };
 
-    def.$to_str = function() {
-      var self = this;
-
-      return self;
-    };
+    Opal.defn(self, '$to_str', def.$to_s);
 
     return (def.$inspect = function() {
       var self = this;
@@ -10109,9 +10792,9 @@ Opal.modules["corelib/string/inheritance"] = function(Opal) {
   })($scope.get('String'), null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/match_data"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars;
 
   Opal.add_stubs(['$attr_reader', '$[]', '$===', '$!', '$==', '$raise', '$inspect']);
@@ -10245,9 +10928,9 @@ Opal.modules["corelib/match_data"] = function(Opal) {
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/numeric"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$include', '$coerce', '$===', '$raise', '$class', '$__send__', '$send_coerced', '$coerce_to!', '$-@', '$**', '$-', '$respond_to?', '$==', '$enum_for', '$gcd', '$lcm', '$<', '$>', '$floor', '$/', '$%']);
@@ -10261,6 +10944,14 @@ Opal.modules["corelib/numeric"] = function(Opal) {
     self.$include($scope.get('Comparable'));
 
     def.$$is_number = true;
+
+    def.$__id__ = function() {
+      var self = this;
+
+      return (self * 2) + 1;
+    };
+
+    Opal.defn(self, '$object_id', def.$__id__);
 
     def.$coerce = function(other, type) {
       var self = this, $case = nil;
@@ -10575,12 +11266,15 @@ Opal.modules["corelib/numeric"] = function(Opal) {
         return self.$enum_for("downto", finish)
       };
       
+      if (!finish.$$is_number) {
+        self.$raise($scope.get('ArgumentError'), "comparison of " + (self.$class()) + " with " + (finish.$class()) + " failed")
+      }
       for (var i = self; i >= finish; i--) {
         if (block(i) === $breaker) {
           return $breaker.$v;
         }
       }
-    
+    ;
       return self;
     };
 
@@ -10827,12 +11521,15 @@ Opal.modules["corelib/numeric"] = function(Opal) {
         return self.$enum_for("upto", finish)
       };
       
+      if (!finish.$$is_number) {
+        self.$raise($scope.get('ArgumentError'), "comparison of " + (self.$class()) + " with " + (finish.$class()) + " failed")
+      }
       for (var i = self; i <= finish; i++) {
         if (block(i) === $breaker) {
           return $breaker.$v;
         }
       }
-    
+    ;
       return self;
     };
 
@@ -10931,9 +11628,9 @@ Opal.modules["corelib/numeric"] = function(Opal) {
   })(self, $scope.get('Numeric'));
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/complex"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   return (function($base, $super) {
@@ -10946,9 +11643,9 @@ Opal.modules["corelib/complex"] = function(Opal) {
   })(self, $scope.get('Numeric'))
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/rational"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   return (function($base, $super) {
@@ -10961,9 +11658,9 @@ Opal.modules["corelib/rational"] = function(Opal) {
   })(self, $scope.get('Numeric'))
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/proc"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$raise']);
@@ -11037,9 +11734,9 @@ Opal.modules["corelib/proc"] = function(Opal) {
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/method"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$attr_reader', '$class', '$arity', '$new', '$name']);
@@ -11136,9 +11833,9 @@ Opal.modules["corelib/method"] = function(Opal) {
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/range"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$include', '$attr_reader', '$<=>', '$raise', '$include?', '$<=', '$<', '$enum_for', '$succ', '$!', '$==', '$===', '$exclude_end?', '$eql?', '$begin', '$end', '$-', '$abs', '$to_i', '$inspect']);
@@ -11305,9 +12002,9 @@ Opal.modules["corelib/range"] = function(Opal) {
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/time"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$include', '$kind_of?', '$to_i', '$coerce_to', '$between?', '$raise', '$new', '$compact', '$nil?', '$===', '$<=>', '$to_f', '$strftime', '$is_a?', '$zero?', '$wday', '$utc?', '$warn', '$year', '$mon', '$day', '$yday', '$hour', '$min', '$sec', '$rjust', '$ljust', '$zone', '$to_s', '$[]', '$cweek_cyear', '$month', '$isdst', '$private', '$<=', '$!', '$==', '$-', '$ceil', '$/', '$+']);
@@ -12046,17 +12743,20 @@ Opal.modules["corelib/time"] = function(Opal) {
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/struct"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
-  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
+  Opal.dynamic_require_severity = "warning";
+  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $hash2 = Opal.hash2;
 
-  Opal.add_stubs(['$==', '$[]', '$upcase', '$const_set', '$new', '$unshift', '$each', '$define_struct_attribute', '$instance_eval', '$to_proc', '$raise', '$<<', '$members', '$define_method', '$instance_variable_get', '$instance_variable_set', '$include', '$each_with_index', '$class', '$===', '$>=', '$size', '$include?', '$to_sym', '$enum_for', '$hash', '$all?', '$length', '$map', '$+', '$join', '$inspect', '$each_pair']);
+  Opal.add_stubs(['$require', '$include', '$==', '$[]', '$upcase', '$const_set', '$new', '$unshift', '$each', '$define_struct_attribute', '$instance_eval', '$to_proc', '$raise', '$<<', '$members', '$attr_accessor', '$each_with_index', '$instance_variable_set', '$class', '$===', '$<', '$-@', '$size', '$>=', '$include?', '$to_sym', '$instance_variable_get', '$enum_for', '$hash', '$all?', '$length', '$map', '$+', '$join', '$inspect', '$each_pair', '$inject', '$[]=', '$flatten', '$to_a']);
+  self.$require("corelib/enumerable");
   return (function($base, $super) {
     function $Struct(){};
     var self = $Struct = $klass($base, $super, 'Struct', $Struct);
 
-    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_8, TMP_10;
+    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_6, TMP_8;
+
+    self.$include($scope.get('Enumerable'));
 
     Opal.defs(self, '$new', TMP_1 = function(name, args) {var $zuper = $slice.call(arguments, 0);
       var $a, $b, $c, TMP_2, self = this, $iter = TMP_1.$$p, block = $iter || nil;
@@ -12085,17 +12785,12 @@ if (arg == null) arg = nil;
     });
 
     Opal.defs(self, '$define_struct_attribute', function(name) {
-      var $a, $b, TMP_4, $c, TMP_5, self = this;
+      var self = this;
 
       if (self['$==']($scope.get('Struct'))) {
         self.$raise($scope.get('ArgumentError'), "you cannot define attributes to the Struct class")};
       self.$members()['$<<'](name);
-      ($a = ($b = self).$define_method, $a.$$p = (TMP_4 = function(){var self = TMP_4.$$s || this;
-
-      return self.$instance_variable_get("@" + (name))}, TMP_4.$$s = self, TMP_4), $a).call($b, name);
-      return ($a = ($c = self).$define_method, $a.$$p = (TMP_5 = function(value){var self = TMP_5.$$s || this;
-if (value == null) value = nil;
-      return self.$instance_variable_set("@" + (name), value)}, TMP_5.$$s = self, TMP_5), $a).call($c, "" + (name) + "=");
+      return self.$attr_accessor(name);
     });
 
     Opal.defs(self, '$members', function() {
@@ -12108,15 +12803,13 @@ if (value == null) value = nil;
     });
 
     Opal.defs(self, '$inherited', function(klass) {
-      var $a, $b, TMP_6, self = this, members = nil;
+      var $a, $b, TMP_4, self = this, members = nil;
       if (self.members == null) self.members = nil;
 
-      if (self['$==']($scope.get('Struct'))) {
-        return nil};
       members = self.members;
-      return ($a = ($b = klass).$instance_eval, $a.$$p = (TMP_6 = function(){var self = TMP_6.$$s || this;
+      return ($a = ($b = klass).$instance_eval, $a.$$p = (TMP_4 = function(){var self = TMP_4.$$s || this;
 
-      return self.members = members}, TMP_6.$$s = self, TMP_6), $a).call($b);
+      return self.members = members}, TMP_4.$$s = self, TMP_4), $a).call($b);
     });
 
     (function(self) {
@@ -12125,15 +12818,13 @@ if (value == null) value = nil;
       return self.$$proto['$[]'] = self.$$proto.$new
     })(self.$singleton_class());
 
-    self.$include($scope.get('Enumerable'));
-
     def.$initialize = function(args) {
-      var $a, $b, TMP_7, self = this;
+      var $a, $b, TMP_5, self = this;
 
       args = $slice.call(arguments, 0);
-      return ($a = ($b = self.$members()).$each_with_index, $a.$$p = (TMP_7 = function(name, index){var self = TMP_7.$$s || this;
+      return ($a = ($b = self.$members()).$each_with_index, $a.$$p = (TMP_5 = function(name, index){var self = TMP_5.$$s || this;
 if (name == null) name = nil;if (index == null) index = nil;
-      return self.$instance_variable_set("@" + (name), args['$[]'](index))}, TMP_7.$$s = self, TMP_7), $a).call($b);
+      return self.$instance_variable_set("@" + (name), args['$[]'](index))}, TMP_5.$$s = self, TMP_5), $a).call($b);
     };
 
     def.$members = function() {
@@ -12146,12 +12837,18 @@ if (name == null) name = nil;if (index == null) index = nil;
       var $a, self = this;
 
       if ((($a = $scope.get('Integer')['$==='](name)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        if (name['$<'](self.$members().$size()['$-@']())) {
+          self.$raise($scope.get('IndexError'), "offset " + (name) + " too small for struct(size:" + (self.$members().$size()) + ")")};
         if (name['$>='](self.$members().$size())) {
           self.$raise($scope.get('IndexError'), "offset " + (name) + " too large for struct(size:" + (self.$members().$size()) + ")")};
         name = self.$members()['$[]'](name);
-      } else if ((($a = self.$members()['$include?'](name.$to_sym())) !== nil && (!$a.$$is_boolean || $a == true))) {
+      } else if ((($a = $scope.get('String')['$==='](name)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        if ((($a = self.$members()['$include?'](name.$to_sym())) !== nil && (!$a.$$is_boolean || $a == true))) {
+          } else {
+          self.$raise($scope.get('NameError'), "no member '" + (name) + "' in struct")
+        }
         } else {
-        self.$raise($scope.get('NameError'), "no member '" + (name) + "' in struct")
+        self.$raise($scope.get('TypeError'), "no implicit conversion of " + (name.$class()) + " into Integer")
       };
       return self.$instance_variable_get("@" + (name));
     };
@@ -12160,50 +12857,56 @@ if (name == null) name = nil;if (index == null) index = nil;
       var $a, self = this;
 
       if ((($a = $scope.get('Integer')['$==='](name)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        if (name['$<'](self.$members().$size()['$-@']())) {
+          self.$raise($scope.get('IndexError'), "offset " + (name) + " too small for struct(size:" + (self.$members().$size()) + ")")};
         if (name['$>='](self.$members().$size())) {
           self.$raise($scope.get('IndexError'), "offset " + (name) + " too large for struct(size:" + (self.$members().$size()) + ")")};
         name = self.$members()['$[]'](name);
-      } else if ((($a = self.$members()['$include?'](name.$to_sym())) !== nil && (!$a.$$is_boolean || $a == true))) {
+      } else if ((($a = $scope.get('String')['$==='](name)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        if ((($a = self.$members()['$include?'](name.$to_sym())) !== nil && (!$a.$$is_boolean || $a == true))) {
+          } else {
+          self.$raise($scope.get('NameError'), "no member '" + (name) + "' in struct")
+        }
         } else {
-        self.$raise($scope.get('NameError'), "no member '" + (name) + "' in struct")
+        self.$raise($scope.get('TypeError'), "no implicit conversion of " + (name.$class()) + " into Integer")
       };
       return self.$instance_variable_set("@" + (name), value);
     };
 
-    def.$each = TMP_8 = function() {
+    def.$each = TMP_6 = function() {
+      var $a, $b, TMP_7, self = this, $iter = TMP_6.$$p, $yield = $iter || nil;
+
+      TMP_6.$$p = null;
+      if (($yield !== nil)) {
+        } else {
+        return self.$enum_for("each")
+      };
+      ($a = ($b = self.$members()).$each, $a.$$p = (TMP_7 = function(name){var self = TMP_7.$$s || this, $a;
+if (name == null) name = nil;
+      return $a = Opal.yield1($yield, self['$[]'](name)), $a === $breaker ? $a : $a}, TMP_7.$$s = self, TMP_7), $a).call($b);
+      return self;
+    };
+
+    def.$each_pair = TMP_8 = function() {
       var $a, $b, TMP_9, self = this, $iter = TMP_8.$$p, $yield = $iter || nil;
 
       TMP_8.$$p = null;
       if (($yield !== nil)) {
         } else {
-        return self.$enum_for("each")
+        return self.$enum_for("each_pair")
       };
       ($a = ($b = self.$members()).$each, $a.$$p = (TMP_9 = function(name){var self = TMP_9.$$s || this, $a;
 if (name == null) name = nil;
-      return $a = Opal.yield1($yield, self['$[]'](name)), $a === $breaker ? $a : $a}, TMP_9.$$s = self, TMP_9), $a).call($b);
-      return self;
-    };
-
-    def.$each_pair = TMP_10 = function() {
-      var $a, $b, TMP_11, self = this, $iter = TMP_10.$$p, $yield = $iter || nil;
-
-      TMP_10.$$p = null;
-      if (($yield !== nil)) {
-        } else {
-        return self.$enum_for("each_pair")
-      };
-      ($a = ($b = self.$members()).$each, $a.$$p = (TMP_11 = function(name){var self = TMP_11.$$s || this, $a;
-if (name == null) name = nil;
-      return $a = Opal.yieldX($yield, [name, self['$[]'](name)]), $a === $breaker ? $a : $a}, TMP_11.$$s = self, TMP_11), $a).call($b);
+      return $a = Opal.yieldX($yield, [name, self['$[]'](name)]), $a === $breaker ? $a : $a}, TMP_9.$$s = self, TMP_9), $a).call($b);
       return self;
     };
 
     def['$eql?'] = function(other) {
-      var $a, $b, $c, TMP_12, self = this;
+      var $a, $b, $c, TMP_10, self = this;
 
-      return ((($a = self.$hash()['$=='](other.$hash())) !== false && $a !== nil) ? $a : ($b = ($c = other.$each_with_index())['$all?'], $b.$$p = (TMP_12 = function(object, index){var self = TMP_12.$$s || this;
+      return ((($a = self.$hash()['$=='](other.$hash())) !== false && $a !== nil) ? $a : ($b = ($c = other.$each_with_index())['$all?'], $b.$$p = (TMP_10 = function(object, index){var self = TMP_10.$$s || this;
 if (object == null) object = nil;if (index == null) index = nil;
-      return self['$[]'](self.$members()['$[]'](index))['$=='](object)}, TMP_12.$$s = self, TMP_12), $b).call($c));
+      return self['$[]'](self.$members()['$[]'](index))['$=='](object)}, TMP_10.$$s = self, TMP_10), $b).call($c));
     };
 
     def.$length = function() {
@@ -12215,51 +12918,92 @@ if (object == null) object = nil;if (index == null) index = nil;
     Opal.defn(self, '$size', def.$length);
 
     def.$to_a = function() {
-      var $a, $b, TMP_13, self = this;
+      var $a, $b, TMP_11, self = this;
 
-      return ($a = ($b = self.$members()).$map, $a.$$p = (TMP_13 = function(name){var self = TMP_13.$$s || this;
+      return ($a = ($b = self.$members()).$map, $a.$$p = (TMP_11 = function(name){var self = TMP_11.$$s || this;
 if (name == null) name = nil;
-      return self['$[]'](name)}, TMP_13.$$s = self, TMP_13), $a).call($b);
+      return self['$[]'](name)}, TMP_11.$$s = self, TMP_11), $a).call($b);
     };
 
     Opal.defn(self, '$values', def.$to_a);
 
     def.$inspect = function() {
-      var $a, $b, TMP_14, self = this, result = nil;
+      var $a, $b, TMP_12, self = this, result = nil;
 
       result = "#<struct ";
       if (self.$class()['$==']($scope.get('Struct'))) {
         result = result['$+']("" + (self.$class()) + " ")};
-      result = result['$+'](($a = ($b = self.$each_pair()).$map, $a.$$p = (TMP_14 = function(name, value){var self = TMP_14.$$s || this;
+      result = result['$+'](($a = ($b = self.$each_pair()).$map, $a.$$p = (TMP_12 = function(name, value){var self = TMP_12.$$s || this;
 if (name == null) name = nil;if (value == null) value = nil;
-      return "" + (name) + "=" + (value.$inspect())}, TMP_14.$$s = self, TMP_14), $a).call($b).$join(", "));
+      return "" + (name) + "=" + (value.$inspect())}, TMP_12.$$s = self, TMP_12), $a).call($b).$join(", "));
       result = result['$+'](">");
       return result;
     };
 
-    return Opal.defn(self, '$to_s', def.$inspect);
-  })(self, null)
+    Opal.defn(self, '$to_s', def.$inspect);
+
+    def.$to_h = function() {
+      var $a, $b, TMP_13, self = this;
+
+      return ($a = ($b = self.$members()).$inject, $a.$$p = (TMP_13 = function(h, name){var self = TMP_13.$$s || this;
+if (h == null) h = nil;if (name == null) name = nil;
+      h['$[]='](name, self['$[]'](name));
+        return h;}, TMP_13.$$s = self, TMP_13), $a).call($b, $hash2([], {}));
+    };
+
+    return (def.$values_at = function(args) {
+      var $a, $b, TMP_14, self = this;
+
+      args = $slice.call(arguments, 0);
+      args = ($a = ($b = args).$map, $a.$$p = (TMP_14 = function(arg){var self = TMP_14.$$s || this;
+if (arg == null) arg = nil;
+      return arg.$$is_range ? arg.$to_a() : arg;}, TMP_14.$$s = self, TMP_14), $a).call($b).$flatten();
+      
+      var result = [];
+      for (var i = 0, len = args.length; i < len; i++) {
+        if (!args[i].$$is_number) {
+          self.$raise($scope.get('TypeError'), "no implicit conversion of " + ((args[i]).$class()) + " into Integer")
+        }
+        result.push(self['$[]'](args[i]));
+      }
+      return result;
+    ;
+    }, nil) && 'values_at';
+  })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/io"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var $a, $b, self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $module = Opal.module, $gvars = Opal.gvars;
   if ($gvars.stdout == null) $gvars.stdout = nil;
   if ($gvars.stderr == null) $gvars.stderr = nil;
 
-  Opal.add_stubs(['$attr_accessor', '$size', '$write', '$join', '$map', '$String', '$concat', '$chomp', '$getbyte', '$getc', '$raise', '$new', '$write_proc=', '$extend']);
+  Opal.add_stubs(['$attr_accessor', '$size', '$write', '$join', '$map', '$String', '$empty?', '$concat', '$chomp', '$getbyte', '$getc', '$raise', '$new', '$write_proc=', '$extend']);
   (function($base, $super) {
     function $IO(){};
     var self = $IO = $klass($base, $super, 'IO', $IO);
 
     var def = self.$$proto, $scope = self.$$scope;
 
+    def.tty = def.closed = nil;
     Opal.cdecl($scope, 'SEEK_SET', 0);
 
     Opal.cdecl($scope, 'SEEK_CUR', 1);
 
     Opal.cdecl($scope, 'SEEK_END', 2);
+
+    def['$tty?'] = function() {
+      var self = this;
+
+      return self.tty;
+    };
+
+    def['$closed?'] = function() {
+      var self = this;
+
+      return self.closed;
+    };
 
     self.$attr_accessor("write_proc");
 
@@ -12270,19 +13014,21 @@ Opal.modules["corelib/io"] = function(Opal) {
       return string.$size();
     };
 
+    self.$attr_accessor("sync");
+
     (function($base) {
       var self = $module($base, 'Writable');
 
       var def = self.$$proto, $scope = self.$$scope;
 
-      def['$<<'] = function(string) {
+      Opal.defn(self, '$<<', function(string) {
         var self = this;
 
         self.$write(string);
         return self;
-      };
+      });
 
-      def.$print = function(args) {
+      Opal.defn(self, '$print', function(args) {
         var $a, $b, TMP_1, self = this;
         if ($gvars[","] == null) $gvars[","] = nil;
 
@@ -12291,20 +13037,23 @@ Opal.modules["corelib/io"] = function(Opal) {
 if (arg == null) arg = nil;
         return self.$String(arg)}, TMP_1.$$s = self, TMP_1), $a).call($b).$join($gvars[","]));
         return nil;
-      };
+      });
 
-      def.$puts = function(args) {
+      Opal.defn(self, '$puts', function(args) {
         var $a, $b, TMP_2, self = this, newline = nil;
         if ($gvars["/"] == null) $gvars["/"] = nil;
 
         args = $slice.call(arguments, 0);
         newline = $gvars["/"];
-        self.$write(($a = ($b = args).$map, $a.$$p = (TMP_2 = function(arg){var self = TMP_2.$$s || this;
+        if ((($a = args['$empty?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+          self.$write($gvars["/"])
+          } else {
+          self.$write(($a = ($b = args).$map, $a.$$p = (TMP_2 = function(arg){var self = TMP_2.$$s || this;
 if (arg == null) arg = nil;
-        return self.$String(arg).$chomp()}, TMP_2.$$s = self, TMP_2), $a).call($b).$concat([nil]).$join(newline));
+          return self.$String(arg).$chomp()}, TMP_2.$$s = self, TMP_2), $a).call($b).$concat([nil]).$join(newline))
+        };
         return nil;
-      };
-            ;Opal.donate(self, ["$<<", "$print", "$puts"]);
+      });
     })(self);
 
     return (function($base) {
@@ -12312,19 +13061,19 @@ if (arg == null) arg = nil;
 
       var def = self.$$proto, $scope = self.$$scope;
 
-      def.$readbyte = function() {
+      Opal.defn(self, '$readbyte', function() {
         var self = this;
 
         return self.$getbyte();
-      };
+      });
 
-      def.$readchar = function() {
+      Opal.defn(self, '$readchar', function() {
         var self = this;
 
         return self.$getc();
-      };
+      });
 
-      def.$readline = function(sep) {
+      Opal.defn(self, '$readline', function(sep) {
         var self = this;
         if ($gvars["/"] == null) $gvars["/"] = nil;
 
@@ -12332,17 +13081,16 @@ if (arg == null) arg = nil;
           sep = $gvars["/"]
         }
         return self.$raise($scope.get('NotImplementedError'));
-      };
+      });
 
-      def.$readpartial = function(integer, outbuf) {
+      Opal.defn(self, '$readpartial', function(integer, outbuf) {
         var self = this;
 
         if (outbuf == null) {
           outbuf = nil
         }
         return self.$raise($scope.get('NotImplementedError'));
-      };
-            ;Opal.donate(self, ["$readbyte", "$readchar", "$readline", "$readpartial"]);
+      });
     })(self);
   })(self, null);
   Opal.cdecl($scope, 'STDERR', $gvars.stderr = $scope.get('IO').$new());
@@ -12354,9 +13102,9 @@ if (arg == null) arg = nil;
   return $gvars.stderr.$extend((($scope.get('IO')).$$scope.get('Writable')));
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/main"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice;
 
   Opal.add_stubs(['$include']);
@@ -12372,9 +13120,9 @@ Opal.modules["corelib/main"] = function(Opal) {
   }), nil) && 'include';
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/variables"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $gvars = Opal.gvars, $hash2 = Opal.hash2;
 
   Opal.add_stubs(['$new']);
@@ -12392,13 +13140,13 @@ Opal.modules["corelib/variables"] = function(Opal) {
   Opal.cdecl($scope, 'RUBY_PLATFORM', "opal");
   Opal.cdecl($scope, 'RUBY_ENGINE', "opal");
   Opal.cdecl($scope, 'RUBY_VERSION', "2.1.1");
-  Opal.cdecl($scope, 'RUBY_ENGINE_VERSION', "0.6.1");
-  return Opal.cdecl($scope, 'RUBY_RELEASE_DATE', "2014-04-15");
+  Opal.cdecl($scope, 'RUBY_ENGINE_VERSION', "0.7.1");
+  return Opal.cdecl($scope, 'RUBY_RELEASE_DATE', "2015-02-14");
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/dir"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$[]']);
@@ -12424,9 +13172,9 @@ Opal.modules["corelib/dir"] = function(Opal) {
         };
       };
       self.$$proto.$pwd = function() {
-        var $a, self = this;
+        var self = this;
 
-        return ((($a = Opal.current_dir) !== false && $a !== nil) ? $a : ".");
+        return Opal.current_dir || '.';
       };
       self.$$proto.$getwd = self.$$proto.$pwd;
       return (self.$$proto.$home = function() {
@@ -12438,9 +13186,9 @@ Opal.modules["corelib/dir"] = function(Opal) {
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["corelib/file"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$join', '$compact', '$split', '$==', '$first', '$[]=', '$home', '$each', '$pop', '$<<', '$[]', '$gsub', '$find', '$=~']);
@@ -12451,6 +13199,10 @@ Opal.modules["corelib/file"] = function(Opal) {
     var def = self.$$proto, $scope = self.$$scope;
 
     Opal.cdecl($scope, 'Separator', Opal.cdecl($scope, 'SEPARATOR', "/"));
+
+    Opal.cdecl($scope, 'ALT_SEPARATOR', nil);
+
+    Opal.cdecl($scope, 'PATH_SEPARATOR', ":");
 
     return (function(self) {
       var $scope = self.$$scope, def = self.$$proto;
@@ -12521,9 +13273,9 @@ if (file == null) file = nil;
   })(self, $scope.get('IO'))
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice;
 
   Opal.add_stubs(['$require']);
@@ -12561,12 +13313,12 @@ Opal.modules["opal"] = function(Opal) {
   return self.$require("corelib/file");
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["native"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $range = Opal.range, $hash2 = Opal.hash2, $klass = Opal.klass, $gvars = Opal.gvars;
 
-  Opal.add_stubs(['$try_convert', '$native?', '$respond_to?', '$to_n', '$raise', '$inspect', '$Native', '$end_with?', '$define_method', '$[]', '$convert', '$call', '$to_proc', '$new', '$each', '$native_reader', '$native_writer', '$extend', '$to_a', '$to_ary', '$include', '$method_missing', '$bind', '$instance_method', '$[]=', '$slice', '$-', '$length', '$enum_for', '$===', '$>=', '$<<', '$==', '$instance_variable_set', '$members', '$each_with_index', '$each_pair', '$name']);
+  Opal.add_stubs(['$try_convert', '$native?', '$respond_to?', '$to_n', '$raise', '$inspect', '$Native', '$end_with?', '$define_method', '$[]', '$convert', '$call', '$to_proc', '$new', '$each', '$native_reader', '$native_writer', '$extend', '$to_a', '$to_ary', '$include', '$method_missing', '$bind', '$instance_method', '$[]=', '$slice', '$-', '$length', '$enum_for', '$===', '$>=', '$<<', '$==', '$instance_variable_set', '$members', '$each_with_index', '$each_pair', '$name', '$native_module']);
   (function($base) {
     var self = $module($base, 'Native');
 
@@ -12652,7 +13404,7 @@ Opal.modules["native"] = function(Opal) {
 
       var def = self.$$proto, $scope = self.$$scope;
 
-      def.$alias_native = function(new$, old, options) {
+      Opal.defn(self, '$alias_native', function(new$, old, options) {
         var $a, $b, TMP_2, $c, TMP_3, $d, TMP_4, self = this, as = nil;
 
         if (old == null) {
@@ -12684,9 +13436,9 @@ args = $slice.call(arguments, 0);
             block = TMP_4.$$p || nil, TMP_4.$$p = null;
           return ($a = ($b = $scope.get('Native')).$call, $a.$$p = block.$to_proc(), $a).apply($b, [self["native"], old].concat(args))}, TMP_4.$$s = self, TMP_4), $a).call($d, new$)
         };
-      };
+      });
 
-      def.$native_reader = function(names) {
+      Opal.defn(self, '$native_reader', function(names) {
         var $a, $b, TMP_5, self = this;
 
         names = $slice.call(arguments, 0);
@@ -12696,9 +13448,9 @@ if (name == null) name = nil;
             if (self["native"] == null) self["native"] = nil;
 
           return self.$Native(self["native"][name])}, TMP_6.$$s = self, TMP_6), $a).call($b, name)}, TMP_5.$$s = self, TMP_5), $a).call($b);
-      };
+      });
 
-      def.$native_writer = function(names) {
+      Opal.defn(self, '$native_writer', function(names) {
         var $a, $b, TMP_7, self = this;
 
         names = $slice.call(arguments, 0);
@@ -12708,16 +13460,15 @@ if (name == null) name = nil;
             if (self["native"] == null) self["native"] = nil;
 if (value == null) value = nil;
           return self.$Native(self["native"][name] = value)}, TMP_8.$$s = self, TMP_8), $a).call($b, "" + (name) + "=")}, TMP_7.$$s = self, TMP_7), $a).call($b);
-      };
+      });
 
-      def.$native_accessor = function(names) {
+      Opal.defn(self, '$native_accessor', function(names) {
         var $a, $b, self = this;
 
         names = $slice.call(arguments, 0);
         ($a = self).$native_reader.apply($a, [].concat(names));
         return ($b = self).$native_writer.apply($b, [].concat(names));
-      };
-            ;Opal.donate(self, ["$alias_native", "$native_reader", "$native_writer", "$native_accessor"]);
+      });
     })(self);
 
     Opal.defs(self, '$included', function(klass) {
@@ -12726,7 +13477,7 @@ if (value == null) value = nil;
       return klass.$extend($scope.get('Helpers'));
     });
 
-    def.$initialize = function(native$) {
+    Opal.defn(self, '$initialize', function(native$) {
       var $a, self = this;
 
       if ((($a = $scope.get('Kernel')['$native?'](native$)) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -12734,28 +13485,27 @@ if (value == null) value = nil;
         $scope.get('Kernel').$raise($scope.get('ArgumentError'), "" + (native$.$inspect()) + " isn't native")
       };
       return self["native"] = native$;
-    };
+    });
 
-    def.$to_n = function() {
+    Opal.defn(self, '$to_n', function() {
       var self = this;
       if (self["native"] == null) self["native"] = nil;
 
       return self["native"];
-    };
-        ;Opal.donate(self, ["$initialize", "$to_n"]);
+    });
   })(self);
   (function($base) {
     var self = $module($base, 'Kernel');
 
     var def = self.$$proto, $scope = self.$$scope, TMP_9;
 
-    def['$native?'] = function(value) {
+    Opal.defn(self, '$native?', function(value) {
       var self = this;
 
       return value == null || !value.$$class;
-    };
+    });
 
-    def.$Native = function(obj) {
+    Opal.defn(self, '$Native', function(obj) {
       var $a, self = this;
 
       if ((($a = obj == null) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -12765,9 +13515,9 @@ if (value == null) value = nil;
         } else {
         return obj
       };
-    };
+    });
 
-    def.$Array = TMP_9 = function(object, args) {
+    Opal.defn(self, '$Array', TMP_9 = function(object, args) {
       var $a, $b, self = this, $iter = TMP_9.$$p, block = $iter || nil;
 
       args = $slice.call(arguments, 1);
@@ -12789,8 +13539,7 @@ if (value == null) value = nil;
         return [object];
       }
     ;
-    };
-        ;Opal.donate(self, ["$native?", "$Native", "$Array"]);
+    });
   })(self);
   (function($base, $super) {
     function $Object(){};
@@ -13323,20 +14072,31 @@ if (name == null) name = nil;if (value == null) value = nil;
 
     var def = self.$$proto, $scope = self.$$scope;
 
-    def.$native_alias = function(jsid, mid) {
+    def.$native_alias = function(new_jsid, existing_mid) {
       var self = this;
 
-      return self.$$proto[jsid] = self.$$proto['$' + mid];
+      
+      var aliased = self.$$proto['$' + existing_mid];
+      if (!aliased) {
+        self.$raise($scope.get('NameError'), "undefined method `" + (existing_mid) + "' for class `" + (self.$inspect()) + "'");
+      }
+      self.$$proto[new_jsid] = aliased;
+    ;
     };
 
-    return Opal.defn(self, '$native_class', def.$native_module);
+    return (def.$native_class = function() {
+      var self = this;
+
+      self.$native_module();
+      self["new"] = self.$new;
+    }, nil) && 'native_class';
   })(self, null);
   return $gvars.$ = $gvars.global = self.$Native(Opal.global);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
-Opal.modules["opal-jquery/constants"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery/constants"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
   var $a, self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $gvars = Opal.gvars;
   if ($gvars.$ == null) $gvars.$ = nil;
 
@@ -13350,19 +14110,19 @@ Opal.modules["opal-jquery/constants"] = function(Opal) {
   };
 };
 
-/* Generated by Opal 0.7.0.beta3 */
-Opal.modules["opal-jquery/element"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery/element"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
-  Opal.add_stubs(['$require', '$to_n', '$include', '$alias_native', '$attr_reader', '$expose', '$nil?', '$is_a?', '$has_key?', '$delete', '$call', '$gsub', '$upcase', '$[]', '$compact', '$map', '$respond_to?', '$<<', '$Native', '$new']);
+  Opal.add_stubs(['$require', '$to_n', '$include', '$each', '$alias_native', '$attr_reader', '$nil?', '$is_a?', '$has_key?', '$delete', '$call', '$gsub', '$upcase', '$[]', '$compact', '$map', '$respond_to?', '$<<', '$Native', '$new']);
   self.$require("native");
-  self.$require("opal-jquery/constants");
+  self.$require("opal/jquery/constants");
   return (function($base, $super) {
     function $Element(){};
     var self = $Element = $klass($base, $super, 'Element', $Element);
 
-    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_5, TMP_6;
+    var def = self.$$proto, $scope = self.$$scope, TMP_2, TMP_3, TMP_6, TMP_7;
 
     var $ = $scope.get('JQUERY_SELECTOR').$to_n();
 
@@ -13410,33 +14170,75 @@ Opal.modules["opal-jquery/element"] = function(Opal) {
     });
 
     Opal.defs(self, '$expose', function(methods) {
-      var self = this, method = nil;
+      var $a, $b, TMP_1, self = this;
 
       methods = $slice.call(arguments, 0);
-      method = nil;
-      
-      for (var i = 0, length = methods.length, method; i < length; i++) {
-        method = methods[i];
-        self.$alias_native(method, method)
-      }
-
-      return nil;
-    
+      return ($a = ($b = methods).$each, $a.$$p = (TMP_1 = function(method){var self = TMP_1.$$s || this;
+if (method == null) method = nil;
+      return self.$alias_native(method)}, TMP_1.$$s = self, TMP_1), $a).call($b);
     });
 
     self.$attr_reader("selector");
 
-    self.$expose("after", "before", "parent", "parents", "prepend", "prev", "remove");
+    self.$alias_native("after");
 
-    self.$expose("hide", "show", "toggle", "children", "blur", "closest", "detach");
+    self.$alias_native("before");
 
-    self.$expose("focus", "find", "next", "siblings", "text", "trigger", "append");
+    self.$alias_native("parent");
 
-    self.$expose("serialize", "is", "filter", "last", "first");
+    self.$alias_native("parents");
 
-    self.$expose("wrap", "stop", "clone", "empty");
+    self.$alias_native("prev");
 
-    self.$expose("get", "attr", "prop");
+    self.$alias_native("remove");
+
+    self.$alias_native("hide");
+
+    self.$alias_native("show");
+
+    self.$alias_native("toggle");
+
+    self.$alias_native("children");
+
+    self.$alias_native("blur");
+
+    self.$alias_native("closest");
+
+    self.$alias_native("detach");
+
+    self.$alias_native("focus");
+
+    self.$alias_native("find");
+
+    self.$alias_native("next");
+
+    self.$alias_native("siblings");
+
+    self.$alias_native("text");
+
+    self.$alias_native("trigger");
+
+    self.$alias_native("append");
+
+    self.$alias_native("serialize");
+
+    self.$alias_native("is");
+
+    self.$alias_native("filter");
+
+    self.$alias_native("last");
+
+    self.$alias_native("wrap");
+
+    self.$alias_native("stop");
+
+    self.$alias_native("clone");
+
+    self.$alias_native("empty");
+
+    self.$alias_native("get");
+
+    self.$alias_native("prop");
 
     Opal.defn(self, '$succ', def.$next);
 
@@ -13483,6 +14285,10 @@ Opal.modules["opal-jquery/element"] = function(Opal) {
     self.$alias_native("height=", "height");
 
     self.$alias_native("width=", "width");
+
+    self.$alias_native("outer_width", "outerWidth");
+
+    self.$alias_native("outer_height", "outerHeight");
 
     def.$to_n = function() {
       var self = this;
@@ -13581,10 +14387,10 @@ Opal.modules["opal-jquery/element"] = function(Opal) {
       return self;
     };
 
-    def.$animate = TMP_1 = function(params) {
-      var $a, self = this, $iter = TMP_1.$$p, block = $iter || nil, speed = nil;
+    def.$animate = TMP_2 = function(params) {
+      var $a, self = this, $iter = TMP_2.$$p, block = $iter || nil, speed = nil;
 
-      TMP_1.$$p = null;
+      TMP_2.$$p = null;
       speed = (function() {if ((($a = params['$has_key?']("speed")) !== nil && (!$a.$$is_boolean || $a == true))) {
         return params.$delete("speed")
         } else {
@@ -13611,21 +14417,21 @@ Opal.modules["opal-jquery/element"] = function(Opal) {
     
     };
 
-    def.$effect = TMP_2 = function(name, args) {
-      var $a, $b, TMP_3, $c, TMP_4, self = this, $iter = TMP_2.$$p, block = $iter || nil;
+    def.$effect = TMP_3 = function(name, args) {
+      var $a, $b, TMP_4, $c, TMP_5, self = this, $iter = TMP_3.$$p, block = $iter || nil;
 
       args = $slice.call(arguments, 1);
-      TMP_2.$$p = null;
-      name = ($a = ($b = name).$gsub, $a.$$p = (TMP_3 = function(match){var self = TMP_3.$$s || this;
+      TMP_3.$$p = null;
+      name = ($a = ($b = name).$gsub, $a.$$p = (TMP_4 = function(match){var self = TMP_4.$$s || this;
 if (match == null) match = nil;
-      return match['$[]'](1).$upcase()}, TMP_3.$$s = self, TMP_3), $a).call($b, /_\w/);
-      args = ($a = ($c = args).$map, $a.$$p = (TMP_4 = function(a){var self = TMP_4.$$s || this, $a;
+      return match['$[]'](1).$upcase()}, TMP_4.$$s = self, TMP_4), $a).call($b, /_\w/);
+      args = ($a = ($c = args).$map, $a.$$p = (TMP_5 = function(a){var self = TMP_5.$$s || this, $a;
 if (a == null) a = nil;
       if ((($a = a['$respond_to?']("to_n")) !== nil && (!$a.$$is_boolean || $a == true))) {
           return a.$to_n()
           } else {
           return nil
-        }}, TMP_4.$$s = self, TMP_4), $a).call($c).$compact();
+        }}, TMP_5.$$s = self, TMP_5), $a).call($c).$compact();
       args['$<<'](function() { (function() {if ((block !== nil)) {
         return block.$call()
         } else {
@@ -13646,10 +14452,10 @@ if (a == null) a = nil;
       return self.$Native(self.offset());
     };
 
-    def.$each = TMP_5 = function() {
-      var self = this, $iter = TMP_5.$$p, $yield = $iter || nil;
+    def.$each = TMP_6 = function() {
+      var self = this, $iter = TMP_6.$$p, $yield = $iter || nil;
 
-      TMP_5.$$p = null;
+      TMP_6.$$p = null;
       for (var i = 0, length = self.length; i < length; i++) {
       if (Opal.yield1($yield, $(self[i])) === $breaker) return $breaker.$v;
       };
@@ -13764,13 +14570,13 @@ if (a == null) a = nil;
 
     Opal.defn(self, '$empty?', def['$none?']);
 
-    def.$on = TMP_6 = function(name, sel) {
-      var self = this, $iter = TMP_6.$$p, block = $iter || nil;
+    def.$on = TMP_7 = function(name, sel) {
+      var self = this, $iter = TMP_7.$$p, block = $iter || nil;
 
       if (sel == null) {
         sel = nil
       }
-      TMP_6.$$p = null;
+      TMP_7.$$p = null;
       
       var wrapper = function(evt) {
         if (evt.preventDefault) {
@@ -13839,71 +14645,129 @@ if (a == null) a = nil;
   })(self, $scope.get('JQUERY_CLASS').$to_n());
 };
 
-/* Generated by Opal 0.7.0.beta3 */
-Opal.modules["opal-jquery/window"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
-  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $gvars = Opal.gvars;
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery/window"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
+  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $gvars = Opal.gvars;
 
-  Opal.add_stubs(['$require', '$find']);
-  self.$require("opal-jquery/element");
-  Opal.cdecl($scope, 'Window', $scope.get('Element').$find(window));
+  Opal.add_stubs(['$require', '$include', '$find', '$on', '$to_proc', '$element', '$off', '$trigger', '$new']);
+  self.$require("opal/jquery/element");
+  (function($base) {
+    var self = $module($base, 'Browser');
+
+    var def = self.$$proto, $scope = self.$$scope;
+
+    (function($base, $super) {
+      function $Window(){};
+      var self = $Window = $klass($base, $super, 'Window', $Window);
+
+      var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2;
+
+      def.element = nil;
+      self.$include($scope.get('Native'));
+
+      def.$element = function() {
+        var $a, self = this;
+
+        return ((($a = self.element) !== false && $a !== nil) ? $a : self.element = $scope.get('Element').$find(window));
+      };
+
+      def.$on = TMP_1 = function(args) {
+        var $a, $b, self = this, $iter = TMP_1.$$p, block = $iter || nil;
+
+        args = $slice.call(arguments, 0);
+        TMP_1.$$p = null;
+        return ($a = ($b = self.$element()).$on, $a.$$p = block.$to_proc(), $a).apply($b, [].concat(args));
+      };
+
+      def.$off = TMP_2 = function(args) {
+        var $a, $b, self = this, $iter = TMP_2.$$p, block = $iter || nil;
+
+        args = $slice.call(arguments, 0);
+        TMP_2.$$p = null;
+        return ($a = ($b = self.$element()).$off, $a.$$p = block.$to_proc(), $a).apply($b, [].concat(args));
+      };
+
+      return (def.$trigger = function(args) {
+        var $a, self = this;
+
+        args = $slice.call(arguments, 0);
+        return ($a = self.$element()).$trigger.apply($a, [].concat(args));
+      }, nil) && 'trigger';
+    })(self, null)
+  })(self);
+  Opal.cdecl($scope, 'Window', (($scope.get('Browser')).$$scope.get('Window')).$new(window));
   return $gvars.window = $scope.get('Window');
 };
 
-/* Generated by Opal 0.7.0.beta3 */
-Opal.modules["opal-jquery/document"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
-  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $gvars = Opal.gvars;
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery/document"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
+  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $gvars = Opal.gvars;
 
-  Opal.add_stubs(['$require', '$find', '$to_n']);
-  self.$require("opal-jquery/constants");
-  self.$require("opal-jquery/element");
+  Opal.add_stubs(['$require', '$to_n', '$find', '$send']);
+  self.$require("opal/jquery/constants");
+  self.$require("opal/jquery/element");
+  (function($base) {
+    var self = $module($base, 'Browser');
+
+    var def = self.$$proto, $scope = self.$$scope;
+
+    (function($base) {
+      var self = $module($base, 'DocumentMethods');
+
+      var def = self.$$proto, $scope = self.$$scope, TMP_1;
+
+      var $ = $scope.get('JQUERY_SELECTOR').$to_n();
+
+      Opal.defn(self, '$ready?', TMP_1 = function() {
+        var self = this, $iter = TMP_1.$$p, block = $iter || nil;
+
+        TMP_1.$$p = null;
+        if ((block !== nil)) {
+          return $(block);
+          } else {
+          return nil
+        };
+      });
+
+      Opal.defn(self, '$title', function() {
+        var self = this;
+
+        return document.title;
+      });
+
+      Opal.defn(self, '$title=', function(title) {
+        var self = this;
+
+        return document.title = title;
+      });
+
+      Opal.defn(self, '$head', function() {
+        var self = this;
+
+        return $scope.get('Element').$find(document.head);
+      });
+
+      Opal.defn(self, '$body', function() {
+        var self = this;
+
+        return $scope.get('Element').$find(document.body);
+      });
+    })(self)
+  })(self);
   Opal.cdecl($scope, 'Document', $scope.get('Element').$find(document));
-  (function(self) {
-    var $scope = self.$$scope, def = self.$$proto;
-
-    var $ = $scope.get('JQUERY_SELECTOR').$to_n();
-    self.$$proto['$ready?'] = TMP_1 = function() {
-      var self = this, $iter = TMP_1.$$p, block = $iter || nil;
-
-      TMP_1.$$p = null;
-      if (block !== false && block !== nil) {
-        return $(block);
-        } else {
-        return nil
-      };
-    };
-    self.$$proto.$title = function() {
-      var self = this;
-
-      return document.title;
-    };
-    self.$$proto['$title='] = function(title) {
-      var self = this;
-
-      return document.title = title;
-    };
-    self.$$proto.$head = function() {
-      var self = this;
-
-      return $scope.get('Element').$find(document.head);
-    };
-    return (self.$$proto.$body = function() {
-      var self = this;
-
-      return $scope.get('Element').$find(document.body);
-    }, nil) && 'body';
-  })($scope.get('Document').$singleton_class());
+  $scope.get('Document').$send("extend", (($scope.get('Browser')).$$scope.get('DocumentMethods')));
   return $gvars.document = $scope.get('Document');
 };
 
-/* Generated by Opal 0.7.0.beta3 */
-Opal.modules["opal-jquery/event"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery/event"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$to_n', '$stop', '$prevent']);
-  self.$require("opal-jquery/constants");
+  self.$require("opal/jquery/constants");
   return (function($base, $super) {
     function $Event(){};
     var self = $Event = $klass($base, $super, 'Event', $Event);
@@ -13937,11 +14801,13 @@ Opal.modules["opal-jquery/event"] = function(Opal) {
       return self["native"].type;
     };
 
-    def.$current_target = function() {
+    def.$element = function() {
       var self = this;
 
       return $(self["native"].currentTarget);
     };
+
+    Opal.defn(self, '$current_target', def.$element);
 
     def.$target = function() {
       var self = this;
@@ -13986,16 +14852,6 @@ Opal.modules["opal-jquery/event"] = function(Opal) {
       return self.$prevent();
     };
 
-    Opal.defn(self, '$default_prevented?', def['$prevented?']);
-
-    Opal.defn(self, '$prevent_default', def.$prevent);
-
-    Opal.defn(self, '$propagation_stopped?', def['$stopped?']);
-
-    Opal.defn(self, '$stop_propagation', def.$stop);
-
-    Opal.defn(self, '$stop_immediate_propagation', def.$stop_immediate);
-
     def.$page_x = function() {
       var self = this;
 
@@ -14026,23 +14882,51 @@ Opal.modules["opal-jquery/event"] = function(Opal) {
       return self["native"].ctrlKey;
     };
 
+    def.$meta_key = function() {
+      var self = this;
+
+      return self["native"].metaKey;
+    };
+
+    def.$alt_key = function() {
+      var self = this;
+
+      return self["native"].altKey;
+    };
+
+    def.$shift_key = function() {
+      var self = this;
+
+      return self["native"].shiftKey;
+    };
+
     def.$key_code = function() {
       var self = this;
 
       return self["native"].keyCode;
     };
 
-    return (def.$which = function() {
+    def.$which = function() {
       var self = this;
 
       return self["native"].which;
-    }, nil) && 'which';
+    };
+
+    Opal.defn(self, '$default_prevented?', def['$prevented?']);
+
+    Opal.defn(self, '$prevent_default', def.$prevent);
+
+    Opal.defn(self, '$propagation_stopped?', def['$stopped?']);
+
+    Opal.defn(self, '$stop_propagation', def.$stop);
+
+    return Opal.defn(self, '$stop_immediate_propagation', def.$stop_immediate);
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["json"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $hash2 = Opal.hash2, $klass = Opal.klass;
 
   Opal.add_stubs(['$new', '$push', '$[]=', '$[]', '$create_id', '$json_create', '$attr_accessor', '$create_id=', '$===', '$parse', '$generate', '$from_object', '$to_json', '$responds_to?', '$to_io', '$write', '$to_s', '$to_a', '$strftime']);
@@ -14181,7 +15065,6 @@ Opal.modules["json"] = function(Opal) {
         return string
       };
     });
-    
   })(self);
   (function($base, $super) {
     function $Object(){};
@@ -14200,12 +15083,11 @@ Opal.modules["json"] = function(Opal) {
 
     var def = self.$$proto, $scope = self.$$scope;
 
-    def.$to_json = function() {
+    Opal.defn(self, '$to_json', function() {
       var self = this;
 
       return self.$to_a().$to_json();
-    }
-        ;Opal.donate(self, ["$to_json"]);
+    })
   })(self);
   (function($base, $super) {
     function $Array(){};
@@ -14337,12 +15219,12 @@ Opal.modules["json"] = function(Opal) {
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["promise"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
-  Opal.add_stubs(['$resolve', '$new', '$reject', '$attr_reader', '$!', '$==', '$<<', '$>>', '$exception?', '$resolved?', '$value', '$rejected?', '$===', '$error', '$realized?', '$raise', '$^', '$call', '$resolve!', '$exception!', '$reject!', '$class', '$object_id', '$+', '$inspect', '$act?', '$prev', '$concat', '$it', '$lambda', '$reverse', '$<=', '$length', '$shift', '$-', '$each', '$wait', '$then', '$to_proc', '$map', '$reduce', '$always', '$try', '$tap', '$all?', '$find']);
+  Opal.add_stubs(['$resolve', '$new', '$reject', '$attr_reader', '$!', '$==', '$<<', '$>>', '$exception?', '$[]', '$resolved?', '$value', '$rejected?', '$===', '$error', '$realized?', '$raise', '$^', '$call', '$resolve!', '$exception!', '$reject!', '$class', '$object_id', '$+', '$inspect', '$act?', '$prev', '$concat', '$it', '$lambda', '$reverse', '$<=', '$length', '$shift', '$-', '$each', '$wait', '$then', '$to_proc', '$map', '$reduce', '$always', '$try', '$tap', '$all?', '$find']);
   return (function($base, $super) {
     function $Promise(){};
     var self = $Promise = $klass($base, $super, 'Promise', $Promise);
@@ -14386,7 +15268,7 @@ Opal.modules["promise"] = function(Opal) {
       self.exception = false;
       self.value = nil;
       self.error = nil;
-      self.delayed = nil;
+      self.delayed = false;
       self.prev = nil;
       return self.next = nil;
     };
@@ -14441,11 +15323,23 @@ Opal.modules["promise"] = function(Opal) {
 
       self.next = promise;
       if ((($a = self['$exception?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
-        promise.$reject(self.delayed)
+        promise.$reject(self.delayed['$[]'](0))
       } else if ((($a = self['$resolved?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
-        promise.$resolve(((($a = self.delayed) !== false && $a !== nil) ? $a : self.$value()))
-      } else if ((($a = ($b = self['$rejected?'](), $b !== false && $b !== nil ?(((($c = self.failure['$!']()) !== false && $c !== nil) ? $c : $scope.get('Promise')['$===']((((($d = self.delayed) !== false && $d !== nil) ? $d : self.error))))) : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
-        promise.$reject(((($a = self.delayed) !== false && $a !== nil) ? $a : self.$error()))};
+        promise.$resolve((function() {if ((($a = self.delayed) !== nil && (!$a.$$is_boolean || $a == true))) {
+          return self.delayed['$[]'](0)
+          } else {
+          return self.$value()
+        }; return nil; })())
+      } else if ((($a = ($b = self['$rejected?'](), $b !== false && $b !== nil ?(((($c = self.failure['$!']()) !== false && $c !== nil) ? $c : $scope.get('Promise')['$==='](((function() {if ((($d = self.delayed) !== nil && (!$d.$$is_boolean || $d == true))) {
+        return self.delayed['$[]'](0)
+        } else {
+        return self.error
+      }; return nil; })())))) : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        promise.$reject((function() {if ((($a = self.delayed) !== nil && (!$a.$$is_boolean || $a == true))) {
+          return self.delayed['$[]'](0)
+          } else {
+          return self.$error()
+        }; return nil; })())};
       return self;
     };
 
@@ -14479,7 +15373,7 @@ Opal.modules["promise"] = function(Opal) {
       if ((($a = self.next) !== nil && (!$a.$$is_boolean || $a == true))) {
         return self.next.$resolve(value)
         } else {
-        return self.delayed = value
+        return self.delayed = [value]
       };
     };
 
@@ -14517,7 +15411,7 @@ Opal.modules["promise"] = function(Opal) {
       if ((($a = self.next) !== nil && (!$a.$$is_boolean || $a == true))) {
         return self.next.$reject(value)
         } else {
-        return self.delayed = value
+        return self.delayed = [value]
       };
     };
 
@@ -14740,24 +15634,37 @@ if (values == null) values = nil;
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
-Opal.modules["opal-jquery/http"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery/http"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $hash2 = Opal.hash2;
 
-  Opal.add_stubs(['$require', '$to_n', '$new', '$attr_reader', '$send', '$to_proc', '$delete', '$upcase', '$succeed', '$fail', '$promise', '$parse', '$private', '$tap', '$proc', '$ok?', '$resolve', '$reject', '$from_object', '$call']);
+  Opal.add_stubs(['$require', '$to_n', '$each', '$define_singleton_method', '$send', '$new', '$define_method', '$attr_reader', '$delete', '$update', '$upcase', '$succeed', '$fail', '$promise', '$parse', '$private', '$tap', '$proc', '$ok?', '$resolve', '$reject', '$from_object', '$call']);
   self.$require("json");
   self.$require("native");
   self.$require("promise");
-  self.$require("opal-jquery/constants");
+  self.$require("opal/jquery/constants");
   return (function($base, $super) {
     function $HTTP(){};
     var self = $HTTP = $klass($base, $super, 'HTTP', $HTTP);
 
-    var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2, TMP_3, TMP_4, TMP_5, TMP_6, TMP_7, TMP_8;
+    var def = self.$$proto, $scope = self.$$scope, $a, $b, TMP_1;
 
-    def.settings = def.url = def.method = def.handler = def.payload = def.json = def.body = def.ok = def.xhr = def.promise = def.status_code = nil;
+    def.settings = def.payload = def.url = def.method = def.handler = def.json = def.body = def.ok = def.xhr = def.promise = def.status_code = nil;
     var $ = $scope.get('JQUERY_SELECTOR').$to_n();
+
+    Opal.cdecl($scope, 'ACTIONS', ["get", "post", "put", "delete", "patch", "head"]);
+
+    ($a = ($b = $scope.get('ACTIONS')).$each, $a.$$p = (TMP_1 = function(action){var self = TMP_1.$$s || this, $a, $b, TMP_2, $c, TMP_3;
+if (action == null) action = nil;
+    ($a = ($b = self).$define_singleton_method, $a.$$p = (TMP_2 = function(url, options){var self = TMP_2.$$s || this, block;
+if (url == null) url = nil;if (options == null) options = $hash2([], {});
+        block = TMP_2.$$p || nil, TMP_2.$$p = null;
+      return self.$new().$send(action, url, options, block)}, TMP_2.$$s = self, TMP_2), $a).call($b, action);
+      return ($a = ($c = self).$define_method, $a.$$p = (TMP_3 = function(url, options){var self = TMP_3.$$s || this, block;
+if (url == null) url = nil;if (options == null) options = $hash2([], {});
+        block = TMP_3.$$p || nil, TMP_3.$$p = null;
+      return self.$send(action, url, options, block)}, TMP_3.$$s = self, TMP_3), $a).call($c, action);}, TMP_1.$$s = self, TMP_1), $a).call($b);
 
     Opal.defs(self, '$setup', function() {
       var self = this;
@@ -14773,95 +15680,22 @@ Opal.modules["opal-jquery/http"] = function(Opal) {
 
     self.$attr_reader("body", "error_message", "method", "status_code", "url", "xhr");
 
-    Opal.defs(self, '$get', TMP_1 = function(url, opts) {
-      var $a, $b, self = this, $iter = TMP_1.$$p, block = $iter || nil;
+    def.$initialize = function() {
+      var self = this;
 
-      if (opts == null) {
-        opts = $hash2([], {})
-      }
-      TMP_1.$$p = null;
-      return ($a = ($b = self).$send, $a.$$p = block.$to_proc(), $a).call($b, "get", url, opts);
-    });
-
-    Opal.defs(self, '$post', TMP_2 = function(url, opts) {
-      var $a, $b, self = this, $iter = TMP_2.$$p, block = $iter || nil;
-
-      if (opts == null) {
-        opts = $hash2([], {})
-      }
-      TMP_2.$$p = null;
-      return ($a = ($b = self).$send, $a.$$p = block.$to_proc(), $a).call($b, "post", url, opts);
-    });
-
-    Opal.defs(self, '$put', TMP_3 = function(url, opts) {
-      var $a, $b, self = this, $iter = TMP_3.$$p, block = $iter || nil;
-
-      if (opts == null) {
-        opts = $hash2([], {})
-      }
-      TMP_3.$$p = null;
-      return ($a = ($b = self).$send, $a.$$p = block.$to_proc(), $a).call($b, "put", url, opts);
-    });
-
-    Opal.defs(self, '$delete', TMP_4 = function(url, opts) {
-      var $a, $b, self = this, $iter = TMP_4.$$p, block = $iter || nil;
-
-      if (opts == null) {
-        opts = $hash2([], {})
-      }
-      TMP_4.$$p = null;
-      return ($a = ($b = self).$send, $a.$$p = block.$to_proc(), $a).call($b, "delete", url, opts);
-    });
-
-    Opal.defs(self, '$patch', TMP_5 = function(url, opts) {
-      var $a, $b, self = this, $iter = TMP_5.$$p, block = $iter || nil;
-
-      if (opts == null) {
-        opts = $hash2([], {})
-      }
-      TMP_5.$$p = null;
-      return ($a = ($b = self).$send, $a.$$p = block.$to_proc(), $a).call($b, "patch", url, opts);
-    });
-
-    Opal.defs(self, '$head', TMP_6 = function(url, opts) {
-      var $a, $b, self = this, $iter = TMP_6.$$p, block = $iter || nil;
-
-      if (opts == null) {
-        opts = $hash2([], {})
-      }
-      TMP_6.$$p = null;
-      return ($a = ($b = self).$send, $a.$$p = block.$to_proc(), $a).call($b, "head", url, opts);
-    });
-
-    Opal.defs(self, '$send', TMP_7 = function(method, url, options) {
-      var $a, $b, self = this, $iter = TMP_7.$$p, block = $iter || nil;
-
-      TMP_7.$$p = null;
-      return ($a = ($b = self).$new, $a.$$p = block.$to_proc(), $a).call($b, method, url, options).$send();
-    });
-
-    def.$initialize = TMP_8 = function(method, url, options) {
-      var self = this, $iter = TMP_8.$$p, handler = $iter || nil;
-
-      if (options == null) {
-        options = $hash2([], {})
-      }
-      TMP_8.$$p = null;
-      self.method = method;
-      self.url = url;
-      self.ok = true;
-      self.payload = options.$delete("payload");
-      self.settings = options;
-      return self.handler = handler;
+      self.settings = $hash2([], {});
+      return self.ok = true;
     };
 
-    def.$send = function(payload) {
-      var $a, self = this, settings = nil;
+    def.$send = function(method, url, options, block) {
+      var $a, self = this, settings = nil, payload = nil;
 
-      if (payload == null) {
-        payload = self.payload
-      }
-      settings = self.settings.$to_n();
+      self.method = method;
+      self.url = url;
+      self.payload = options.$delete("payload");
+      self.handler = block;
+      self.settings.$update(options);
+      $a = [self.settings.$to_n(), self.payload], settings = $a[0], payload = $a[1];
       
       if (typeof(payload) === 'string') {
         settings.data = payload;
@@ -14894,7 +15728,7 @@ Opal.modules["opal-jquery/http"] = function(Opal) {
     def.$json = function() {
       var $a, self = this;
 
-      return ((($a = self.json) !== false && $a !== nil) ? $a : $scope.get('JSON').$parse(self.body));
+      return ((($a = self.json) !== false && $a !== nil) ? $a : self.json = $scope.get('JSON').$parse(self.body));
     };
 
     def['$ok?'] = function() {
@@ -14912,19 +15746,19 @@ Opal.modules["opal-jquery/http"] = function(Opal) {
     self.$private();
 
     def.$promise = function() {
-      var $a, $b, TMP_9, self = this;
+      var $a, $b, TMP_4, self = this;
 
       if ((($a = self.promise) !== nil && (!$a.$$is_boolean || $a == true))) {
         return self.promise};
-      return self.promise = ($a = ($b = $scope.get('Promise').$new()).$tap, $a.$$p = (TMP_9 = function(promise){var self = TMP_9.$$s || this, $a, $b, TMP_10;
+      return self.promise = ($a = ($b = $scope.get('Promise').$new()).$tap, $a.$$p = (TMP_4 = function(promise){var self = TMP_4.$$s || this, $a, $b, TMP_5;
 if (promise == null) promise = nil;
-      return self.handler = ($a = ($b = self).$proc, $a.$$p = (TMP_10 = function(res){var self = TMP_10.$$s || this, $a;
+      return self.handler = ($a = ($b = self).$proc, $a.$$p = (TMP_5 = function(res){var self = TMP_5.$$s || this, $a;
 if (res == null) res = nil;
         if ((($a = res['$ok?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
             return promise.$resolve(res)
             } else {
             return promise.$reject(res)
-          }}, TMP_10.$$s = self, TMP_10), $a).call($b)}, TMP_9.$$s = self, TMP_9), $a).call($b);
+          }}, TMP_5.$$s = self, TMP_5), $a).call($b)}, TMP_4.$$s = self, TMP_4), $a).call($b);
     };
 
     def.$succeed = function(data, status, xhr) {
@@ -14964,9 +15798,9 @@ if (res == null) res = nil;
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
-Opal.modules["opal-jquery/kernel"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery/kernel"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module;
 
   return (function($base) {
@@ -14974,33 +15808,42 @@ Opal.modules["opal-jquery/kernel"] = function(Opal) {
 
     var def = self.$$proto, $scope = self.$$scope;
 
-    def.$alert = function(msg) {
+    Opal.defn(self, '$alert', function(msg) {
       var self = this;
 
       alert(msg);
       return nil;
-    }
-        ;Opal.donate(self, ["$alert"]);
+    })
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
+Opal.modules["opal/jquery"] = function(Opal) {
+  Opal.dynamic_require_severity = "warning";
+  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice;
+
+  Opal.add_stubs(['$==', '$require']);
+  if ($scope.get('RUBY_ENGINE')['$==']("opal")) {
+    self.$require("opal/jquery/window");
+    self.$require("opal/jquery/document");
+    self.$require("opal/jquery/element");
+    self.$require("opal/jquery/event");
+    self.$require("opal/jquery/http");
+    return self.$require("opal/jquery/kernel");}
+};
+
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal-jquery"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice;
 
   Opal.add_stubs(['$require']);
-  self.$require("opal-jquery/window");
-  self.$require("opal-jquery/document");
-  self.$require("opal-jquery/element");
-  self.$require("opal-jquery/event");
-  self.$require("opal-jquery/http");
-  return self.$require("opal-jquery/kernel");
+  return self.$require("opal/jquery")
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["set"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $module = Opal.module;
 
   Opal.add_stubs(['$include', '$new', '$nil?', '$===', '$raise', '$each', '$add', '$call', '$merge', '$class', '$respond_to?', '$subtract', '$dup', '$join', '$to_a', '$equal?', '$instance_of?', '$==', '$instance_variable_get', '$is_a?', '$size', '$all?', '$include?', '$[]=', '$enum_for', '$[]', '$<<', '$replace', '$delete', '$select', '$each_key', '$to_proc', '$empty?', '$eql?', '$instance_eval', '$clear', '$keys']);
@@ -15259,7 +16102,7 @@ if (item == null) item = nil;
 
     var def = self.$$proto, $scope = self.$$scope, TMP_16;
 
-    def.$to_set = TMP_16 = function(klass, args) {
+    Opal.defn(self, '$to_set', TMP_16 = function(klass, args) {
       var $a, $b, self = this, $iter = TMP_16.$$p, block = $iter || nil;
 
       args = $slice.call(arguments, 1);
@@ -15268,14 +16111,13 @@ if (item == null) item = nil;
       }
       TMP_16.$$p = null;
       return ($a = ($b = klass).$new, $a.$$p = block.$to_proc(), $a).apply($b, [self].concat(args));
-    }
-        ;Opal.donate(self, ["$to_set"]);
+    })
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/parser/sexp"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$attr_reader', '$attr_accessor', '$[]', '$[]=', '$send', '$to_proc', '$<<', '$push', '$new', '$dup', '$is_a?', '$==', '$array', '$join', '$map', '$inspect', '$line']);
@@ -15400,13 +16242,12 @@ if (e == null) e = nil;
 
       return Opal.defn(self, '$to_s', def.$inspect);
     })(self, null)
-    
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["strscan"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$attr_reader', '$length', '$pos=']);
@@ -15614,9 +16455,9 @@ Opal.modules["strscan"] = function(Opal) {
   })(self, null)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/parser/keywords"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $hash2 = Opal.hash2;
 
   Opal.add_stubs(['$attr_accessor', '$map', '$new', '$each', '$[]=', '$name', '$[]']);
@@ -15671,18 +16512,16 @@ if (k == null) k = nil;
 
         return self.$map()['$[]'](kw);
       });
-      
     })(self)
-    
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/parser/lexer"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $hash2 = Opal.hash2;
 
-  Opal.add_stubs(['$require', '$|', '$attr_reader', '$attr_accessor', '$new', '$has_local?', '$scope', '$parser', '$to_sym', '$<<', '$&', '$>>', '$!', '$==', '$include?', '$arg?', '$space?', '$check', '$after_operator?', '$scan', '$+', '$length', '$matched', '$pos=', '$-', '$pos', '$yylex', '$yylval', '$new_strterm', '$merge', '$yylval=', '$to_f', '$gsub', '$scanner', '$to_i', '$raise', '$peek', '$chr', '$%', '$[]', '$escape', '$peek_variable_name', '$bol?', '$eos?', '$read_escape', '$join', '$count', '$strterm', '$[]=', '$pushback', '$strterm=', '$add_string_content', '$line=', '$line', '$label_state?', '$end_with?', '$=~', '$keyword', '$state', '$name', '$id', '$cond?', '$cmdarg?', '$here_document', '$parse_string', '$skip', '$empty?', '$new_op_asgn', '$set_arg_state', '$spcarg?', '$beg?', '$===', '$new_strterm2', '$cond_push', '$cmdarg_push', '$cond_lexpop', '$cmdarg_lexpop', '$end?', '$heredoc_identifier', '$sub', '$inspect', '$process_numeric', '$process_identifier', '$size', '$pop', '$last']);
+  Opal.add_stubs(['$require', '$|', '$attr_reader', '$attr_accessor', '$new', '$yylex', '$yylval', '$has_local?', '$scope', '$parser', '$to_sym', '$<<', '$&', '$>>', '$!', '$==', '$include?', '$arg?', '$space?', '$check', '$after_operator?', '$scan', '$+', '$length', '$matched', '$pos=', '$-', '$pos', '$new_strterm', '$merge', '$yylval=', '$to_f', '$gsub', '$scanner', '$to_i', '$raise', '$peek', '$chr', '$%', '$[]', '$escape', '$peek_variable_name', '$bol?', '$eos?', '$read_escape', '$join', '$count', '$strterm', '$[]=', '$pushback', '$strterm=', '$add_string_content', '$line=', '$line', '$label_state?', '$end_with?', '$=~', '$keyword', '$state', '$name', '$id', '$cond?', '$cmdarg?', '$here_document', '$parse_string', '$skip', '$empty?', '$new_op_asgn', '$set_arg_state', '$spcarg?', '$beg?', '$===', '$new_strterm2', '$cond_push', '$cmdarg_push', '$cond_lexpop', '$cmdarg_lexpop', '$end?', '$heredoc_identifier', '$sub', '$inspect', '$process_numeric', '$process_identifier', '$size', '$pop', '$last']);
   self.$require("strscan");
   self.$require("opal/parser/keywords");
   return (function($base) {
@@ -15696,7 +16535,7 @@ Opal.modules["opal/parser/lexer"] = function(Opal) {
 
       var def = self.$$proto, $scope = self.$$scope;
 
-      def.scanner = def.cond = def.cmdarg = def.lex_state = def.space_seen = def.column = def.yylval = def.tok_line = def.tok_column = def.line = def.scanner_stack = def.start_of_lambda = def.file = nil;
+      def.scanner = def.tok_line = def.tok_column = def.column = def.line = def.cond = def.cmdarg = def.lex_state = def.space_seen = def.yylval = def.scanner_stack = def.start_of_lambda = def.file = nil;
       Opal.cdecl($scope, 'STR_FUNC_ESCAPE', 1);
 
       Opal.cdecl($scope, 'STR_FUNC_EXPAND', 2);
@@ -15758,6 +16597,17 @@ Opal.modules["opal/parser/lexer"] = function(Opal) {
         self.scanner_stack = [self.scanner];
         self.case_stmt = nil;
         return self.start_of_lambda = nil;
+      };
+
+      def.$next_token = function() {
+        var self = this, token = nil, value = nil, location = nil;
+
+        token = self.$yylex();
+        value = self.$yylval();
+        location = [self.tok_line, self.tok_column];
+        self.tok_column = self.column;
+        self.tok_line = self.line;
+        return [token, [value, location]];
       };
 
       def['$has_local?'] = function(local) {
@@ -15907,17 +16757,6 @@ Opal.modules["opal/parser/lexer"] = function(Opal) {
 
         self.column = self.tok_column = 0;
         return self.line = self.tok_line = line;
-      };
-
-      def.$next_token = function() {
-        var self = this, token = nil, value = nil, location = nil;
-
-        token = self.$yylex();
-        value = self.$yylval();
-        location = [self.tok_line, self.tok_column];
-        self.tok_column = self.column;
-        self.tok_line = self.line;
-        return [token, [value, location]];
       };
 
       def.$new_strterm = function(func, term, paren) {
@@ -16762,13 +17601,12 @@ Opal.modules["opal/parser/lexer"] = function(Opal) {
         } catch ($returner) { if ($returner === Opal.returner) { return $returner.$v } throw $returner; }
       }, nil) && 'yylex';
     })(self, null)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["racc/parser.rb"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$class', '$_racc_do_parse_rb', '$_racc_setup', '$[]', '$!', '$==', '$next_token', '$racc_read_token', '$+', '$<', '$nil?', '$puts', '$>', '$-', '$push', '$<<', '$racc_shift', '$-@', '$*', '$last', '$pop', '$__send__', '$raise', '$racc_reduce', '$>=', '$inspect', '$racc_next_state', '$racc_token2str', '$racc_print_stacks', '$empty?', '$map', '$racc_print_states', '$each_index', '$each']);
@@ -16970,16 +17808,15 @@ if (st == null) st = nil;
         return self.$puts("  ]");
       }, nil) && 'racc_print_states';
     })(self, null)
-    
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/parser/grammar"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $hash = Opal.hash;
 
-  Opal.add_stubs(['$require', '$new', '$each', '$empty?', '$[]=', '$to_i', '$+', '$split', '$new_compstmt', '$[]', '$new_block', '$<<', '$new_body', '$lex_state=', '$lexer', '$new_alias', '$s', '$to_sym', '$value', '$new_if', '$new_while', '$new_until', '$new_rescue_mod', '$new_assign', '$new_op_asgn', '$op_to_setter', '$new_unary_call', '$new_return', '$new_break', '$new_next', '$new_call', '$new_super', '$new_yield', '$new_assignable', '$new_attrasgn', '$new_colon2', '$new_colon3', '$new_const', '$new_sym', '$new_op_asgn1', '$new_irange', '$new_erange', '$new_binary_call', '$new_int', '$new_float', '$include?', '$type', '$==', '$-@', '$to_f', '$new_not', '$new_and', '$new_or', '$add_block_pass', '$new_hash', '$cmdarg_push', '$cmdarg_pop', '$new_block_pass', '$new_splat', '$line', '$new_paren', '$new_array', '$new_nil', '$cond_push', '$cond_pop', '$new_class', '$new_sclass', '$new_module', '$push_scope', '$new_def', '$pop_scope', '$new_iter', '$new_ident', '$new_block_args', '$push', '$intern', '$first', '$nil?', '$new_str', '$str_append', '$new_xstr', '$new_regexp', '$concat', '$new_str_content', '$strterm', '$strterm=', '$new_evstr', '$cond_lexpop', '$cmdarg_lexpop', '$new_gvar', '$new_ivar', '$new_cvar', '$new_dsym', '$negate_num', '$new_self', '$new_true', '$new_false', '$new___FILE__', '$new___LINE__', '$new_var_ref', '$new_args', '$add_local', '$scope', '$raise']);
+  Opal.add_stubs(['$require', '$new', '$each', '$empty?', '$[]=', '$to_i', '$+', '$split', '$new_compstmt', '$[]', '$new_block', '$<<', '$new_body', '$lex_state=', '$lexer', '$new_alias', '$s', '$to_sym', '$value', '$new_if', '$new_while', '$new_until', '$new_rescue_mod', '$new_assign', '$new_op_asgn', '$op_to_setter', '$new_unary_call', '$new_return', '$new_break', '$new_next', '$new_call', '$new_super', '$new_yield', '$new_assignable', '$new_attrasgn', '$new_colon2', '$new_colon3', '$new_const', '$new_sym', '$new_op_asgn1', '$new_irange', '$new_erange', '$new_binary_call', '$new_int', '$new_float', '$include?', '$type', '$==', '$-@', '$to_f', '$new_not', '$new_and', '$new_or', '$add_block_pass', '$new_hash', '$cmdarg_push', '$cmdarg_pop', '$new_block_pass', '$new_splat', '$line', '$new_paren', '$new_array', '$new_nil', '$cond_push', '$cond_pop', '$new_class', '$new_sclass', '$new_module', '$push_scope', '$new_def', '$pop_scope', '$new_iter', '$new_ident', '$new_block_args', '$push', '$intern', '$first', '$nil?', '$new_str', '$str_append', '$new_xstr', '$new_regexp', '$concat', '$new_str_content', '$strterm', '$strterm=', '$new_evstr', '$cond_lexpop', '$cmdarg_lexpop', '$new_gvar', '$new_ivar', '$new_cvar', '$new_dsym', '$negate_num', '$new_self', '$new_true', '$new_false', '$new___FILE__', '$new___LINE__', '$new_var_ref', '$new_kwrestarg', '$new_kwoptarg', '$new_kwarg', '$new_args_tail', '$new_args', '$add_local', '$scope', '$raise']);
   self.$require("racc/parser.rb");
   return (function($base) {
     var self = $module($base, 'Opal');
@@ -16992,9 +17829,9 @@ Opal.modules["opal/parser/grammar"] = function(Opal) {
 
       var def = self.$$proto, $scope = self.$$scope, $a, $b, TMP_1, $c, TMP_3, $d, TMP_5, $e, TMP_7, clist = nil, racc_action_table = nil, arr = nil, idx = nil, racc_action_check = nil, racc_action_pointer = nil, racc_action_default = nil, racc_goto_table = nil, racc_goto_check = nil, racc_goto_pointer = nil, racc_goto_default = nil, racc_reduce_table = nil, racc_reduce_n = nil, racc_shift_n = nil, racc_token_table = nil, racc_nt_base = nil, racc_use_result_var = nil;
 
-      clist = ["63,64,65,8,51,-90,-93,543,57,58,203,204,566,61,270,59,60,62,23,24,66", "67,-95,-505,-89,597,828,22,28,27,90,89,91,92,446,639,17,577,-88,-92", "-91,-64,7,41,6,9,94,93,639,84,50,86,85,87,270,88,95,96,-90,81,82,270", "38,39,101,784,678,-83,638,100,203,204,-508,710,587,639,-437,-94,-75", "265,782,638,-95,-437,36,599,598,30,-505,566,52,298,299,54,744,32,566", "-91,609,40,269,761,203,204,-92,566,-507,18,638,-505,-85,542,79,73,75", "76,77,78,-90,265,-90,74,80,-90,566,101,-87,565,-81,56,100,-437,53,-507", "-83,37,83,63,64,65,269,51,-80,-84,-83,57,58,269,535,-92,61,537,59,60", "62,23,24,66,67,305,608,710,-82,401,22,28,27,90,89,91,92,-83,101,17,709", "-507,579,100,-83,586,41,-86,265,94,93,760,84,50,86,85,87,305,88,95,96", "597,81,82,101,38,39,655,101,100,565,639,200,100,656,101,-91,565,-91", "201,100,-91,778,-92,101,-92,565,208,-92,100,212,-268,661,52,203,204", "54,-84,-268,-90,252,73,40,101,638,565,864,-82,100,74,18,710,518,519", "305,79,73,75,76,77,78,599,598,604,74,80,101,199,709,-268,907,100,56", "777,-446,53,-268,908,37,83,63,64,65,575,51,597,-268,592,57,58,576,203", "204,61,593,59,60,62,256,257,66,67,597,265,-84,602,841,255,28,27,90,89", "91,92,-82,-80,217,397,398,203,204,597,-88,41,-268,906,94,93,597,84,50", "86,85,87,259,88,95,96,574,81,82,-84,38,39,562,599,598,610,-84,-274,101", "-82,709,-445,-89,100,-274,619,-82,-321,-445,-508,599,598,208,-276,-321", "212,561,-275,52,-441,-276,54,635,254,-275,225,-441,40,101,599,598,600", "514,100,225,216,599,598,595,515,79,73,75,76,77,78,-82,-275,583,74,80", "-446,-274,-90,-275,796,-445,56,772,202,53,522,-321,37,83,63,64,65,-276", "51,262,101,-275,57,58,787,100,263,61,552,59,60,62,256,257,66,67,513", "535,203,204,534,255,288,292,90,89,91,92,-88,-87,217,-275,582,771,101", "615,-95,41,-94,100,94,93,793,84,50,86,85,87,-275,88,95,96,794,81,82", "-275,38,39,549,225,229,234,235,236,231,233,241,242,237,238,-274,218", "219,-445,552,239,240,-274,208,583,-445,212,-508,409,52,550,581,54,411", "410,222,797,228,40,224,223,220,221,232,230,226,216,227,-275,798,-439", "79,73,75,76,77,78,-439,552,525,74,80,-440,243,801,-227,526,101,56,-440", "-274,53,100,-445,37,83,63,64,65,582,51,-444,101,-443,57,58,483,100,-444", "61,-443,59,60,62,256,257,66,67,103,104,105,106,107,255,288,292,90,89", "91,92,101,-437,217,442,444,100,481,615,-437,41,443,535,94,93,537,84", "50,86,85,87,-276,88,95,96,787,81,82,-276,38,39,810,225,229,234,235,236", "231,233,241,242,237,238,-274,218,219,692,811,239,240,-274,208,549,535", "212,-508,537,52,813,444,54,546,787,222,573,228,40,224,223,220,221,232", "230,226,216,227,-276,603,-434,79,73,75,76,77,78,-434,341,340,74,80,483", "243,338,337,341,340,56,692,-274,53,750,522,37,83,63,64,65,-442,51,806", "787,655,57,58,-442,341,340,61,656,59,60,62,256,257,66,67,103,104,105", "106,107,255,288,292,90,89,91,92,607,620,217,-81,-86,338,337,341,340", "41,-89,-94,94,93,539,84,50,86,85,87,305,88,95,96,538,81,82,-507,38,39", "815,225,229,234,235,236,231,233,241,242,237,238,-84,218,219,806,787", "239,240,-92,208,763,572,212,573,611,52,614,305,54,225,617,222,490,228", "40,224,223,220,221,232,230,226,216,227,823,825,828,79,73,75,76,77,78", "829,524,831,74,80,-254,243,523,-227,490,876,56,-256,618,53,265,305,37", "83,63,64,65,274,51,516,833,834,57,58,835,95,96,61,509,59,60,62,256,257", "66,67,103,104,105,106,107,255,288,292,90,89,91,92,508,507,217,338,337", "341,340,-63,-255,41,265,842,94,93,843,84,50,86,85,87,259,88,95,96,844", "81,82,265,38,39,265,225,229,234,235,236,231,233,241,242,237,238,746", "218,219,244,225,239,240,847,208,848,678,212,490,850,52,483,-254,54,854", "225,222,252,228,40,224,223,220,221,232,230,226,216,227,481,225,225,79", "73,75,76,77,78,859,479,861,74,80,213,243,636,222,448,876,56,224,223", "53,447,225,37,83,63,64,65,445,51,867,869,870,57,58,305,713,573,61,705", "59,60,62,256,257,66,67,702,880,-257,412,700,255,288,292,90,89,91,92", "881,883,217,338,337,341,340,399,690,41,388,-508,94,93,552,84,50,86,85", "87,259,88,95,96,385,81,82,893,38,39,894,225,229,234,235,236,231,233", "241,242,237,238,686,218,219,685,305,239,240,899,208,900,578,212,828", "829,52,684,225,54,652,644,222,252,228,40,224,223,220,221,232,230,226", "216,227,297,678,296,79,73,75,76,77,78,909,528,244,74,80,222,243,305", "657,224,223,56,915,244,53,670,684,37,83,63,64,65,225,51,198,197,196", "57,58,195,668,925,61,828,59,60,62,256,257,66,67,927,928,108,-75,667", "255,288,292,90,89,91,92,222,97,217,665,224,223,220,221,,41,,,94,93,", "84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233", "241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54,,,222,,228,40", "224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,,74,80,,243", ",,,,56,,,53,,,37,83,63,64,65,225,51,,,,57,58,,,,61,,59,60,62,23,24,66", "67,,,,,,22,28,27,90,89,91,92,222,,17,,224,223,220,221,,41,,,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241", "242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54,,,222,,228,40,224", "223,220,221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,243,,", ",,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67", ",,,,,255,28,27,90,89,91,92,,554,217,333,331,330,,332,,41,,,94,93,,84", "50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233", "241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54,,254,222,,228", "40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,,74,80", ",243,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257", "66,67,,,,,,255,288,292,90,89,91,92,,554,217,333,331,330,,332,,41,,,94", "93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229,234,235,236,231", "233,241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54,,644,222", ",228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,", "74,80,,243,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62", "23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242", "237,238,,218,219,,,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223", "220,221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,243,,,,,56", ",,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,", ",22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242,237,238,,218,219", ",,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220,221,232,230", "226,18,227,,,,79,73,75,76,77,78,,,,74,80,,243,,,,,56,,,53,,,37,83,63", "64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91", "92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225", "229,234,235,236,231,233,241,242,237,238,,218,219,,,239,240,,208,,,212", "213,,52,,,54,,,222,,228,40,224,223,220,221,232,230,226,18,227,,,,79", "73,75,76,77,78,,,,74,80,,243,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57", "58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,,", ",41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235", "236,231,233,241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54", ",,222,,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77", "78,,,,74,80,,243,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59", "60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229,234,235,236,231", "233,241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54,,,222,,228", "40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,,74,80", ",243,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242,237", "238,,218,219,,,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220", "221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,243,,,,,56,,,53", ",,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255", "28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96", ",81,82,,38,39,,225,229,234,235,236,231,233,241,242,237,238,,218,219", ",,239,240,,208,,,212,,,52,,,54,,254,222,252,228,40,224,223,220,221,232", "230,226,216,227,,,,79,73,75,76,77,78,,,,74,80,,243,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,28,27", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81", "82,,38,39,,225,229,234,235,236,231,233,241,242,237,238,,218,219,,,239", "240,,208,,,212,,,52,,,54,,254,222,252,228,40,224,223,220,221,232,230", "226,216,227,,,,79,73,75,76,77,78,,,,74,80,,243,,,,,56,,,53,,,37,83,63", "64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89", "91,92,,554,217,333,331,330,,332,,41,,,94,93,,84,50,86,85,87,259,88,95", "96,,81,82,,38,39,554,,333,331,330,,332,,,557,,,,,,,,803,,,208,,,212", "225,,52,,,54,,254,,252,,40,,,557,,239,240,,216,,,560,,79,73,75,76,77", "78,,222,,74,80,224,223,220,221,,,56,,,53,,,37,83,63,64,65,8,51,,,,57", "58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,554,17,333", "331,330,,332,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,", ",,,,,,,,557,,,,,,,,560,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79", "73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58", ",,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41", ",9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,-528,-528,-528", "-528,231,233,,,-528,-528,,,,,,239,240,,36,,,30,,,52,,,54,,32,222,,228", "40,224,223,220,221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257", "66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,324,,333,331,330,,332,,,,,,,,,,,,,,,,,696,,,212", ",,52,,,54,,,,,,335,,,,,,,,338,337,341,340,,79,73,75,76,77,78,765,,,74", "80,,,,,,,56,,,53,,,293,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23", "24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,225,-528,-528,-528,-528,231,233,,,-528", "-528,,,,,,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220,221", "232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27", "90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,225,-528,-528,-528,-528,231,233,,,-528,-528,,,,,,239,240,,36", ",,278,,,52,,,54,,32,222,,228,40,224,223,220,221,232,230,226,18,227,", ",,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57", "58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,289,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,738,,333,331,330", ",332,,,,,,,,,,,,,,,,,286,,,283,,,52,,,54,,282,,,,335,732,,,,,,,338,337", "341,340,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,293,83,63,64,65", ",51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91", "92,,,217,,,,,,,289,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,324,,333", "331,330,,332,,,,,,,,,,,,,,,,,286,,,212,,,52,,,54,,,,,,335,,,,,,,,338", "337,341,340,,79,73,75,76,77,78,,,,74,80,,,,295,,,56,,,53,,,293,83,63", "64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89", "91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",225,-528,-528,-528,-528,231,233,,,-528,-528,,,,,,239,240,,36,,,30,", ",52,,,54,,32,222,,228,40,224,223,220,221,232,230,226,18,227,,,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,", ",61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,", "9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,-528,-528,-528", "-528,231,233,,,-528,-528,,,,,,239,240,,36,,,30,,,52,,,54,,32,222,,228", "40,224,223,220,221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66", "67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242,237,238", ",-528,-528,,,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220", "221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,", ",37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255", "288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,225,-528,-528,-528,-528,231,233,,,-528,-528,,,,,,239", "240,,208,,,212,,,52,,,54,,644,222,252,228,40,224,223,220,221,232,230", "226,216,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64", "65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89", "91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",225,229,234,235,236,231,233,241,,237,238,,,,,,239,240,,208,,,212,,", "52,,,54,,,222,,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75", "76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61", ",59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41", ",,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,,,,,,,,,,,,,,,", "239,240,,208,,,212,,,52,,,54,,,222,,228,40,224,223,220,221,,,226,216", "227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51", ",,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92", ",,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225", "229,234,235,236,231,233,,,237,238,,,,,,239,240,,208,,,212,,,52,,,54", ",,222,,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77", "78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,225,,,,,,,,,,,,,,,,239,240,,36", ",,30,,,52,,,54,,32,222,,228,40,224,223,220,221,,,226,18,227,,,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,", "61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41", ",,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,,,,,,,,,,,,", ",,,239,240,,208,,,212,,,52,,,54,,254,222,,228,40,224,223,220,221,,,226", "216,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65", ",51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92", ",,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225", ",,,,,,,,,,,,,,,239,240,,208,,,212,,,52,,,54,,254,222,,228,40,224,223", "220,221,,,226,216,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,", "37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27", "90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,", "38,39,,225,229,234,235,236,231,233,241,242,237,238,,-528,-528,,,239", "240,,208,,,212,,,52,,,54,,,222,,228,40,224,223,220,221,232,230,226,18", "227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51", ",,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,", "217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225", ",,,,,,,,,,,,,,,239,240,,208,,,212,,,52,,,54,,254,222,,228,40,224,223", "220,221,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83", "63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81", "82,,38,39,,225,,,,,,,,,,,,,,,,239,240,,208,,,212,,,52,,,54,,,222,,228", "40,224,223,220,221,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,", "53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22", "28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,", ",,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,", ",,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,", ",,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54", ",,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90", "89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79", "73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58", ",,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41", ",,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,", "208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80", "101,,,,,100,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,324,,333,331,330,,332,,,,,,,,,,,,,,,,,353", ",,30,,,52,,,54,,32,,,,335,319,,,,,,,338,337,341,340,,79,73,75,76,77", "78,,,,74,80,,,,,,,56,,,53,,,293,83,63,64,65,,51,,,,57,58,,,,61,,59,60", "62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93", ",84,50,86,85,358,,88,95,96,,81,82,738,,333,331,330,,332,,,,,,,,,,,,", ",364,,,359,,,212,,,52,,,54,,,,,,335,732,,,,,,,338,337,341,340,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,293,83,63,64,65,,51,,,,57,58,,", ",61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,", "94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208", ",,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", "644,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,", "37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,", "217,,,,,,,289,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,324,,333,331", "330,,332,,,,,,,,,,,,,,,,,888,,,212,,,52,,,54,,,,,,335,,545,,,,,,338", "337,341,340,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,293,83,63,64", "65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89", "91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,", "61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,", "41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,", ",,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74", "80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257", "66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,259,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54", ",254,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,", ",37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255", "288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,", ",216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8", "51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,", "17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,", ",,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59", "60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,6,9,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30", ",,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,401", "56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,", ",,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65", ",51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,", ",17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,", ",,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77", "78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53", ",,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28", "27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,", ",79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57", "58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7", "41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,", ",,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74", "80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,6,9,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32", ",,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83", "63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,", ",,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57", "58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,749,,,,40,,,,,,,,216,,,,,79,73,75,76,77", "78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,", "52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,", ",53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,", "22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,", ",,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65", ",51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,", ",217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,", ",,,,,,,,,,,,,,208,,,212,,,52,,,54,,418,,,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61", ",59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,418,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66", "67,,,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,", ",40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83", "63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90", "89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,254,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,", ",,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,", ",,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53", ",,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28", "27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,", ",,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,", ",,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,", ",,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54", ",,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,", "217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,", ",,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59", "60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67", ",,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40", ",,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64", "65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89", "91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,", ",61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,", "9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,", "36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66", "67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,", ",40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63", "64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91", "92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,", ",,,,,,,,,,,,,,,,,208,,,212,,450,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,", "61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,", "41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,", ",,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74", "80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32", ",,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83", "63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,", ",,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57", "58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,", "52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,", ",53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,", ",255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40", ",,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64", "65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89", "91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,", "61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,", "41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,", ",,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74", "80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257", "66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54", ",,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,", "217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,", ",,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59", "60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,", "217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,", ",,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59", "60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,", "217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,", ",,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59", "60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,", "217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,", ",,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59", "60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,", ",57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,", "217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,", ",,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59", "60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67", ",,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40", ",,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64", "65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92", ",,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,", ",,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59", "60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30", ",,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,401", "56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67", ",,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,", ",40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83", "63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90", "89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79", "73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58", ",,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,", ",,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,", ",,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,", ",,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,", "52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,", ",53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,", "22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,", ",,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65", ",51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91", "92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,", ",,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61", ",59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,", "30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,", ",,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67", ",,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259", "88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,254", ",252,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,28,27", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,499,,,54,,254,,252,,40,,,", ",,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65", ",51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92", ",,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,", ",,,,,,,,,,,,,,,,,,208,,,212,,503,52,,,54,,254,,252,,40,,,,,,,,216,,", ",,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57", "58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,254,,,,40,,,,,,,,216,,,,,79,73,75,76,77", "78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60", "62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,", "84,50,86,85,87,259,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,", "212,,,52,,,54,,644,,252,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257", "66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54", ",,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27", "90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,36,,,278,,,52,,,54,,32,,,,40,,,,,,,,18,,", ",,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57", "58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,", "52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,", ",53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,", ",255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,358,,88", "95,96,,81,82,738,,333,331,330,,332,,,,,,,,,,,,,,,,,359,,,212,,,52,,", "54,,,,,,335,,,,,,,,338,337,341,340,,79,73,75,76,77,78,,,,74,80,,,,,", ",56,,,53,,,293,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67", ",,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,738,,333,331,330,,332,,,,,,,,,,,,,,,,,286,,,212,,,52", ",,54,,,,,,335,,,,,,,,338,337,341,340,,79,73,75,76,77,78,,,,74,80,,,", "511,,,56,,,53,,,293,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,278,,,52,,,54,,32", ",,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83", "63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90", "89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79", "73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58", ",,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41", ",9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,", ",36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257", "66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,,,,,,,,,,,,,,,,,,,,,,,286,,,283,,,52,,,54,,", ",,,,,,,,,,,,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,293,83,63", "64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91", "92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,", ",,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75", "76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61", ",59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212", ",,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56", ",,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,", ",,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,,,,,,,,,,,,,,,,,,,,,,,286,,,283,,,52,,,54,,,,,,,,,,,,", ",,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,293,83,63,64,65,,51", ",,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92", ",,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,", ",,,,,,,,,,,,,,,208,,,212,,,52,,,54,,418,,,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61", ",59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,,,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,", ",212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,", ",,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37", "83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,,,,,,,,,,,,,,,,,,,,,,,286,,,283,,,52,,,54,,,,,,,,,,,,,,,,,,,79,73", "75,76,77,78,,,,74,80,,,,,,,56,,,53,,,293,83,63,64,65,,51,,,,57,58,,", ",61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,", ",41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,", ",,,,208,,,212,,,52,,,54,,254,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62", "23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,", "54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53", ",,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28", "27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,", ",79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57", "58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7", "41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,", ",,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74", "80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32", ",,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83", "63,64,65,,51,,,,57,58,,,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,528,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,8,51,", ",,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,", ",,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,", ",,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,", "84,50,86,85,87,,88,95,96,,81,82,,-527,,,,,,,-527,-527,-527,,,-527,-527", "-527,,-527,,,,,,286,,,283,-527,,52,,,54,,,,,-527,-527,,-527,-527,-527", "-527,-527,,,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,-511,,53,,,293,83", "-511,-511,-511,-527,,-511,-511,-511,,-511,-527,,,,,265,-527,,-511,-511", "-511,,,,,,,,,-511,-511,,-511,-511,-511,-511,-511,-527,,,,,,,,,,,,,-527", ",-527,,,-527,,,,,-511,-511,-511,-511,-511,-511,-511,-511,-511,-511,-511", "-511,-511,-511,,,-511,-511,-511,,762,-511,,,-511,,,-511,,-511,,-511", ",-511,,-511,-511,-511,-511,-511,-511,-511,,-511,-511,-511,,,,,,,,,,", ",,-511,-511,-511,-511,-511,-511,,,-511,,-91,-511,-511,-511,,,,-511,-511", ",-511,,,,,,,,,-511,,,,,,,,,,,-511,-511,,-511,-511,-511,-511,-511,,,", ",,,,,,,,,,,,,,,,,,,,-511,-511,-511,-511,-511,-511,-511,-511,-511,-511", "-511,-511,-511,-511,,,-511,-511,-511,,625,,,,-511,,,,,,,-511,,-511,", "-511,-511,-511,-511,-511,-511,-511,,-511,-511,-511,,,,,,,,,,,,,-511", "-511,,-83,-437,-511,,,-511,,-91,-437,-437,-437,,,-437,-437,-437,,-437", ",,,,,,,-437,,-437,-437,-437,,,,,,,,-437,-437,,-437,-437,-437,-437,-437", ",,,,,,,,,,,,,,,,,,,,,,,-437,-437,-437,-437,-437,-437,-437,-437,-437", "-437,-437,-437,-437,-437,,,-437,-437,-437,,-437,-437,,,-437,,,-437,", "-437,,-437,,-437,,-437,-437,-437,-437,-437,-437,-437,,-437,,-437,,,", ",,,,,,,,,-437,-437,-437,-437,-274,-437,,-437,-437,,-437,-274,-274,-274", ",,,-274,-274,,-274,,,,,,,,,,,,,,,,,,,,-274,-274,,-274,-274,-274,-274", "-274,,,,,,,,,,,,,,,,,,,,,,,,-274,-274,-274,-274,-274,-274,-274,-274", "-274,-274,-274,-274,-274,-274,,,-274,-274,-274,,628,,,,-274,,,,,,,-274", ",-274,,-274,-274,-274,-274,-274,-274,-274,,-274,,-274,,,,,,,,,,,,,-274", "-274,,-85,-274,-274,,,-274,,-93,-274,-274,-274,,,-274,-274,-274,,-274", ",,,,,,,,,-274,-274,,,,,,,,,-274,-274,,-274,-274,-274,-274,-274,,,,,", ",,,,,,,,,,,,,,,,,,-274,-274,-274,-274,-274,-274,-274,-274,-274,-274", "-274,-274,-274,-274,,,-274,-274,-274,,628,-274,,,-274,,,-274,,-274,", "-274,,-274,,-274,-274,-274,-274,-274,-274,-274,,-274,,-274,,,,,,,,,", ",,,-274,-274,-274,-274,-434,-274,,,-274,,-93,-434,-434,-434,,,-434,-434", "-434,,-434,,,,,,,,-434,,-434,-434,-434,,,,,,,,-434,-434,,-434,-434,-434", "-434,-434,,,,,,,,,,,,,,,,,,,,,,,,-434,-434,-434,-434,-434,-434,-434", "-434,-434,-434,-434,-434,-434,-434,,,-434,-434,-434,,-434,-434,,,-434", ",,-434,,-434,,-434,,-434,,-434,-434,-434,-434,-434,-434,-434,,-434,", "-434,,,,,,,,,,,,,-434,-434,-434,-434,-513,-434,,-434,-434,,-434,-513", "-513,-513,,,-513,-513,-513,,-513,,,,,,,,,-513,-513,-513,-513,,,,,,,", "-513,-513,,-513,-513,-513,-513,-513,,,,,,,,,,,,,,,,,,,,,,,,-513,-513", "-513,-513,-513,-513,-513,-513,-513,-513,-513,-513,-513,-513,,,-513,-513", "-513,,,-513,,,-513,,,-513,,-513,,-513,,-513,,-513,-513,-513,-513,-513", "-513,-513,,-513,-513,-513,,,,,,,,,,,,,-513,-513,-513,-513,-269,-513", ",-513,-513,,,-269,-269,-269,,,-269,-269,-269,,-269,,,,,,,,,,-269,-269", "-269,,,,,,,,-269,-269,,-269,-269,-269,-269,-269,,,,,,,,,,,,,,,,,,,,", ",,,-269,-269,-269,-269,-269,-269,-269,-269,-269,-269,-269,-269,-269", "-269,,,-269,-269,-269,,,-269,,,-269,,,-269,,-269,,-269,,-269,,-269,-269", "-269,-269,-269,-269,-269,,-269,,-269,,,,,,,,,,,,,-269,-269,-269,-269", "-512,-269,,-269,-269,,,-512,-512,-512,,,-512,-512,-512,,-512,,,,,,,", ",-512,-512,-512,-512,,,,,,,,-512,-512,,-512,-512,-512,-512,-512,,,,", ",,,,,,,,,,,,,,,,,,,-512,-512,-512,-512,-512,-512,-512,-512,-512,-512", "-512,-512,-512,-512,,,-512,-512,-512,,,-512,,,-512,,,-512,,-512,,-512", ",-512,,-512,-512,-512,-512,-512,-512,-512,,-512,-512,-512,,,,,,,,,,", ",,-512,-512,-512,-512,-282,-512,,-512,-512,,,-282,-282,-282,,,-282,-282", "-282,,-282,,,,,,,,,,-282,-282,,,,,,,,,-282,-282,,-282,-282,-282,-282", "-282,,,,,,,,,,,,,,,,,,,,,,,,-282,-282,-282,-282,-282,-282,-282,-282", "-282,-282,-282,-282,-282,-282,,,-282,-282,-282,,,-282,,274,-282,,,-282", ",-282,,-282,,-282,,-282,-282,-282,-282,-282,-282,-282,,-282,,-282,,", ",,,,,,,,,,-282,-282,-282,-282,-370,-282,,,-282,,,-370,-370,-370,,,-370", "-370,-370,,-370,,,,,,,,,-370,-370,-370,,,,,,,,,-370,-370,,-370,-370", "-370,-370,-370,,,,,,,,,,,,,,,,,,,,,,,,-370,-370,-370,-370,-370,-370", "-370,-370,-370,-370,-370,-370,-370,-370,,,-370,-370,-370,,,-370,,265", "-370,,,-370,,-370,,-370,,-370,,-370,-370,-370,-370,-370,-370,-370,,-370", "-370,-370,,,,,,,,,,,,,-370,-370,-370,-370,-527,-370,,,-370,,,-527,-527", "-527,,,-527,-527,-527,,-527,,,,,,,,,-527,-527,-527,,,,,,,,,-527,-527", ",-527,-527,-527,-527,-527,,,,,,,,,,,,,,,,,,,,,,,,-527,-527,-527,-527", "-527,-527,-527,-527,-527,-527,-527,-527,-527,-527,,,-527,-527,-527,", ",-527,,265,-527,,,-527,,-527,,-527,,-527,,-527,-527,-527,-527,-527,-527", "-527,,-527,-527,-527,,,,,,,,,,,,,-527,-527,-527,-527,-527,-527,,,-527", ",,-527,-527,-527,,,-527,-527,-527,,-527,,,,,,,,,,-527,,,,,,,,,,-527", "-527,,-527,-527,-527,-527,-527,,,,,,717,430,,,718,,,,,,,,,142,143,,139", "121,122,123,130,127,129,,,124,125,,,-527,144,145,131,132,,,-527,,,265", ",265,-527,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,,", "146,-527,,,,,,,,,,,,,-527,,-527,,,-527,156,167,157,180,153,173,163,162", "188,191,178,161,160,155,181,189,190,165,154,168,172,174,166,159,,,,175", "182,177,176,169,179,164,152,171,170,183,184,185,186,187,151,158,149", "150,147,148,,111,113,,,112,,,,,,,,,142,143,,139,121,122,123,130,127", "129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137", "133,134,128,126,118,140,119,,,146,192,,,,,,,,,,80,156,167,157,180,153", "173,163,162,188,191,178,161,160,155,181,189,190,165,154,168,172,174", "166,159,,,,175,182,177,176,169,179,164,152,171,170,183,184,185,186,187", "151,158,149,150,147,148,,111,113,110,,112,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,,,146,192,,,,,,,,,,80,156,167", "157,180,153,173,163,162,188,191,178,161,160,155,181,189,190,165,154", "168,172,174,166,159,,,,175,182,177,176,169,179,164,152,171,170,183,184", "185,186,187,151,158,149,150,147,148,,111,113,,,112,,,,,,,,,142,143,", "139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,", ",136,135,,120,141,138,137,133,134,128,126,118,140,119,,,146,192,,,,", ",,,,,80,156,167,157,180,153,173,163,162,188,191,178,161,160,155,181", "189,190,165,154,168,172,174,166,159,,,,175,182,177,176,169,179,164,152", "171,170,183,184,185,186,187,151,158,149,150,147,148,,111,113,,,112,", ",,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131", "132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119", ",,146,192,,,,,,,,,,80,156,167,157,180,153,173,163,162,188,191,178,161", "160,155,181,189,190,165,154,168,172,174,166,159,,,,175,182,177,176,169", "179,164,152,171,170,183,184,185,186,187,151,158,149,150,147,148,,111", "113,,,112,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,", "144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126", "118,140,119,,,146,156,167,157,180,153,173,163,162,188,191,178,161,160", "155,181,189,190,165,154,168,172,174,166,159,,,,175,182,177,176,169,179", "164,152,171,170,183,184,185,186,187,151,158,149,150,147,148,,111,113", "395,394,112,,396,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125", ",,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128", "126,118,140,119,,,146,156,167,157,180,153,173,163,162,188,191,178,161", "160,155,181,189,190,165,154,168,172,174,166,159,,,,175,182,177,373,372", "374,371,152,171,170,183,184,185,186,187,151,158,149,150,369,370,,367", "113,86,85,368,,88,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125", ",,,144,145,131,132,,,,,,378,,,,,,,136,135,,120,141,138,137,133,134,128", "126,118,140,119,,,146,156,167,157,180,153,173,163,162,188,191,178,161", "160,155,181,189,190,165,154,168,172,174,166,159,,,,175,182,177,176,169", "179,164,152,171,170,183,184,185,186,187,151,158,149,150,147,148,,111", "113,395,394,112,,396,,,,,,,142,143,,139,121,122,123,130,127,129,,,124", "125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134", "128,126,118,140,119,432,436,146,,434,,,,,,,,,142,143,,139,121,122,123", "130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141", "138,137,133,134,128,126,118,140,119,672,430,146,,673,,,,,,,,,142,143", ",139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,265,", ",,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,426,430,146", ",427,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,265,,,,,,,136,135,,120,141,138,137,133,134,128,126,118", "140,119,675,436,146,,676,,,,,,,,,142,143,,139,121,122,123,130,127,129", ",,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133", "134,128,126,118,140,119,922,436,146,,923,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,487,430,146,,488,,,,,,,,,142", "143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,265", ",,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,724,436,146", ",856,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126,118,140", "119,631,436,146,,632,,,,,,,,,142,143,,139,121,122,123,130,127,129,,", "124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133", "134,128,126,118,140,119,487,430,146,,488,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,920,430,146,,921,,,,,,,,,142", "143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,265", ",,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,629,430,146", ",630,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,265,,,,,,,136,135,,120,141,138,137,133,134,128,126,118", "140,119,631,436,146,,632,,,,,,,,,142,143,,139,121,122,123,130,127,129", ",,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133", "134,128,126,118,140,119,487,430,146,,488,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,487,430,146,,488,,,,,,,,,142", "143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,", ",,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,487,430,146", ",488,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126,118,140", "119,719,436,146,,720,,,,,,,,,142,143,,139,121,122,123,130,127,129,,", "124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133", "134,128,126,118,140,119,724,436,146,,722,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,629,430,146,,630,,,,,,,,,142", "143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,265", ",,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,,,146"];
+      clist = ["63,64,65,8,51,566,-91,-93,57,58,837,203,204,61,678,59,60,62,23,24,66", "67,856,787,737,597,609,22,28,27,90,89,91,92,-92,734,17,597,397,398,602", "639,7,41,6,9,94,93,-95,84,50,86,85,87,270,88,95,96,639,81,82,265,38", "39,710,786,587,341,340,-64,543,-89,-522,-523,638,203,204,203,204,-92", "-88,298,299,-91,36,599,598,30,608,566,52,638,603,54,753,32,-90,599,598", "40,101,522,566,735,710,100,-75,18,-94,566,-83,-85,79,73,75,76,77,78", "101,566,565,74,80,100,-84,-90,63,64,65,56,51,-89,53,265,57,58,37,83", "-84,61,269,59,60,62,256,257,66,67,341,340,-94,770,-87,255,28,27,90,89", "91,92,639,-522,217,101,305,709,305,535,100,41,537,586,94,93,542,84,50", "86,85,87,259,88,95,96,-80,81,82,607,38,39,101,-84,-92,638,-92,100,-91", "-92,-91,655,-92,-91,101,101,565,709,656,100,100,-90,208,-90,-86,212", "-90,101,52,565,879,54,100,254,101,-82,565,40,-83,100,-84,-82,815,796", "101,216,565,-81,-84,100,79,73,75,76,77,78,409,710,305,74,80,411,410", "270,63,64,65,56,51,270,53,-445,57,58,37,83,-520,61,-445,59,60,62,256", "257,66,67,769,737,203,204,579,255,288,292,90,89,91,92,734,655,217,225", "-82,597,-522,-83,656,289,597,225,94,93,225,84,50,86,85,87,926,88,95", "96,446,81,82,927,-445,597,265,-437,341,340,101,101,265,-90,-437,100", "100,-82,222,-520,-83,793,224,223,305,-82,286,269,-83,283,73,-446,52", "269,101,54,709,578,74,100,-520,599,598,610,735,894,599,598,595,-95,737", "925,796,-445,79,73,75,76,77,78,-445,734,-437,74,80,599,598,600,63,64", "65,56,51,597,53,-440,57,58,293,83,-88,61,-440,59,60,62,256,257,66,67", "577,338,337,341,340,255,288,292,90,89,91,92,-268,611,217,-321,639,759", "-445,-268,522,41,-321,802,94,93,692,84,50,86,85,87,803,88,95,96,549", "81,82,735,38,39,552,599,598,604,514,583,200,638,262,401,-434,515,805", "201,-275,263,-81,-434,806,-86,208,-275,807,212,-89,-268,52,-94,-321", "54,338,337,341,340,535,40,552,537,-441,894,810,203,204,216,737,-441", "781,575,79,73,75,76,77,78,576,734,780,74,80,513,582,199,63,64,65,56", "51,-443,53,-275,57,58,37,83,-443,61,796,59,60,62,256,257,66,67,819,338", "337,341,340,255,288,292,90,89,91,92,635,-439,217,-275,-437,820,574,615", "-439,41,-275,-437,94,93,202,84,50,86,85,87,614,88,95,96,822,81,82,735", "38,39,617,225,229,234,235,236,231,233,241,242,237,238,-274,218,219,583", "101,239,240,-274,208,100,581,212,-523,-87,52,483,-275,54,619,562,222", "-95,228,40,224,223,220,221,232,230,226,216,227,341,340,620,79,73,75", "76,77,78,-276,561,525,74,80,442,243,-276,-227,526,101,56,443,-274,53", "100,582,-82,37,83,63,64,65,8,51,-90,848,849,57,58,850,95,96,61,-84,59", "60,62,23,24,66,67,-92,535,203,204,537,22,28,27,90,89,91,92,101,-276", "17,444,481,100,444,615,7,41,552,9,94,93,-446,84,50,86,85,87,-275,88", "95,96,-522,81,82,-275,38,39,824,225,229,234,235,236,231,233,241,242", "237,238,-274,218,219,-268,550,239,240,-274,36,-442,-268,30,-523,-80", "52,535,-442,54,534,32,222,-88,228,40,224,223,220,221,232,230,226,18", "227,-275,518,519,79,73,75,76,77,78,-274,592,-276,74,80,-254,243,-274", "593,-276,401,56,-523,-274,53,572,-268,573,37,83,63,64,65,225,51,-444", "101,549,57,58,546,100,-444,61,618,59,60,62,256,257,66,67,103,104,105", "106,107,255,288,292,90,89,91,92,222,-274,217,-276,224,223,220,221,796", "41,573,483,94,93,772,84,50,86,85,87,832,88,95,96,265,81,82,834,38,39", "837,225,229,234,235,236,231,233,241,242,237,238,838,218,219,203,204", "239,240,840,208,815,796,212,842,844,52,539,846,54,490,538,222,490,228", "40,224,223,220,221,232,230,226,216,227,-256,225,305,79,73,75,76,77,78", "692,225,524,74,80,523,243,636,63,64,65,56,51,-255,53,225,57,58,37,83", "265,61,305,59,60,62,23,24,66,67,103,104,105,106,107,22,28,27,90,89,91", "92,755,274,17,857,338,337,341,340,858,41,859,265,94,93,265,84,50,86", "85,87,225,88,95,96,244,81,82,516,38,39,862,225,229,234,235,236,231,233", "241,242,237,238,863,218,219,678,509,239,240,865,208,508,-254,212,869", "661,52,507,225,54,713,874,222,252,228,40,224,223,220,221,232,230,226", "18,227,-63,876,573,79,73,75,76,77,78,705,490,483,74,80,481,243,882,63", "64,65,56,51,884,53,885,57,58,37,83,305,61,479,59,60,62,23,24,66,67,103", "104,105,106,107,22,28,27,90,89,91,92,702,554,17,333,331,330,213,332", "448,41,447,700,94,93,898,84,50,86,85,87,-257,88,95,96,445,81,82,690", "38,39,899,225,229,234,235,236,231,233,241,242,237,238,901,218,219,412", "652,239,240,399,208,-523,552,212,305,911,52,912,388,54,385,686,222,917", "228,40,224,223,220,221,232,230,226,18,227,791,919,842,79,73,75,76,77", "78,842,844,685,74,80,305,243,684,63,64,65,56,51,297,53,657,57,58,37", "83,928,61,296,59,60,62,256,257,66,67,244,665,244,934,667,255,288,292", "90,89,91,92,-75,554,217,333,331,330,684,332,198,41,197,196,94,93,195", "84,50,86,85,87,259,88,95,96,678,81,82,944,38,39,842,225,229,234,235", "236,231,233,241,242,237,238,946,218,219,947,108,239,240,528,208,668", "97,212,670,,52,,,54,,644,222,,228,40,224,223,220,221,232,230,226,216", "227,,,,79,73,75,76,77,78,,,,74,80,,243,,63,64,65,56,51,,53,,57,58,37", "83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,", ",,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229,234", "235,236,231,233,241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,", ",54,,254,222,,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75", "76,77,78,,,,74,80,,243,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84", "50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233", "241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,225,54,,,222,,228", "40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,,74,80", "222,243,,-227,224,223,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61", ",59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231", "233,241,242,237,238,,218,219,,,239,240,,36,,,30,,,52,,,54,,32,222,,228", "40,224,223,220,221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80", ",243,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23", "24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242,237", "238,,218,219,,,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220", "221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,243,,63,64,65", "56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89", "91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",225,229,234,235,236,231,233,241,242,237,238,,218,219,,,239,240,,208", ",,212,213,,52,,,54,,,222,,228,40,224,223,220,221,232,230,226,18,227", ",,,79,73,75,76,77,78,,,,74,80,,243,,63,64,65,56,51,,53,,57,58,37,83", ",61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,", ",94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236", "231,233,241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54,,,222", ",228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,", "74,80,,243,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242,237", "238,,218,219,,,239,240,,208,,,212,,,52,,,54,,,222,,228,40,224,223,220", "221,232,230,226,216,227,,,,79,73,75,76,77,78,,,,74,80,,243,,,,,56,,", "53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,", "22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242,237,238,,218,219", ",,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220,221,232,230", "226,18,227,,,,79,73,75,76,77,78,,,,74,80,,243,,63,64,65,56,51,,53,,57", "58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229", "234,235,236,231,233,241,242,237,238,,218,219,,,239,240,,208,,,212,,", "52,,,54,,254,222,252,228,40,224,223,220,221,232,230,226,216,227,,,,79", "73,75,76,77,78,,,,74,80,,243,,63,64,65,56,51,,53,,57,58,37,83,,61,,59", "60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93", ",84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229,234,235,236,231", "233,241,242,237,238,,218,219,,,239,240,,208,,,212,,,52,,,54,,254,222", "252,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78", ",,,74,80,,243,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257", "66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,259,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241,242,237", "238,,218,219,,,239,240,,208,,,212,,,52,,,54,,254,222,252,228,40,224", "223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,,74,80,,243,", ",,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66", "67,,,,,,22,28,27,90,89,91,92,,554,17,333,331,330,,332,7,41,,9,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,554,,333,331,330,,332,554,557", "333,331,330,,332,,,560,,,36,,,30,,,52,,,54,,32,,,,40,,,324,557,333,331", "330,18,332,,557,560,79,73,75,76,77,78,812,,,74,80,,,,63,64,65,56,51", ",53,,57,58,37,83,,61,335,59,60,62,256,257,66,67,338,337,341,340,,255", "288,292,90,89,91,92,,225,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88", "95,96,,81,82,,38,39,,225,222,,,,224,223,220,221,,,,,,,,239,240,,208", ",,212,,,52,,,54,,,222,252,228,40,224,223,220,221,,,226,216,227,,,,79", "73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60", "62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93", ",84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,229,234,235,236,231", "233,241,242,237,238,,-543,-543,,,239,240,,208,,,212,,,52,,,54,,644,222", "252,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236,231,233,241", ",237,238,,,,,,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220", "221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,", ",,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28", "27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,225,229,234,235,236,231,233,241,242,237,238,,-543,-543,,", "239,240,,36,,,278,,,52,,,54,,32,222,,228,40,224,223,220,221,232,230", "226,18,227,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,289,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,324,,333,331,330", "225,332,,,,,,,,,,,,,,,239,240,286,,,283,,,52,,,54,,282,,222,,335,,224", "223,220,221,,,338,337,341,340,,79,73,75,76,77,78,774,,,74,80,,,,63,64", "65,56,51,,53,,57,58,293,83,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,747,,333,331,330,737,332,,,,,,,,,,734,,,,,,,286,,,212,,,52,,,54,", ",,,,335,732,,,,,,,338,337,341,340,,79,73,75,76,77,78,,,,74,80,,,,295", ",,56,,,53,,,,293,83,63,64,65,,51,,,735,57,58,,,,61,,59,60,62,256,257", "66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,747,,333,331,330,737,332,,,,,,,,,,734,,,,,,,696", ",,212,,,52,,,54,,,,,,335,732,,,,,,,338,337,341,340,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,,293,83,63,64,65,8,51,,,735,57,58,,,,61,,59", "60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,,,,,,,,,,,,,,,,239,240", ",36,,,30,,,52,,,54,,32,222,,228,40,224,223,220,221,,,226,18,227,,,,79", "73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58", ",,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41", ",9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225,229,234,235,236", "231,233,,,237,238,,,,,,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224", "223,220,221,232,230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56", ",,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,", ",,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,225,,,,,,,,,,,,,,,,239,240,,36,,,30,,,52,,,54,,32", "222,,228,40,224,223,220,221,,,226,18,227,,,,79,73,75,76,77,78,,,,74", "80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,", ",,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,225,,,,,,,,,,,,,,,,239,240,,208,,,212,,,52,,,54", ",,222,,228,40,224,223,220,221,,,226,216,227,,,,79,73,75,76,77,78,,,", "74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67", ",,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,225,-543,-543,-543,-543,231,233,,,-543,-543", ",,,,,239,240,,208,,,212,,,52,,,54,,,222,,228,40,224,223,220,221,232", "230,226,216,227,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53", ",57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92", ",,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,225", "-543,-543,-543,-543,231,233,,,-543,-543,,,,,,239,240,,208,,,212,,,52", ",,54,,,222,,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,225,-543,-543,-543,-543,231,233,,", "-543,-543,,,,,,239,240,,208,,,212,,,52,,,54,,644,222,252,228,40,224", "223,220,221,232,230,226,216,227,,,,79,73,75,76,77,78,,,,74,80,,,,,,", "56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67", ",,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,225,-543,-543,-543,-543,231,233,,,-543,-543,,,", ",,239,240,,36,,,30,,,52,,,54,,32,222,,228,40,224,223,220,221,232,230", "226,18,227,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217,", ",,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225,-543", "-543,-543,-543,231,233,,,-543,-543,,,,,,239,240,,208,,,212,,,52,,,54", ",254,222,,228,40,224,223,220,221,232,230,226,216,227,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,225,-543,-543,-543,-543,231,233,,,-543,-543", ",,,,,239,240,,208,,,212,,,52,,,54,,,222,,228,40,224,223,220,221,232", "230,226,18,227,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,", "57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,", ",217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225", ",,,,,,,,,,,,,,,239,240,,208,,,212,,,52,,,54,,254,222,,228,40,224,223", "220,221,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53", ",57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92", ",,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,225", ",,,,,,,,,,,,,,,239,240,,208,,,212,,,52,,,54,,,222,,228,40,224,223,220", "221,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57", "58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,,,,,,,", ",,,,,,,,,,,,208,,,212,,,52,,,54,,254,,,,40,,,,,,,,216,,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,", ",40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,", "57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67", ",,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40", ",,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,", ",41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,", ",,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74", "80,101,,,,,100,56,,,53,,,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,", "84,50,86,85,87,,88,95,96,,81,82,324,,333,331,330,,332,,,,,,,,,,,,,,", ",,353,,,30,,,52,,,54,,32,,,,335,,545,,,,,,338,337,341,340,,79,73,75", "76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,293,83,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,", "84,50,86,85,358,,88,95,96,,81,82,324,,333,331,330,,332,,,,,,,,,,,,,", "364,,,359,,,212,,,52,,,54,,,,,,335,319,,,,,,,338,337,341,340,,79,73", "75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,293,83,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53", ",,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22", "28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,", ",18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8", "51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,", "17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,", ",,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,644,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65", "56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,", ",,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61", ",59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41", ",,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,", "208,,,212,,,52,,,54,,758,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74", "80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,", ",22,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,", ",,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,", ",,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,", ",74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67", ",,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,747,,333,331,330,737,332,,,,,,,,,,734,,,,,,,906,,,212", ",,52,,,54,,,,,,335,,,,,,,,338,337,341,340,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,,293,83,63,64,65,8,51,,,735,57,58,,,,61,,59,60,62,23", "24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,6,9,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54", ",32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,401,56,,,53", ",,,37,83,63,64,65,,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28", "27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,", ",79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,", "59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212", ",,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64", "65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90", "89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79", "73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53", ",,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22", "28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,", ",18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8", "51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,", "17,,,,,,7,41,6,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,", ",,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24", "66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,", "53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91", "92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,", ",,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61", ",59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,", "30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,", ",,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67", ",,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40", ",,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217,,,,", ",,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,", ",,,,,208,,,212,,,52,,,54,,418,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67", ",,,,,22,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88", "95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,418,,,", "40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,", "57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87", "259,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", "254,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51", ",53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89", "91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73", "75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62", "256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,", "52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65", "56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89", "91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39", ",,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73", "75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62", "23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54", ",,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,", "53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92", ",,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,", ",,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56", "51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90", "89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79", "73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60", "62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,", "84,50,86,85,87,259,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,", "212,,,52,,,54,,254,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,", ",,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255", "288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,", ",216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37", "83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,", ",,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,", ",,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52", ",,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53", ",,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22", "28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,", ",18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83", ",61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,", "94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208", ",,212,,450,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80", ",,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,", "255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,", "53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91", "92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,", ",,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56", "51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90", "89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79", "73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60", "62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212", ",,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64", "65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,", ",,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61", ",59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41", ",,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,", "208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80", ",,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,", "255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,", "53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91", "92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,", ",,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56", "51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90", "89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79", "73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60", "62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212", ",,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64", "65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,", ",,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61", ",59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41", ",,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,", "208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80", ",,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,", "255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,", "53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91", "92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,", ",,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56", "51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90", "89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79", "73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60", "62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212", ",,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64", "65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,", ",,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61", ",59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41", ",,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,", "208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80", ",,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,", "255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60", "62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84", "50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52", ",,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65", "56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90", "89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,644,,252,,40,,,,,,,", "216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83", ",61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,", ",41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,", ",,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,", "74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67,", ",,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37", "83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,", ",,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,", ",,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37", "83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27", "90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,", ",79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,", "57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,", ",,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,", ",,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78", ",,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,,,,,,,,,,,,,,,,,,,,,,,286,,,283,,,52,,,54,,,,,", ",,,,,,,,,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "293,83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81,82,,38,39,,,,,,,,", ",,,,,,,,,,,,208,,,212,,,52,,,54,,254,,252,,40,,,,,,,,216,,,,,79,73,75", "76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86", "85,87,259,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,499", ",,54,,254,,252,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64", "65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,28,27", "90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,259,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,503,52,,,54,,254,,252,,40,", ",,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64", "65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91", "92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,", ",,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75", "76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61", ",59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,", "30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63", "64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27", "90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,", "38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,", "79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57", "58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7", "41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,", ",,,,36,,,278,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,", "74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67", ",,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,747,,333,331,330,737,332,,,,,,,,,,734,,,,,,,286,,,283", ",,52,,,54,,,,,,335,,,,,,,,338,337,341,340,,79,73,75,76,77,78,,,,74,80", ",,,,,,56,,,53,,,,293,83,63,64,65,8,51,,,735,57,58,,,,61,,59,60,62,23", "24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54", ",32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51", ",53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89", "91,92,,,217,,,,,,,289,,,94,93,,84,50,86,85,358,,88,95,96,,81,82,,,,", ",,,,,,,,,,,,,,,,,,,359,,,212,,,52,,,54,,,,,,,,,,,,,,,,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,293,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,,,,,,,,,,,,,,,,,,,,,,,286,,,212,,,52,,,54", ",,,,,,,,,,,,,,,,,,79,73,75,76,77,78,,,,74,80,,,,511,,,56,,,53,,,,293", "83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27", "90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82", ",38,39,,,,,,,,,,,,,,,,,,,,,36,,,278,,,52,,,54,,32,,,,40,,,,,,,,18,,", ",,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61", ",59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41", ",,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,", "208,,,212,,,52,,,54,,418,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74", "80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,", ",22,28,27,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95", "96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,", ",,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58", "37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217", ",,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,", ",,,,,,,,,208,,,212,,,52,,,54,,254,,,,40,,,,,,,,216,,,,,79,73,75,76,77", "78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,23,24,66", "67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,,41,,,94,93,,84,50,86,85,87,", "88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,", "40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57", "58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,", ",,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,", ",,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,", ",,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66", "67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85", "87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,", ",,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,", "53,,57,58,37,83,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92", ",,17,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,", ",,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,18,,,,,79,73,75,76", "77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256", "257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50", "86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52", ",,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56", "51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288,292,90", "89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38", "39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79", "73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60", "62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,289,,,94,93", ",84,50,86,85,87,,88,95,96,,81,82,,,,,,,,,,,,,,,,,,,,,,,,286,,,283,,", "52,,,54,,,,,,,,,,,,,,,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,", ",,293,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22", "28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,", ",18,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8", "51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,", "17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,", ",,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76", "77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51,,,,57,58,,,,61,", "59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17,,,,,,7,41,,9,94", "93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,", "30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77,78,,,,74,80,,,,63", "64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67,,,,,,255,288", "292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87,,88,95,96,,81", "82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216", ",,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53,,,,37,83,63,64,65,8,51", ",,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22,28,27,90,89,91,92,,,17", ",,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,", ",,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,,,18,,,,,79,73,75,76,77", "78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257", "66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86", "85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,528,,52", ",,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,,,,56,,,53", ",,,37,83,63,64,65,8,51,,,,57,58,,,,61,,59,60,62,23,24,66,67,,,,,,22", "28,27,90,89,91,92,,,17,,,,,,7,41,,9,94,93,,84,50,86,85,87,,88,95,96", ",81,82,,38,39,,,,,,,,,,,,,,,,,,,,,36,,,30,,,52,,,54,,32,,,,40,,,,,,", ",18,,,,,79,73,75,76,77,78,,,,74,80,,,,63,64,65,56,51,,53,,57,58,37,83", ",61,,59,60,62,256,257,66,67,,,,,,255,288,292,90,89,91,92,,,217,,,,,", ",41,,,94,93,,84,50,86,85,87,,88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,", ",,,,208,,,212,,,52,,,54,,,,,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,", "74,80,,,,63,64,65,56,51,,53,,57,58,37,83,,61,,59,60,62,256,257,66,67", ",,,,,255,288,292,90,89,91,92,,,217,,,,,,,41,,,94,93,,84,50,86,85,87", ",88,95,96,,81,82,,38,39,,,,,,,,,,,,,,,,,,,,,208,,,212,,,52,,,54,,254", ",,,40,,,,,,,,216,,,,,79,73,75,76,77,78,,,,74,80,,,,-437,,,56,,,53,-437", "-437,-437,37,83,-437,-437,-437,,-437,,,,,,,,-437,,-437,-437,-437,,,", ",,,,-437,-437,,-437,-437,-437,-437,-437,,,,,,,,,,,,,,,,,,,,,,,,-437", "-437,-437,-437,-437,-437,-437,-437,-437,-437,-437,-437,-437,-437,,,-437", "-437,-437,,-437,-437,,,-437,,,-437,,-437,,-437,,-437,,-437,-437,-437", "-437,-437,-437,-437,,-437,,-437,,,,,,,,,,,,,-437,-437,-437,-437,,-437", "-434,-437,-437,,,-437,,-434,-434,-434,,,-434,-434,-434,,-434,,,,,,,", "-434,,-434,-434,-434,,,,,,,,-434,-434,,-434,-434,-434,-434,-434,,,,", ",,,,,,,,,,,,,,,,,,,-434,-434,-434,-434,-434,-434,-434,-434,-434,-434", "-434,-434,-434,-434,,,-434,-434,-434,,-434,-434,,,-434,,,-434,,-434", ",-434,,-434,,-434,-434,-434,-434,-434,-434,-434,,-434,,-434,,,,,,,,", ",,,,-434,-434,-434,-434,,-434,-526,-434,-434,,,-434,,-526,-526,-526", ",,-526,-526,-526,,-526,,,,,,,,,-526,-526,-526,,,,,,,,,-526,-526,,-526", "-526,-526,-526,-526,,,,,,,,,,,,,,,,,,,,,,,,-526,-526,-526,-526,-526", "-526,-526,-526,-526,-526,-526,-526,-526,-526,,,-526,-526,-526,,771,-526", ",,-526,,,-526,,-526,,-526,,-526,,-526,-526,-526,-526,-526,-526,-526", ",-526,-526,-526,,,,,,,,,,,,,-526,-526,-526,-526,,-526,-526,,-526,,,-91", ",-526,-526,-526,,,,-526,-526,,-526,,,,,,,,,-526,,,,,,,,,,,-526,-526", ",-526,-526,-526,-526,-526,,,,,,,,,,,,,,,,,,,,,,,,-526,-526,-526,-526", "-526,-526,-526,-526,-526,-526,-526,-526,-526,-526,,,-526,-526,-526,", "625,,,,-526,,,,,,,-526,,-526,,-526,-526,-526,-526,-526,-526,-526,,-526", "-526,-526,,,,,,,,,,,,,-526,-526,,-83,,-526,-274,,-526,,,-91,,-274,-274", "-274,,,-274,-274,-274,,-274,,,,,,,,,,-274,-274,,,,,,,,,-274,-274,,-274", "-274,-274,-274,-274,,,,,,,,,,,,,,,,,,,,,,,,-274,-274,-274,-274,-274", "-274,-274,-274,-274,-274,-274,-274,-274,-274,,,-274,-274,-274,,628,-274", ",,-274,,,-274,,-274,,-274,,-274,,-274,-274,-274,-274,-274,-274,-274", ",-274,,-274,,,,,,,,,,,,,-274,-274,-274,-274,,-274,-274,,-274,,,-93,", "-274,-274,-274,,,,-274,-274,,-274,,,,,,,,,,,,,,,,,,,,-274,-274,,-274", "-274,-274,-274,-274,,,,,,,,,,,,,,,,,,,,,,,,-274,-274,-274,-274,-274", "-274,-274,-274,-274,-274,-274,-274,-274,-274,,,-274,-274,-274,,628,", ",,-274,,,,,,,-274,,-274,,-274,-274,-274,-274,-274,-274,-274,,-274,,-274", ",,,,,,,,,,,,-274,-274,,-85,,-274,-269,,-274,,,-93,,-269,-269,-269,,", "-269,-269,-269,,-269,,,,,,,,,,-269,-269,-269,,,,,,,,-269,-269,,-269", "-269,-269,-269,-269,,,,,,,,,,,,,,,,,,,,,,,,-269,-269,-269,-269,-269", "-269,-269,-269,-269,-269,-269,-269,-269,-269,,,-269,-269,-269,,,-269", ",,-269,,,-269,,-269,,-269,,-269,,-269,-269,-269,-269,-269,-269,-269", ",-269,,-269,,,,,,,,,,,,,-269,-269,-269,-269,-542,-269,,-269,-269,,,-542", "-542,-542,,,-542,-542,-542,,-542,,,,,,,,,-542,-542,-542,,,,,,,,,-542", "-542,,-542,-542,-542,-542,-542,,,,,,,,,,,,,,,,,,,,,,,,-542,-542,-542", "-542,-542,-542,-542,-542,-542,-542,-542,-542,-542,-542,,,-542,-542,-542", ",,-542,,265,-542,,,-542,,-542,,-542,,-542,,-542,-542,-542,-542,-542", "-542,-542,,-542,-542,-542,,,,,,,,,,,,,-542,-542,-542,-542,-528,-542", ",,-542,,,-528,-528,-528,,,-528,-528,-528,,-528,,,,,,,,,-528,-528,-528", "-528,,,,,,,,-528,-528,,-528,-528,-528,-528,-528,,,,,,,,,,,,,,,,,,,,", ",,,-528,-528,-528,-528,-528,-528,-528,-528,-528,-528,-528,-528,-528", "-528,,,-528,-528,-528,,,-528,,,-528,,,-528,,-528,,-528,,-528,,-528,-528", "-528,-528,-528,-528,-528,,-528,-528,-528,,,,,,,,,,,,,-528,-528,-528", "-528,-370,-528,,-528,-528,,,-370,-370,-370,,,-370,-370,-370,,-370,,", ",,,,,,-370,-370,-370,,,,,,,,,-370,-370,,-370,-370,-370,-370,-370,,,", ",,,,,,,,,,,,,,,,,,,,-370,-370,-370,-370,-370,-370,-370,-370,-370,-370", "-370,-370,-370,-370,,,-370,-370,-370,,,-370,,265,-370,,,-370,,-370,", "-370,,-370,,-370,-370,-370,-370,-370,-370,-370,,-370,-370,-370,,,,,", ",,,,,,,-370,-370,-370,-370,-282,-370,,,-370,,,-282,-282,-282,,,-282", "-282,-282,,-282,,,,,,,,,,-282,-282,,,,,,,,,-282,-282,,-282,-282,-282", "-282,-282,,,,,,,,,,,,,,,,,,,,,,,,-282,-282,-282,-282,-282,-282,-282", "-282,-282,-282,-282,-282,-282,-282,,,-282,-282,-282,,,-282,,274,-282", ",,-282,,-282,,-282,,-282,,-282,-282,-282,-282,-282,-282,-282,,-282,", "-282,,,,,,,,,,,,,-282,-282,-282,-282,-527,-282,,,-282,,,-527,-527,-527", ",,-527,-527,-527,,-527,,,,,,,,,-527,-527,-527,-527,,,,,,,,-527,-527", ",-527,-527,-527,-527,-527,,,,,,,,,,,,,,,,,,,,,,,,-527,-527,-527,-527", "-527,-527,-527,-527,-527,-527,-527,-527,-527,-527,,,-527,-527,-527,", ",-527,,,-527,,,-527,,-527,,-527,,-527,,-527,-527,-527,-527,-527,-527", "-527,,-527,-527,-527,,,,,,,,,,,,,-527,-527,-527,-527,-542,-527,,-527", "-527,,,-542,-542,-542,,,-542,-542,-542,,-542,,,,,,,,,,-542,,,,,,,,,", "-542,-542,,-542,-542,-542,-542,-542,,,,,,,,,,,,,-542,,,,,,,-542,-542", "-542,,,-542,-542,-542,,-542,,,,,,-542,,,,-542,,,-542,,,,,265,-542,-542", "-542,,-542,-542,-542,-542,-542,,,,,,,,,,,,,-542,,,,,,,,,,,,,-542,,-542", ",,-542,,,,-542,,,,,,,-542,,,,,265,-542,,,,,,,,,,,,,,,,,,,,,-542,,,,", ",,,,,,,,-542,,-542,,,-542,156,167,157,180,153,173,163,162,188,191,178", "161,160,155,181,189,190,165,154,168,172,174,166,159,,,,175,182,177,176", "169,179,164,152,171,170,183,184,185,186,187,151,158,149,150,147,148", ",111,113,,,112,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125", ",,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128", "126,118,140,119,,,146,192,,,,,,,,,,80,156,167,157,180,153,173,163,162", "188,191,178,161,160,155,181,189,190,165,154,168,172,174,166,159,,,,175", "182,177,176,169,179,164,152,171,170,183,184,185,186,187,151,158,149", "150,147,148,,111,113,,,112,,,,,,,,,142,143,,139,121,122,123,130,127", "129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137", "133,134,128,126,118,140,119,,,146,192,,,,,,,,,,80,156,167,157,180,153", "173,163,162,188,191,178,161,160,155,181,189,190,165,154,168,172,174", "166,159,,,,175,182,177,176,169,179,164,152,171,170,183,184,185,186,187", "151,158,149,150,147,148,,111,113,110,,112,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,,,146,192,,,,,,,,,,80,156,167", "157,180,153,173,163,162,188,191,178,161,160,155,181,189,190,165,154", "168,172,174,166,159,,,,175,182,177,176,169,179,164,152,171,170,183,184", "185,186,187,151,158,149,150,147,148,,111,113,,,112,,,,,,,,,142,143,", "139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,", ",136,135,,120,141,138,137,133,134,128,126,118,140,119,,,146,192,,,,", ",,,,,80,156,167,157,180,153,173,163,162,188,191,178,161,160,155,181", "189,190,165,154,168,172,174,166,159,,,,175,182,177,373,372,374,371,152", "171,170,183,184,185,186,187,151,158,149,150,369,370,,367,113,86,85,368", ",88,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,378,,,,,,,136,135,,120,141,138,137,133,134,128,126,118", "140,119,,,146,156,167,157,180,153,173,163,162,188,191,178,161,160,155", "181,189,190,165,154,168,172,174,166,159,,,,175,182,177,176,169,179,164", "152,171,170,183,184,185,186,187,151,158,149,150,147,148,,111,113,395", "394,112,,396,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,", ",144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126", "118,140,119,,,146,156,167,157,180,153,173,163,162,188,191,178,161,160", "155,181,189,190,165,154,168,172,174,166,159,,,,175,182,177,176,169,179", "164,152,171,170,183,184,185,186,187,151,158,149,150,147,148,,111,113", ",,112,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144", "145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126,118", "140,119,,,146,156,167,157,180,153,173,163,162,188,191,178,161,160,155", "181,189,190,165,154,168,172,174,166,159,,,,175,182,177,176,169,179,164", "152,171,170,183,184,185,186,187,151,158,149,150,147,148,,111,113,395", "394,112,,396,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,", ",144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126", "118,140,119,426,430,146,,427,,,,,,,,,142,143,,139,121,122,123,130,127", "129,,,124,125,,,,144,145,131,132,,,,,,265,,,,,,,136,135,,120,141,138", "137,133,134,128,126,118,140,119,487,430,146,,488,,,,,,,,,142,143,,139", "121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136", "135,,120,141,138,137,133,134,128,126,118,140,119,487,430,146,,488,,", ",,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131", "132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119", "672,430,146,,673,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124", "125,,,,144,145,131,132,,,,,,265,,,,,,,136,135,,120,141,138,137,133,134", "128,126,118,140,119,629,430,146,,630,,,,,,,,,142,143,,139,121,122,123", "130,127,129,,,124,125,,,,144,145,131,132,,,,,,265,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,631,436,146,,632,,,,,,,,,142", "143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,", ",,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,717,430,146", ",718,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,265,,,,,,,136,135,,120,141,138,137,133,134,128,126,118", "140,119,724,436,146,,871,,,,,,,,,142,143,,139,121,122,123,130,127,129", ",,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133", "134,128,126,118,140,119,719,436,146,,720,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120", "141,138,137,133,134,128,126,118,140,119,432,436,146,,434,,,,,,,,,142", "143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,", ",,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119,487,430,146", ",488,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134,128,126,118,140", "119,487,430,146,,488,,,,,,,,,142,143,,139,121,122,123,130,127,129,,", "124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133", "134,128,126,118,140,119,629,430,146,,630,,,,,,,,,142,143,,139,121,122", "123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,265,,,,,,,136,135", ",120,141,138,137,133,134,128,126,118,140,119,939,430,146,,940,,,,,,", ",,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132", ",,,,,265,,,,,,,136,135,,120,141,138,137,133,134,128,126,118,140,119", "631,436,146,,632,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124", "125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133,134", "128,126,118,140,119,724,436,146,,722,,,,,,,,,142,143,,139,121,122,123", "130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141", "138,137,133,134,128,126,118,140,119,941,436,146,,942,,,,,,,,,142,143", ",139,121,122,123,130,127,129,,,124,125,,,,144,145,131,132,,,,,,,,,,", ",,136,135,,120,141,138,137,133,134,128,126,118,140,119,487,430,146,", "488,,,,,,,,,142,143,,139,121,122,123,130,127,129,,,124,125,,,,144,145", "131,132,,,,,,265,,,,,,,136,135,,120,141,138,137,133,134,128,126,118", "140,119,675,436,146,,676,,,,,,,,,142,143,,139,121,122,123,130,127,129", ",,124,125,,,,144,145,131,132,,,,,,,,,,,,,136,135,,120,141,138,137,133", "134,128,126,118,140,119,,,146"];
 
-      racc_action_table = arr = Opal.get('Array').$new(24653, nil);
+      racc_action_table = arr = Opal.get('Array').$new(23675, nil);
 
       idx = 0;
 
@@ -17008,9 +17845,9 @@ if (i == null) i = nil;
           };
           return idx = idx['$+'](1);}, TMP_2.$$s = self, TMP_2), $a).call($b)}, TMP_1.$$s = self, TMP_1), $a).call($b);
 
-      clist = ["0,0,0,0,0,920,720,318,0,0,682,682,345,0,290,0,0,0,0,0,0,0,354,358,813", "605,873,0,0,0,0,0,0,0,209,500,0,353,351,718,719,667,0,0,0,0,0,0,477", "0,0,0,0,0,26,0,0,0,717,0,0,55,0,0,733,682,669,675,500,733,307,307,720", "569,363,490,358,577,667,290,671,477,209,358,0,605,605,0,358,860,0,37", "37,0,605,0,344,922,389,0,290,630,594,594,921,853,719,0,490,358,720,318", "0,0,0,0,0,0,920,26,920,0,0,920,812,345,354,345,813,0,345,358,0,675,675", "0,0,499,499,499,26,499,351,718,719,499,499,55,314,630,499,314,499,499", "499,499,499,499,499,307,389,568,717,350,499,499,499,499,499,499,499", "675,569,499,569,922,359,569,675,363,499,577,674,499,499,629,499,499", "499,499,499,594,499,499,499,386,499,499,363,499,499,494,860,363,860", "501,13,860,494,344,922,344,922,13,344,922,662,921,853,921,853,499,921", "853,499,889,499,499,15,15,499,673,889,629,499,71,499,812,501,812,812", "672,812,71,499,814,293,293,494,499,499,499,499,499,499,386,386,386,499", "499,568,13,568,287,887,568,499,659,35,499,287,887,499,499,513,513,513", "352,513,391,889,376,513,513,352,729,729,513,376,513,513,513,513,513", "513,513,384,677,673,384,763,513,513,513,513,513,513,513,672,35,513,83", "83,449,449,382,35,513,287,887,513,513,380,513,513,513,513,513,513,513", "513,513,352,513,513,673,513,513,342,391,391,391,673,676,814,672,814", "886,763,814,676,426,672,42,886,676,384,384,513,782,42,513,339,909,513", "374,782,513,449,513,909,680,374,513,729,382,382,382,285,729,681,513", "380,380,380,285,513,513,513,513,513,513,426,579,695,513,513,207,676", "426,579,695,886,513,654,14,513,445,42,513,513,522,522,522,782,522,25", "587,909,522,522,683,587,25,522,327,522,522,522,522,522,522,522,285,310", "343,343,310,522,522,522,522,522,522,522,207,14,522,579,695,653,275,416", "14,522,445,275,522,522,688,522,522,522,522,522,516,522,522,522,689,522", "522,516,522,522,692,416,416,416,416,416,416,416,416,416,416,416,722", "416,416,284,694,416,416,722,522,361,284,522,722,110,522,326,361,522", "110,110,416,696,416,522,416,416,416,416,416,416,416,522,416,516,697", "372,522,522,522,522,522,522,372,698,300,522,522,373,416,701,416,300", "727,522,373,722,522,727,284,522,522,523,523,523,361,523,369,3,370,523", "523,643,3,369,523,370,523,523,523,523,523,523,523,276,276,276,276,276", "523,523,523,523,523,523,523,348,368,523,206,300,348,641,634,368,523", "206,687,523,523,687,523,523,523,523,523,928,523,523,523,706,523,523", "928,523,523,712,634,634,634,634,634,634,634,634,634,634,634,923,634", "634,546,714,634,634,923,523,324,311,523,923,311,523,716,206,523,323", "896,634,896,634,523,634,634,634,634,634,634,634,523,634,928,385,367", "523,523,523,523,523,523,367,552,552,523,523,315,634,546,546,546,546", "523,798,923,523,618,297,523,523,483,483,483,371,483,910,910,775,483", "483,371,828,828,483,775,483,483,483,483,483,483,483,5,5,5,5,5,483,483", "483,483,483,483,483,388,427,483,618,297,798,798,798,798,483,618,297", "483,483,313,483,483,483,483,483,775,483,483,483,312,483,483,724,483", "483,725,658,658,658,658,658,658,658,658,658,658,658,427,658,658,704", "704,658,658,427,483,633,349,483,349,407,483,413,309,483,302,419,658", "626,658,483,658,658,658,658,658,658,658,483,658,734,735,736,483,483", "483,483,483,483,738,299,741,483,483,421,658,298,658,621,825,483,748", "425,483,292,289,483,483,481,481,481,288,481,286,742,742,481,481,742", "742,742,481,281,481,481,481,481,481,481,481,666,666,666,666,666,481", "481,481,481,481,481,481,280,279,481,825,825,825,825,277,616,481,433", "766,481,481,767,481,481,481,481,481,481,481,481,481,770,481,481,773", "481,481,774,476,476,476,476,476,476,476,476,476,476,476,609,476,476", "776,455,476,476,779,481,780,781,481,264,785,481,253,788,481,789,454", "476,481,476,481,476,476,476,476,476,476,476,481,476,250,456,457,481", "481,481,481,481,481,804,249,807,481,481,217,476,476,454,211,900,481", "454,454,481,210,458,481,481,479,479,479,208,479,816,819,820,479,479", "821,571,570,479,564,479,479,479,479,479,479,479,559,837,838,193,555", "479,479,479,479,479,479,479,845,846,479,900,900,900,900,97,544,479,78", "856,479,479,857,479,479,479,479,479,479,479,479,479,77,479,479,862,479", "479,863,759,759,759,759,759,759,759,759,759,759,759,531,759,759,530", "41,759,759,871,479,872,355,479,875,876,479,529,453,479,492,479,759,479", "759,479,759,759,759,759,759,759,759,479,759,36,520,34,479,479,479,479", "479,479,888,517,20,479,479,453,759,493,495,453,453,479,898,496,479,512", "905,479,479,524,524,524,473,524,12,11,10,524,524,9,510,914,524,916,524", "524,524,524,524,524,524,917,919,6,507,506,524,524,524,524,524,524,524", "473,1,524,502,473,473,473,473,,524,,,524,524,,524,524,524,524,524,,524", "524,524,,524,524,,524,524,,747,747,747,747,747,747,747,747,747,747,747", ",747,747,,,747,747,,524,,,524,,,524,,,524,,,747,,747,524,747,747,747", "747,747,747,747,524,747,,,,524,524,524,524,524,524,,,,524,524,,747,", ",,,524,,,524,,,524,524,528,528,528,472,528,,,,528,528,,,,528,,528,528", "528,528,528,528,528,,,,,,528,528,528,528,528,528,528,472,,528,,472,472", "472,472,,528,,,528,528,,528,528,528,528,528,,528,528,528,,528,528,,528", "528,,679,679,679,679,679,679,679,679,679,679,679,,679,679,,,679,679", ",528,,,528,,,528,,,528,,,679,,679,528,679,679,679,679,679,679,679,528", "679,,,,528,528,528,528,528,528,,,,528,528,,679,,,,,528,,,528,,,528,528", "906,906,906,,906,,,,906,906,,,,906,,906,906,906,906,906,906,906,,,,", ",906,906,906,906,906,906,906,,560,906,560,560,560,,560,,906,,,906,906", ",906,906,906,906,906,906,906,906,906,,906,906,,906,906,,752,752,752", "752,752,752,752,752,752,752,752,,752,752,,,752,752,,906,,,906,,,906", ",,906,,906,752,,752,906,752,752,752,752,752,752,752,906,752,,,,906,906", "906,906,906,906,,,,906,906,,752,,,,,906,,,906,,,906,906,534,534,534", ",534,,,,534,534,,,,534,,534,534,534,534,534,534,534,,,,,,534,534,534", "534,534,534,534,,803,534,803,803,803,,803,,534,,,534,534,,534,534,534", "534,534,534,534,534,534,,534,534,,534,534,,764,764,764,764,764,764,764", "764,764,764,764,,764,764,,,764,764,,534,,,534,,,534,,,534,,534,764,", "764,534,764,764,764,764,764,764,764,534,764,,,,534,534,534,534,534,534", ",,,534,534,,764,,,,,534,,,534,,,534,534,904,904,904,904,904,,,,904,904", ",,,904,,904,904,904,904,904,904,904,,,,,,904,904,904,904,904,904,904", ",,904,,,,,,904,904,,904,904,904,,904,904,904,904,904,,904,904,904,,904", "904,,904,904,,840,840,840,840,840,840,840,840,840,840,840,,840,840,", ",840,840,,904,,,904,,,904,,,904,,904,840,,840,904,840,840,840,840,840", "840,840,904,840,,,,904,904,904,904,904,904,,,,904,904,,840,,,,,904,", ",904,,,904,904,897,897,897,897,897,,,,897,897,,,,897,,897,897,897,897", "897,897,897,,,,,,897,897,897,897,897,897,897,,,897,,,,,,897,897,,897", "897,897,,897,897,897,897,897,,897,897,897,,897,897,,897,897,,424,424", "424,424,424,424,424,424,424,424,424,,424,424,,,424,424,,897,,,897,,", "897,,,897,,897,424,,424,897,424,424,424,424,424,424,424,897,424,,,,897", "897,897,897,897,897,,,,897,897,,424,,,,,897,,,897,,,897,897,17,17,17", ",17,,,,17,17,,,,17,,17,17,17,17,17,17,17,,,,,,17,17,17,17,17,17,17,", ",17,,,,,,,17,,,17,17,,17,17,17,17,17,,17,17,17,,17,17,,17,17,,754,754", "754,754,754,754,754,754,754,754,754,,754,754,,,754,754,,17,,,17,17,", "17,,,17,,,754,,754,17,754,754,754,754,754,754,754,17,754,,,,17,17,17", "17,17,17,,,,17,17,,754,,,,,17,,,17,,,17,17,18,18,18,,18,,,,18,18,,,", "18,,18,18,18,18,18,18,18,,,,,,18,18,18,18,18,18,18,,,18,,,,,,,18,,,18", "18,,18,18,18,18,18,,18,18,18,,18,18,,18,18,,757,757,757,757,757,757", "757,757,757,757,757,,757,757,,,757,757,,18,,,18,,,18,,,18,,,757,,757", "18,757,757,757,757,757,757,757,18,757,,,,18,18,18,18,18,18,,,,18,18", ",757,,,,,18,,,18,,,18,18,537,537,537,,537,,,,537,537,,,,537,,537,537", "537,537,537,537,537,,,,,,537,537,537,537,537,537,537,,,537,,,,,,,537", ",,537,537,,537,537,537,537,537,537,537,537,537,,537,537,,537,537,,19", "19,19,19,19,19,19,19,19,19,19,,19,19,,,19,19,,537,,,537,,,537,,,537", ",,19,,19,537,19,19,19,19,19,19,19,537,19,,,,537,537,537,537,537,537", ",,,537,537,,19,,,,,537,,,537,,,537,537,892,892,892,892,892,,,,892,892", ",,,892,,892,892,892,892,892,892,892,,,,,,892,892,892,892,892,892,892", ",,892,,,,,,892,892,,892,892,892,,892,892,892,892,892,,892,892,892,,892", "892,,892,892,,527,527,527,527,527,527,527,527,527,527,527,,527,527,", ",527,527,,892,,,892,,,892,,,892,,892,527,,527,892,527,527,527,527,527", "527,527,892,527,,,,892,892,892,892,892,892,,,,892,892,,527,,,,,892,", ",892,,,892,892,22,22,22,,22,,,,22,22,,,,22,,22,22,22,22,22,22,22,,,", ",,22,22,22,22,22,22,22,,,22,,,,,,,22,,,22,22,,22,22,22,22,22,22,22,22", "22,,22,22,,22,22,,439,439,439,439,439,439,439,439,439,439,439,,439,439", ",,439,439,,22,,,22,,,22,,,22,,22,439,22,439,22,439,439,439,439,439,439", "439,22,439,,,,22,22,22,22,22,22,,,,22,22,,439,,,,,22,,,22,,,22,22,23", "23,23,,23,,,,23,23,,,,23,,23,23,23,23,23,23,23,,,,,,23,23,23,23,23,23", "23,,,23,,,,,,,23,,,23,23,,23,23,23,23,23,23,23,23,23,,23,23,,23,23,", "247,247,247,247,247,247,247,247,247,247,247,,247,247,,,247,247,,23,", ",23,,,23,,,23,,23,247,23,247,23,247,247,247,247,247,247,247,23,247,", ",,23,23,23,23,23,23,,,,23,23,,247,,,,,23,,,23,,,23,23,24,24,24,,24,", ",,24,24,,,,24,,24,24,24,24,24,24,24,,,,,,24,24,24,24,24,24,24,,702,24", "702,702,702,,702,,24,,,24,24,,24,24,24,24,24,24,24,24,24,,24,24,,24", "24,335,,335,335,335,,335,,,702,,,,,,,,702,,,24,,,24,461,,24,,,24,,24", ",24,,24,,,335,,461,461,,24,,,335,,24,24,24,24,24,24,,461,,24,24,461", "461,461,461,,,24,,,24,,,24,24,542,542,542,542,542,,,,542,542,,,,542", ",542,542,542,542,542,542,542,,,,,,542,542,542,542,542,542,542,,557,542", "557,557,557,,557,542,542,,542,542,542,,542,542,542,542,542,,542,542", "542,,542,542,,542,542,,,,,,,,,,557,,,,,,,,557,,,542,,,542,,,542,,,542", ",542,,,,542,,,,,,,,542,,,,,542,542,542,542,542,542,,,,542,542,,,,,,", "542,,,542,,,542,542,543,543,543,543,543,,,,543,543,,,,543,,543,543,543", "543,543,543,543,,,,,,543,543,543,543,543,543,543,,,543,,,,,,543,543", ",543,543,543,,543,543,543,543,543,,543,543,543,,543,543,,543,543,,471", "471,471,471,471,471,471,,,471,471,,,,,,471,471,,543,,,543,,,543,,,543", ",543,471,,471,543,471,471,471,471,471,471,471,543,471,,,,543,543,543", "543,543,543,,,,543,543,,,,,,,543,,,543,,,543,543,549,549,549,,549,,", ",549,549,,,,549,,549,549,549,549,549,549,549,,,,,,549,549,549,549,549", "549,549,,,549,,,,,,,549,,,549,549,,549,549,549,549,549,,549,549,549", ",549,549,638,,638,638,638,,638,,,,,,,,,,,,,,,,,549,,,549,,,549,,,549", ",,,,,638,,,,,,,,638,638,638,638,,549,549,549,549,549,549,638,,,549,549", ",,,,,,549,,,549,,,549,549,563,563,563,563,563,,,,563,563,,,,563,,563", "563,563,563,563,563,563,,,,,,563,563,563,563,563,563,563,,,563,,,,,", "563,563,,563,563,563,,563,563,563,563,563,,563,563,563,,563,563,,563", "563,,467,467,467,467,467,467,467,,,467,467,,,,,,467,467,,563,,,563,", ",563,,,563,,563,467,,467,563,467,467,467,467,467,467,467,563,467,,,", "563,563,563,563,563,563,,,,563,563,,,,,,,563,,,563,,,563,563,30,30,30", "30,30,,,,30,30,,,,30,,30,30,30,30,30,30,30,,,,,,30,30,30,30,30,30,30", ",,30,,,,,,30,30,,30,30,30,,30,30,30,30,30,,30,30,30,,30,30,,30,30,,468", "468,468,468,468,468,468,,,468,468,,,,,,468,468,,30,,,30,,,30,,,30,,30", "468,,468,30,468,468,468,468,468,468,468,30,468,,,,30,30,30,30,30,30", ",,,30,30,,,,,,,30,,,30,,,30,30,31,31,31,,31,,,,31,31,,,,31,,31,31,31", "31,31,31,31,,,,,,31,31,31,31,31,31,31,,,31,,,,,,,31,,,31,31,,31,31,31", "31,31,,31,31,31,,31,31,590,,590,590,590,,590,,,,,,,,,,,,,,,,,31,,,31", ",,31,,,31,,31,,,,590,590,,,,,,,590,590,590,590,,31,31,31,31,31,31,,", ",31,31,,,,,,,31,,,31,,,31,31,32,32,32,,32,,,,32,32,,,,32,,32,32,32,32", "32,32,32,,,,,,32,32,32,32,32,32,32,,,32,,,,,,,32,,,32,32,,32,32,32,32", "32,,32,32,32,,32,32,550,,550,550,550,,550,,,,,,,,,,,,,,,,,32,,,32,,", "32,,,32,,,,,,550,,,,,,,,550,550,550,550,,32,32,32,32,32,32,,,,32,32", ",,,32,,,32,,,32,,,32,32,567,567,567,567,567,,,,567,567,,,,567,,567,567", "567,567,567,567,567,,,,,,567,567,567,567,567,567,567,,,567,,,,,,567", "567,,567,567,567,,567,567,567,567,567,,567,567,567,,567,567,,567,567", ",469,469,469,469,469,469,469,,,469,469,,,,,,469,469,,567,,,567,,,567", ",,567,,567,469,,469,567,469,469,469,469,469,469,469,567,469,,,,567,567", "567,567,567,567,,,,567,567,,,,,,,567,,,567,,,567,567,572,572,572,572", "572,,,,572,572,,,,572,,572,572,572,572,572,572,572,,,,,,572,572,572", "572,572,572,572,,,572,,,,,,572,572,,572,572,572,,572,572,572,572,572", ",572,572,572,,572,572,,572,572,,470,470,470,470,470,470,470,,,470,470", ",,,,,470,470,,572,,,572,,,572,,,572,,572,470,,470,572,470,470,470,470", "470,470,470,572,470,,,,572,572,572,572,572,572,,,,572,572,,,,,,,572", ",,572,,,572,572,885,885,885,885,885,,,,885,885,,,,885,,885,885,885,885", "885,885,885,,,,,,885,885,885,885,885,885,885,,,885,,,,,,885,885,,885", "885,885,,885,885,885,885,885,,885,885,885,,885,885,,885,885,,451,451", "451,451,451,451,451,451,451,451,451,,451,451,,,451,451,,885,,,885,,", "885,,,885,,885,451,,451,885,451,451,451,451,451,451,451,885,451,,,,885", "885,885,885,885,885,,,,885,885,,,,,,,885,,,885,,,885,885,883,883,883", ",883,,,,883,883,,,,883,,883,883,883,883,883,883,883,,,,,,883,883,883", "883,883,883,883,,,883,,,,,,,883,,,883,883,,883,883,883,883,883,,883", "883,883,,883,883,,883,883,,462,462,462,462,462,462,462,,,462,462,,,", ",,462,462,,883,,,883,,,883,,,883,,883,462,883,462,883,462,462,462,462", "462,462,462,883,462,,,,883,883,883,883,883,883,,,,883,883,,,,,,,883", ",,883,,,883,883,38,38,38,,38,,,,38,38,,,,38,,38,38,38,38,38,38,38,,", ",,,38,38,38,38,38,38,38,,,38,,,,,,,38,,,38,38,,38,38,38,38,38,,38,38", "38,,38,38,,38,38,,475,475,475,475,475,475,475,475,,475,475,,,,,,475", "475,,38,,,38,,,38,,,38,,,475,,475,38,475,475,475,475,475,475,475,38", "475,,,,38,38,38,38,38,38,,,,38,38,,,,,,,38,,,38,,,38,38,39,39,39,,39", ",,,39,39,,,,39,,39,39,39,39,39,39,39,,,,,,39,39,39,39,39,39,39,,,39", ",,,,,,39,,,39,39,,39,39,39,39,39,,39,39,39,,39,39,,39,39,,466,,,,,,", ",,,,,,,,,466,466,,39,,,39,,,39,,,39,,,466,,466,39,466,466,466,466,,", "466,39,466,,,,39,39,39,39,39,39,,,,39,39,,,,,,,39,,,39,,,39,39,40,40", "40,,40,,,,40,40,,,,40,,40,40,40,40,40,40,40,,,,,,40,40,40,40,40,40,40", ",,40,,,,,,,40,,,40,40,,40,40,40,40,40,,40,40,40,,40,40,,40,40,,474,474", "474,474,474,474,474,,,474,474,,,,,,474,474,,40,,,40,,,40,,,40,,,474", ",474,40,474,474,474,474,474,474,474,40,474,,,,40,40,40,40,40,40,,,,40", "40,,,,,,,40,,,40,,,40,40,868,868,868,868,868,,,,868,868,,,,868,,868", "868,868,868,868,868,868,,,,,,868,868,868,868,868,868,868,,,868,,,,,", "868,868,,868,868,868,,868,868,868,868,868,,868,868,868,,868,868,,868", "868,,465,,,,,,,,,,,,,,,,465,465,,868,,,868,,,868,,,868,,868,465,,465", "868,465,465,465,465,,,465,868,465,,,,868,868,868,868,868,868,,,,868", "868,,,,,,,868,,,868,,,868,868,574,574,574,,574,,,,574,574,,,,574,,574", "574,574,574,574,574,574,,,,,,574,574,574,574,574,574,574,,,574,,,,,", ",574,,,574,574,,574,574,574,574,574,574,574,574,574,,574,574,,574,574", ",464,,,,,,,,,,,,,,,,464,464,,574,,,574,,,574,,,574,,574,464,,464,574", "464,464,464,464,,,464,574,464,,,,574,574,574,574,574,574,,,,574,574", ",,,,,,574,,,574,,,574,574,582,582,582,,582,,,,582,582,,,,582,,582,582", "582,582,582,582,582,,,,,,582,582,582,582,582,582,582,,,582,,,,,,,582", ",,582,582,,582,582,582,582,582,582,582,582,582,,582,582,,582,582,,463", ",,,,,,,,,,,,,,,463,463,,582,,,582,,,582,,,582,,582,463,,463,582,463", "463,463,463,,,463,582,463,,,,582,582,582,582,582,582,,,,582,582,,,,", ",,582,,,582,,,582,582,52,52,52,,52,,,,52,52,,,,52,,52,52,52,52,52,52", "52,,,,,,52,52,52,52,52,52,52,,,52,,,,,,,52,,,52,52,,52,52,52,52,52,", "52,52,52,,52,52,,52,52,,452,452,452,452,452,452,452,452,452,452,452", ",452,452,,,452,452,,52,,,52,,,52,,,52,,,452,,452,52,452,452,452,452", "452,452,452,52,452,,,,52,52,52,52,52,52,,,,52,52,,,,,,,52,,,52,,,52", "52,53,53,53,,53,,,,53,53,,,,53,,53,53,53,53,53,53,53,,,,,,53,53,53,53", "53,53,53,,,53,,,,,,,53,,,53,53,,53,53,53,53,53,53,53,53,53,,53,53,,53", "53,,460,,,,,,,,,,,,,,,,460,460,,53,,,53,,,53,,,53,,53,460,,460,53,460", "460,460,460,,,,53,,,,,53,53,53,53,53,53,,,,53,53,,,,,,,53,,,53,,,53", "53,54,54,54,,54,,,,54,54,,,,54,,54,54,54,54,54,54,54,,,,,,54,54,54,54", "54,54,54,,,54,,,,,,,54,,,54,54,,54,54,54,54,54,54,54,54,54,,54,54,,54", "54,,459,,,,,,,,,,,,,,,,459,459,,54,,,54,,,54,,,54,,,459,,459,54,459", "459,459,459,,,,54,,,,,54,54,54,54,54,54,,,,54,54,,,,,,,54,,,54,,,54", "54,586,586,586,,586,,,,586,586,,,,586,,586,586,586,586,586,586,586,", ",,,,586,586,586,586,586,586,586,,,586,,,,,,,586,,,586,586,,586,586,586", "586,586,,586,586,586,,586,586,,586,586,,,,,,,,,,,,,,,,,,,,,586,,,586", ",,586,,,586,,,,,,586,,,,,,,,586,,,,,586,586,586,586,586,586,,,,586,586", ",,,,,,586,,,586,,,586,586,865,865,865,865,865,,,,865,865,,,,865,,865", "865,865,865,865,865,865,,,,,,865,865,865,865,865,865,865,,,865,,,,,", "865,865,,865,865,865,,865,865,865,865,865,,865,865,865,,865,865,,865", "865,,,,,,,,,,,,,,,,,,,,,865,,,865,,,865,,,865,,865,,,,865,,,,,,,,865", ",,,,865,865,865,865,865,865,,,,865,865,,,,,,,865,,,865,,,865,865,57", "57,57,,57,,,,57,57,,,,57,,57,57,57,57,57,57,57,,,,,,57,57,57,57,57,57", "57,,,57,,,,,,,57,,,57,57,,57,57,57,57,57,,57,57,57,,57,57,,57,57,,,", ",,,,,,,,,,,,,,,,,57,,,57,,,57,,,57,,,,,,57,,,,,,,,57,,,,,57,57,57,57", "57,57,,,,57,57,,,,,,,57,,,57,,,57,57,58,58,58,,58,,,,58,58,,,,58,,58", "58,58,58,58,58,58,,,,,,58,58,58,58,58,58,58,,,58,,,,,,,58,,,58,58,,58", "58,58,58,58,,58,58,58,,58,58,,58,58,,,,,,,,,,,,,,,,,,,,,58,,,58,,,58", ",,58,,,,,,58,,,,,,,,58,,,,,58,58,58,58,58,58,,,,58,58,,,,,,,58,,,58", ",,58,58,61,61,61,,61,,,,61,61,,,,61,,61,61,61,61,61,61,61,,,,,,61,61", "61,61,61,61,61,,,61,,,,,,,61,,,61,61,,61,61,61,61,61,,61,61,61,,61,61", ",61,61,,,,,,,,,,,,,,,,,,,,,61,,,61,,,61,,,61,,,,,,61,,,,,,,,61,,,,,61", "61,61,61,61,61,,,,61,61,61,,,,,61,61,,,61,,,61,61,62,62,62,,62,,,,62", "62,,,,62,,62,62,62,62,62,62,62,,,,,,62,62,62,62,62,62,62,,,62,,,,,,", "62,,,62,62,,62,62,62,62,62,,62,62,62,,62,62,56,,56,56,56,,56,,,,,,,", ",,,,,,,,,62,,,62,,,62,,,62,,62,,,,56,56,,,,,,,56,56,56,56,,62,62,62", "62,62,62,,,,62,62,,,,,,,62,,,62,,,62,62,63,63,63,,63,,,,63,63,,,,63", ",63,63,63,63,63,63,63,,,,,,63,63,63,63,63,63,63,,,63,,,,,,,63,,,63,63", ",63,63,63,63,63,,63,63,63,,63,63,879,,879,879,879,,879,,,,,,,,,,,,,", "63,,,63,,,63,,,63,,,63,,,,,,879,879,,,,,,,879,879,879,879,,63,63,63", "63,63,63,,,,63,63,,,,,,,63,,,63,,,63,63,588,588,588,,588,,,,588,588", ",,,588,,588,588,588,588,588,588,588,,,,,,588,588,588,588,588,588,588", ",,588,,,,,,,588,,,588,588,,588,588,588,588,588,,588,588,588,,588,588", ",588,588,,,,,,,,,,,,,,,,,,,,,588,,,588,,,588,,,588,,,,,,588,,,,,,,,588", ",,,,588,588,588,588,588,588,,,,588,588,,,,,,,588,,,588,,,588,588,864", "864,864,,864,,,,864,864,,,,864,,864,864,864,864,864,864,864,,,,,,864", "864,864,864,864,864,864,,,864,,,,,,,864,,,864,864,,864,864,864,864,864", ",864,864,864,,864,864,,864,864,,,,,,,,,,,,,,,,,,,,,864,,,864,,,864,", ",864,,864,,,,864,,,,,,,,864,,,,,864,864,864,864,864,864,,,,864,864,", ",,,,,864,,,864,,,864,864,448,448,448,,448,,,,448,448,,,,448,,448,448", "448,448,448,448,448,,,,,,448,448,448,448,448,448,448,,,448,,,,,,,448", ",,448,448,,448,448,448,448,448,,448,448,448,,448,448,,448,448,,,,,,", ",,,,,,,,,,,,,,448,,,448,,,448,,,448,,,,,,448,,,,,,,,448,,,,,448,448", "448,448,448,448,,,,448,448,,,,,,,448,,,448,,,448,448,854,854,854,,854", ",,,854,854,,,,854,,854,854,854,854,854,854,854,,,,,,854,854,854,854", "854,854,854,,,854,,,,,,,854,,,854,854,,854,854,854,854,854,,854,854", "854,,854,854,319,,319,319,319,,319,,,,,,,,,,,,,,,,,854,,,854,,,854,", ",854,,,,,,319,,319,,,,,,319,319,319,319,,854,854,854,854,854,854,,,", "854,854,,,,,,,854,,,854,,,854,854,447,447,447,,447,,,,447,447,,,,447", ",447,447,447,447,447,447,447,,,,,,447,447,447,447,447,447,447,,,447", ",,,,,,447,,,447,447,,447,447,447,447,447,,447,447,447,,447,447,,447", "447,,,,,,,,,,,,,,,,,,,,,447,,,447,,,447,,,447,,,,,,447,,,,,,,,447,,", ",,447,447,447,447,447,447,,,,447,447,,,,,,,447,,,447,,,447,447,446,446", "446,,446,,,,446,446,,,,446,,446,446,446,446,446,446,446,,,,,,446,446", "446,446,446,446,446,,,446,,,,,,,446,,,446,446,,446,446,446,446,446,", "446,446,446,,446,446,,446,446,,,,,,,,,,,,,,,,,,,,,446,,,446,,,446,,", "446,,,,,,446,,,,,,,,446,,,,,446,446,446,446,446,446,,,,446,446,,,,,", ",446,,,446,,,446,446,444,444,444,,444,,,,444,444,,,,444,,444,444,444", "444,444,444,444,,,,,,444,444,444,444,444,444,444,,,444,,,,,,,444,,,444", "444,,444,444,444,444,444,444,444,444,444,,444,444,,444,444,,,,,,,,,", ",,,,,,,,,,,444,,,444,,,444,,,444,,444,,,,444,,,,,,,,444,,,,,444,444", "444,444,444,444,,,,444,444,,,,,,,444,,,444,,,444,444,615,615,615,,615", ",,,615,615,,,,615,,615,615,615,615,615,615,615,,,,,,615,615,615,615", "615,615,615,,,615,,,,,,,615,,,615,615,,615,615,615,615,615,,615,615", "615,,615,615,,615,615,,,,,,,,,,,,,,,,,,,,,615,,,615,,,615,,,615,,,,", ",615,,,,,,,,615,,,,,615,615,615,615,615,615,,,,615,615,,,,,,,615,,,615", ",,615,615,850,850,850,850,850,,,,850,850,,,,850,,850,850,850,850,850", "850,850,,,,,,850,850,850,850,850,850,850,,,850,,,,,,850,850,,850,850", "850,,850,850,850,850,850,,850,850,850,,850,850,,850,850,,,,,,,,,,,,", ",,,,,,,,850,,,850,,,850,,,850,,850,,,,850,,,,,,,,850,,,,,850,850,850", "850,850,850,,,,850,850,,,,,,,850,,,850,,,850,850,99,99,99,99,99,,,,99", "99,,,,99,,99,99,99,99,99,99,99,,,,,,99,99,99,99,99,99,99,,,99,,,,,,99", "99,99,99,99,99,,99,99,99,99,99,,99,99,99,,99,99,,99,99,,,,,,,,,,,,,", ",,,,,,,99,,,99,,,99,,,99,,99,,,,99,,,,,,,,99,,,,,99,99,99,99,99,99,", ",,99,99,,,,,,99,99,,,99,,,99,99,103,103,103,,103,,,,103,103,,,,103,", "103,103,103,103,103,103,103,,,,,,103,103,103,103,103,103,103,,,103,", ",,,,,103,,,103,103,,103,103,103,103,103,,103,103,103,,103,103,,103,103", ",,,,,,,,,,,,,,,,,,,,103,,,103,,,103,,,103,,,,,,103,,,,,,,,103,,,,,103", "103,103,103,103,103,,,,103,103,,,,,,,103,,,103,,,103,103,104,104,104", ",104,,,,104,104,,,,104,,104,104,104,104,104,104,104,,,,,,104,104,104", "104,104,104,104,,,104,,,,,,,104,,,104,104,,104,104,104,104,104,,104", "104,104,,104,104,,104,104,,,,,,,,,,,,,,,,,,,,,104,,,104,,,104,,,104", ",,,,,104,,,,,,,,104,,,,,104,104,104,104,104,104,,,,104,104,,,,,,,104", ",,104,,,104,104,105,105,105,,105,,,,105,105,,,,105,,105,105,105,105", "105,105,105,,,,,,105,105,105,105,105,105,105,,,105,,,,,,,105,,,105,105", ",105,105,105,105,105,,105,105,105,,105,105,,105,105,,,,,,,,,,,,,,,,", ",,,,105,,,105,,,105,,,105,,,,,,105,,,,,,,,105,,,,,105,105,105,105,105", "105,,,,105,105,,,,,,,105,,,105,,,105,105,106,106,106,,106,,,,106,106", ",,,106,,106,106,106,106,106,106,106,,,,,,106,106,106,106,106,106,106", ",,106,,,,,,,106,,,106,106,,106,106,106,106,106,,106,106,106,,106,106", ",106,106,,,,,,,,,,,,,,,,,,,,,106,,,106,,,106,,,106,,,,,,106,,,,,,,,106", ",,,,106,106,106,106,106,106,,,,106,106,,,,,,,106,,,106,,,106,106,107", "107,107,107,107,,,,107,107,,,,107,,107,107,107,107,107,107,107,,,,,", "107,107,107,107,107,107,107,,,107,,,,,,107,107,,107,107,107,,107,107", "107,107,107,,107,107,107,,107,107,,107,107,,,,,,,,,,,,,,,,,,,,,107,", ",107,,,107,,,107,,107,,,,107,,,,,,,,107,,,,,107,107,107,107,107,107", ",,,107,107,,,,,,,107,,,107,,,107,107,108,108,108,108,108,,,,108,108", ",,,108,,108,108,108,108,108,108,108,,,,,,108,108,108,108,108,108,108", ",,108,,,,,,108,108,108,108,108,108,,108,108,108,108,108,,108,108,108", ",108,108,,108,108,,,,,,,,,,,,,,,,,,,,,108,,,108,,,108,,,108,,108,,,", "108,,,,,,,,108,,,,,108,108,108,108,108,108,,,,108,108,,,,,,,108,,,108", ",,108,108,841,841,841,,841,,,,841,841,,,,841,,841,841,841,841,841,841", "841,,,,,,841,841,841,841,841,841,841,,,841,,,,,,,841,,,841,841,,841", "841,841,841,841,,841,841,841,,841,841,,841,841,,,,,,,,,,,,,,,,,,,,,841", ",,841,,,841,,,841,,,,,,841,,,,,,,,841,,,,,841,841,841,841,841,841,,", ",841,841,,,,,,,841,,,841,,,841,841,617,617,617,,617,,,,617,617,,,,617", ",617,617,617,617,617,617,617,,,,,,617,617,617,617,617,617,617,,,617", ",,,,,,617,,,617,617,,617,617,617,617,617,,617,617,617,,617,617,,617", "617,,,,,,,,,,,,,,,,,,,,,617,,,617,,,617,,,617,,617,,,,617,,,,,,,,617", ",,,,617,617,617,617,617,617,,,,617,617,,,,,,,617,,,617,,,617,617,619", "619,619,,619,,,,619,619,,,,619,,619,619,619,619,619,619,619,,,,,,619", "619,619,619,619,619,619,,,619,,,,,,,619,,,619,619,,619,619,619,619,619", ",619,619,619,,619,619,,619,619,,,,,,,,,,,,,,,,,,,,,619,,,619,,,619,", ",619,,,,,,619,,,,,,,,619,,,,,619,619,619,619,619,619,,,,619,619,,,,", ",,619,,,619,,,619,619,195,195,195,195,195,,,,195,195,,,,195,,195,195", "195,195,195,195,195,,,,,,195,195,195,195,195,195,195,,,195,,,,,,195", "195,,195,195,195,,195,195,195,195,195,,195,195,195,,195,195,,195,195", ",,,,,,,,,,,,,,,,,,,,195,,,195,,,195,,,195,,195,,,,195,,,,,,,,195,,,", ",195,195,195,195,195,195,,,,195,195,,,,,,,195,,,195,,,195,195,196,196", "196,,196,,,,196,196,,,,196,,196,196,196,196,196,196,196,,,,,,196,196", "196,196,196,196,196,,,196,,,,,,,196,,,196,196,,196,196,196,196,196,", "196,196,196,,196,196,,196,196,,,,,,,,,,,,,,,,,,,,,196,,,196,,,196,,", "196,,196,,,,196,,,,,,,,196,,,,,196,196,196,196,196,196,,,,196,196,,", ",,,,196,,,196,,,196,196,197,197,197,,197,,,,197,197,,,,197,,197,197", "197,197,197,197,197,,,,,,197,197,197,197,197,197,197,,,197,,,,,,,197", ",,197,197,,197,197,197,197,197,,197,197,197,,197,197,,197,197,,,,,,", ",,,,,,,,,,,,,,197,,,197,,,197,,,197,,197,,,,197,,,,,,,,197,,,,,197,197", "197,197,197,197,,,,197,197,,,,,,,197,,,197,,,197,197,198,198,198,,198", ",,,198,198,,,,198,,198,198,198,198,198,198,198,,,,,,198,198,198,198", "198,198,198,,,198,,,,,,,198,,,198,198,,198,198,198,198,198,,198,198", "198,,198,198,,198,198,,,,,,,,,,,,,,,,,,,,,198,,,198,,,198,,,198,,,,", ",198,,,,,,,,198,,,,,198,198,198,198,198,198,,,,198,198,,,,,,,198,,,198", ",,198,198,199,199,199,,199,,,,199,199,,,,199,,199,199,199,199,199,199", "199,,,,,,199,199,199,199,199,199,199,,,199,,,,,,,199,,,199,199,,199", "199,199,199,199,199,199,199,199,,199,199,,199,199,,,,,,,,,,,,,,,,,,", ",,199,,,199,,,199,,,199,,199,,,,199,,,,,,,,199,,,,,199,199,199,199,199", "199,,,,199,199,,,,,,,199,,,199,,,199,199,620,620,620,,620,,,,620,620", ",,,620,,620,620,620,620,620,620,620,,,,,,620,620,620,620,620,620,620", ",,620,,,,,,,620,,,620,620,,620,620,620,620,620,,620,620,620,,620,620", ",620,620,,,,,,,,,,,,,,,,,,,,,620,,,620,,,620,,,620,,,,,,620,,,,,,,,620", ",,,,620,620,620,620,620,620,,,,620,620,,,,,,,620,,,620,,,620,620,625", "625,625,,625,,,,625,625,,,,625,,625,625,625,625,625,625,625,,,,,,625", "625,625,625,625,625,625,,,625,,,,,,,625,,,625,625,,625,625,625,625,625", ",625,625,625,,625,625,,625,625,,,,,,,,,,,,,,,,,,,,,625,,,625,,,625,", ",625,,,,,,625,,,,,,,,625,,,,,625,625,625,625,625,625,,,,625,625,,,,", ",,625,,,625,,,625,625,202,202,202,,202,,,,202,202,,,,202,,202,202,202", "202,202,202,202,,,,,,202,202,202,202,202,202,202,,,202,,,,,,,202,,,202", "202,,202,202,202,202,202,,202,202,202,,202,202,,202,202,,,,,,,,,,,,", ",,,,,,,,202,,,202,,,202,,,202,,,,,,202,,,,,,,,202,,,,,202,202,202,202", "202,202,,,,202,202,,,,,,,202,,,202,,,202,202,203,203,203,,203,,,,203", "203,,,,203,,203,203,203,203,203,203,203,,,,,,203,203,203,203,203,203", "203,,,203,,,,,,,203,,,203,203,,203,203,203,203,203,,203,203,203,,203", "203,,203,203,,,,,,,,,,,,,,,,,,,,,203,,,203,,,203,,,203,,,,,,203,,,,", ",,,203,,,,,203,203,203,203,203,203,,,,203,203,,,,,,,203,,,203,,,203", "203,204,204,204,,204,,,,204,204,,,,204,,204,204,204,204,204,204,204", ",,,,,204,204,204,204,204,204,204,,,204,,,,,,,204,,,204,204,,204,204", "204,204,204,,204,204,204,,204,204,,204,204,,,,,,,,,,,,,,,,,,,,,204,", ",204,,,204,,,204,,,,,,204,,,,,,,,204,,,,,204,204,204,204,204,204,,,", "204,204,,,,,,,204,,,204,,,204,204,628,628,628,,628,,,,628,628,,,,628", ",628,628,628,628,628,628,628,,,,,,628,628,628,628,628,628,628,,,628", ",,,,,,628,,,628,628,,628,628,628,628,628,,628,628,628,,628,628,,628", "628,,,,,,,,,,,,,,,,,,,,,628,,,628,,,628,,,628,,,,,,628,,,,,,,,628,,", ",,628,628,628,628,628,628,,,,628,628,,,,,,,628,,,628,,,628,628,829,829", "829,,829,,,,829,829,,,,829,,829,829,829,829,829,829,829,,,,,,829,829", "829,829,829,829,829,,,829,,,,,,,829,,,829,829,,829,829,829,829,829,", "829,829,829,,829,829,,829,829,,,,,,,,,,,,,,,,,,,,,829,,,829,,,829,,", "829,,,,,,829,,,,,,,,829,,,,,829,829,829,829,829,829,,,,829,829,,,,,", ",829,,,829,,,829,829,418,418,418,,418,,,,418,418,,,,418,,418,418,418", "418,418,418,418,,,,,,418,418,418,418,418,418,418,,,418,,,,,,,418,,,418", "418,,418,418,418,418,418,,418,418,418,,418,418,,418,418,,,,,,,,,,,,", ",,,,,,,,418,,,418,,,418,,,418,,,,,,418,,,,,,,,418,,,,,418,418,418,418", "418,418,,,,418,418,,,,,,,418,,,418,,,418,418,730,730,730,730,730,,,", "730,730,,,,730,,730,730,730,730,730,730,730,,,,,,730,730,730,730,730", "730,730,,,730,,,,,,730,730,,730,730,730,,730,730,730,730,730,,730,730", "730,,730,730,,730,730,,,,,,,,,,,,,,,,,,,,,730,,,730,,,730,,,730,,730", ",,,730,,,,,,,,730,,,,,730,730,730,730,730,730,,,,730,730,,,,,,,730,", ",730,,,730,730,636,636,636,,636,,,,636,636,,,,636,,636,636,636,636,636", "636,636,,,,,,636,636,636,636,636,636,636,,,636,,,,,,,636,,,636,636,", "636,636,636,636,636,,636,636,636,,636,636,,636,636,,,,,,,,,,,,,,,,,", ",,,636,,,636,,,636,,,636,,,,,,636,,,,,,,,636,,,,,636,636,636,636,636", "636,,,,636,636,,,,,,,636,,,636,,,636,636,809,809,809,809,809,,,,809", "809,,,,809,,809,809,809,809,809,809,809,,,,,,809,809,809,809,809,809", "809,,,809,,,,,,809,809,,809,809,809,,809,809,809,809,809,,809,809,809", ",809,809,,809,809,,,,,,,,,,,,,,,,,,,,,809,,,809,,,809,,,809,,809,,,", "809,,,,,,,,809,,,,,809,809,809,809,809,809,,,,809,809,,,,,,,809,,,809", ",,809,809,212,212,212,212,212,,,,212,212,,,,212,,212,212,212,212,212", "212,212,,,,,,212,212,212,212,212,212,212,,,212,,,,,,212,212,,212,212", "212,,212,212,212,212,212,,212,212,212,,212,212,,212,212,,,,,,,,,,,,", ",,,,,,,,212,,,212,,,212,,,212,,212,,,,212,,,,,,,,212,,,,,212,212,212", "212,212,212,,,,212,212,,,,,,,212,,,212,,,212,212,213,213,213,,213,,", ",213,213,,,,213,,213,213,213,213,213,213,213,,,,,,213,213,213,213,213", "213,213,,,213,,,,,,,213,,,213,213,,213,213,213,213,213,,213,213,213", ",213,213,,213,213,,,,,,,,,,,,,,,,,,,,,213,,,213,,213,213,,,213,,,,,", "213,,,,,,,,213,,,,,213,213,213,213,213,213,,,,213,213,,,,,,,213,,,213", ",,213,213,216,216,216,,216,,,,216,216,,,,216,,216,216,216,216,216,216", "216,,,,,,216,216,216,216,216,216,216,,,216,,,,,,,216,,,216,216,,216", "216,216,216,216,,216,216,216,,216,216,,216,216,,,,,,,,,,,,,,,,,,,,,216", ",,216,,,216,,,216,,,,,,216,,,,,,,,216,,,,,216,216,216,216,216,216,,", ",216,216,,,,,,,216,,,216,,,216,216,808,808,808,808,808,,,,808,808,,", ",808,,808,808,808,808,808,808,808,,,,,,808,808,808,808,808,808,808,", ",808,,,,,,808,808,,808,808,808,,808,808,808,808,808,,808,808,808,,808", "808,,808,808,,,,,,,,,,,,,,,,,,,,,808,,,808,,,808,,,808,,808,,,,808,", ",,,,,,808,,,,,808,808,808,808,808,808,,,,808,808,,,,,,,808,,,808,,,808", "808,218,218,218,,218,,,,218,218,,,,218,,218,218,218,218,218,218,218", ",,,,,218,218,218,218,218,218,218,,,218,,,,,,,218,,,218,218,,218,218", "218,218,218,,218,218,218,,218,218,,218,218,,,,,,,,,,,,,,,,,,,,,218,", ",218,,,218,,,218,,,,,,218,,,,,,,,218,,,,,218,218,218,218,218,218,,,", "218,218,,,,,,,218,,,218,,,218,218,219,219,219,,219,,,,219,219,,,,219", ",219,219,219,219,219,219,219,,,,,,219,219,219,219,219,219,219,,,219", ",,,,,,219,,,219,219,,219,219,219,219,219,,219,219,219,,219,219,,219", "219,,,,,,,,,,,,,,,,,,,,,219,,,219,,,219,,,219,,,,,,219,,,,,,,,219,,", ",,219,219,219,219,219,219,,,,219,219,,,,,,,219,,,219,,,219,219,220,220", "220,,220,,,,220,220,,,,220,,220,220,220,220,220,220,220,,,,,,220,220", "220,220,220,220,220,,,220,,,,,,,220,,,220,220,,220,220,220,220,220,", "220,220,220,,220,220,,220,220,,,,,,,,,,,,,,,,,,,,,220,,,220,,,220,,", "220,,,,,,220,,,,,,,,220,,,,,220,220,220,220,220,220,,,,220,220,,,,,", ",220,,,220,,,220,220,221,221,221,,221,,,,221,221,,,,221,,221,221,221", "221,221,221,221,,,,,,221,221,221,221,221,221,221,,,221,,,,,,,221,,,221", "221,,221,221,221,221,221,,221,221,221,,221,221,,221,221,,,,,,,,,,,,", ",,,,,,,,221,,,221,,,221,,,221,,,,,,221,,,,,,,,221,,,,,221,221,221,221", "221,221,,,,221,221,,,,,,,221,,,221,,,221,221,222,222,222,,222,,,,222", "222,,,,222,,222,222,222,222,222,222,222,,,,,,222,222,222,222,222,222", "222,,,222,,,,,,,222,,,222,222,,222,222,222,222,222,,222,222,222,,222", "222,,222,222,,,,,,,,,,,,,,,,,,,,,222,,,222,,,222,,,222,,,,,,222,,,,", ",,,222,,,,,222,222,222,222,222,222,,,,222,222,,,,,,,222,,,222,,,222", "222,223,223,223,,223,,,,223,223,,,,223,,223,223,223,223,223,223,223", ",,,,,223,223,223,223,223,223,223,,,223,,,,,,,223,,,223,223,,223,223", "223,223,223,,223,223,223,,223,223,,223,223,,,,,,,,,,,,,,,,,,,,,223,", ",223,,,223,,,223,,,,,,223,,,,,,,,223,,,,,223,223,223,223,223,223,,,", "223,223,,,,,,,223,,,223,,,223,223,224,224,224,,224,,,,224,224,,,,224", ",224,224,224,224,224,224,224,,,,,,224,224,224,224,224,224,224,,,224", ",,,,,,224,,,224,224,,224,224,224,224,224,,224,224,224,,224,224,,224", "224,,,,,,,,,,,,,,,,,,,,,224,,,224,,,224,,,224,,,,,,224,,,,,,,,224,,", ",,224,224,224,224,224,224,,,,224,224,,,,,,,224,,,224,,,224,224,225,225", "225,,225,,,,225,225,,,,225,,225,225,225,225,225,225,225,,,,,,225,225", "225,225,225,225,225,,,225,,,,,,,225,,,225,225,,225,225,225,225,225,", "225,225,225,,225,225,,225,225,,,,,,,,,,,,,,,,,,,,,225,,,225,,,225,,", "225,,,,,,225,,,,,,,,225,,,,,225,225,225,225,225,225,,,,225,225,,,,,", ",225,,,225,,,225,225,226,226,226,,226,,,,226,226,,,,226,,226,226,226", "226,226,226,226,,,,,,226,226,226,226,226,226,226,,,226,,,,,,,226,,,226", "226,,226,226,226,226,226,,226,226,226,,226,226,,226,226,,,,,,,,,,,,", ",,,,,,,,226,,,226,,,226,,,226,,,,,,226,,,,,,,,226,,,,,226,226,226,226", "226,226,,,,226,226,,,,,,,226,,,226,,,226,226,227,227,227,,227,,,,227", "227,,,,227,,227,227,227,227,227,227,227,,,,,,227,227,227,227,227,227", "227,,,227,,,,,,,227,,,227,227,,227,227,227,227,227,,227,227,227,,227", "227,,227,227,,,,,,,,,,,,,,,,,,,,,227,,,227,,,227,,,227,,,,,,227,,,,", ",,,227,,,,,227,227,227,227,227,227,,,,227,227,,,,,,,227,,,227,,,227", "227,228,228,228,,228,,,,228,228,,,,228,,228,228,228,228,228,228,228", ",,,,,228,228,228,228,228,228,228,,,228,,,,,,,228,,,228,228,,228,228", "228,228,228,,228,228,228,,228,228,,228,228,,,,,,,,,,,,,,,,,,,,,228,", ",228,,,228,,,228,,,,,,228,,,,,,,,228,,,,,228,228,228,228,228,228,,,", "228,228,,,,,,,228,,,228,,,228,228,229,229,229,,229,,,,229,229,,,,229", ",229,229,229,229,229,229,229,,,,,,229,229,229,229,229,229,229,,,229", ",,,,,,229,,,229,229,,229,229,229,229,229,,229,229,229,,229,229,,229", "229,,,,,,,,,,,,,,,,,,,,,229,,,229,,,229,,,229,,,,,,229,,,,,,,,229,,", ",,229,229,229,229,229,229,,,,229,229,,,,,,,229,,,229,,,229,229,230,230", "230,,230,,,,230,230,,,,230,,230,230,230,230,230,230,230,,,,,,230,230", "230,230,230,230,230,,,230,,,,,,,230,,,230,230,,230,230,230,230,230,", "230,230,230,,230,230,,230,230,,,,,,,,,,,,,,,,,,,,,230,,,230,,,230,,", "230,,,,,,230,,,,,,,,230,,,,,230,230,230,230,230,230,,,,230,230,,,,,", ",230,,,230,,,230,230,231,231,231,,231,,,,231,231,,,,231,,231,231,231", "231,231,231,231,,,,,,231,231,231,231,231,231,231,,,231,,,,,,,231,,,231", "231,,231,231,231,231,231,,231,231,231,,231,231,,231,231,,,,,,,,,,,,", ",,,,,,,,231,,,231,,,231,,,231,,,,,,231,,,,,,,,231,,,,,231,231,231,231", "231,231,,,,231,231,,,,,,,231,,,231,,,231,231,232,232,232,,232,,,,232", "232,,,,232,,232,232,232,232,232,232,232,,,,,,232,232,232,232,232,232", "232,,,232,,,,,,,232,,,232,232,,232,232,232,232,232,,232,232,232,,232", "232,,232,232,,,,,,,,,,,,,,,,,,,,,232,,,232,,,232,,,232,,,,,,232,,,,", ",,,232,,,,,232,232,232,232,232,232,,,,232,232,,,,,,,232,,,232,,,232", "232,233,233,233,,233,,,,233,233,,,,233,,233,233,233,233,233,233,233", ",,,,,233,233,233,233,233,233,233,,,233,,,,,,,233,,,233,233,,233,233", "233,233,233,,233,233,233,,233,233,,233,233,,,,,,,,,,,,,,,,,,,,,233,", ",233,,,233,,,233,,,,,,233,,,,,,,,233,,,,,233,233,233,233,233,233,,,", "233,233,,,,,,,233,,,233,,,233,233,234,234,234,,234,,,,234,234,,,,234", ",234,234,234,234,234,234,234,,,,,,234,234,234,234,234,234,234,,,234", ",,,,,,234,,,234,234,,234,234,234,234,234,,234,234,234,,234,234,,234", "234,,,,,,,,,,,,,,,,,,,,,234,,,234,,,234,,,234,,,,,,234,,,,,,,,234,,", ",,234,234,234,234,234,234,,,,234,234,,,,,,,234,,,234,,,234,234,235,235", "235,,235,,,,235,235,,,,235,,235,235,235,235,235,235,235,,,,,,235,235", "235,235,235,235,235,,,235,,,,,,,235,,,235,235,,235,235,235,235,235,", "235,235,235,,235,235,,235,235,,,,,,,,,,,,,,,,,,,,,235,,,235,,,235,,", "235,,,,,,235,,,,,,,,235,,,,,235,235,235,235,235,235,,,,235,235,,,,,", ",235,,,235,,,235,235,236,236,236,,236,,,,236,236,,,,236,,236,236,236", "236,236,236,236,,,,,,236,236,236,236,236,236,236,,,236,,,,,,,236,,,236", "236,,236,236,236,236,236,,236,236,236,,236,236,,236,236,,,,,,,,,,,,", ",,,,,,,,236,,,236,,,236,,,236,,,,,,236,,,,,,,,236,,,,,236,236,236,236", "236,236,,,,236,236,,,,,,,236,,,236,,,236,236,237,237,237,,237,,,,237", "237,,,,237,,237,237,237,237,237,237,237,,,,,,237,237,237,237,237,237", "237,,,237,,,,,,,237,,,237,237,,237,237,237,237,237,,237,237,237,,237", "237,,237,237,,,,,,,,,,,,,,,,,,,,,237,,,237,,,237,,,237,,,,,,237,,,,", ",,,237,,,,,237,237,237,237,237,237,,,,237,237,,,,,,,237,,,237,,,237", "237,238,238,238,,238,,,,238,238,,,,238,,238,238,238,238,238,238,238", ",,,,,238,238,238,238,238,238,238,,,238,,,,,,,238,,,238,238,,238,238", "238,238,238,,238,238,238,,238,238,,238,238,,,,,,,,,,,,,,,,,,,,,238,", ",238,,,238,,,238,,,,,,238,,,,,,,,238,,,,,238,238,238,238,238,238,,,", "238,238,,,,,,,238,,,238,,,238,238,239,239,239,,239,,,,239,239,,,,239", ",239,239,239,239,239,239,239,,,,,,239,239,239,239,239,239,239,,,239", ",,,,,,239,,,239,239,,239,239,239,239,239,,239,239,239,,239,239,,239", "239,,,,,,,,,,,,,,,,,,,,,239,,,239,,,239,,,239,,,,,,239,,,,,,,,239,,", ",,239,239,239,239,239,239,,,,239,239,,,,,,,239,,,239,,,239,239,240,240", "240,,240,,,,240,240,,,,240,,240,240,240,240,240,240,240,,,,,,240,240", "240,240,240,240,240,,,240,,,,,,,240,,,240,240,,240,240,240,240,240,", "240,240,240,,240,240,,240,240,,,,,,,,,,,,,,,,,,,,,240,,,240,,,240,,", "240,,,,,,240,,,,,,,,240,,,,,240,240,240,240,240,240,,,,240,240,,,,,", ",240,,,240,,,240,240,241,241,241,,241,,,,241,241,,,,241,,241,241,241", "241,241,241,241,,,,,,241,241,241,241,241,241,241,,,241,,,,,,,241,,,241", "241,,241,241,241,241,241,,241,241,241,,241,241,,241,241,,,,,,,,,,,,", ",,,,,,,,241,,,241,,,241,,,241,,,,,,241,,,,,,,,241,,,,,241,241,241,241", "241,241,,,,241,241,,,,,,,241,,,241,,,241,241,242,242,242,,242,,,,242", "242,,,,242,,242,242,242,242,242,242,242,,,,,,242,242,242,242,242,242", "242,,,242,,,,,,,242,,,242,242,,242,242,242,242,242,,242,242,242,,242", "242,,242,242,,,,,,,,,,,,,,,,,,,,,242,,,242,,,242,,,242,,,,,,242,,,,", ",,,242,,,,,242,242,242,242,242,242,,,,242,242,,,,,,,242,,,242,,,242", "242,243,243,243,,243,,,,243,243,,,,243,,243,243,243,243,243,243,243", ",,,,,243,243,243,243,243,243,243,,,243,,,,,,,243,,,243,243,,243,243", "243,243,243,,243,243,243,,243,243,,243,243,,,,,,,,,,,,,,,,,,,,,243,", ",243,,,243,,,243,,,,,,243,,,,,,,,243,,,,,243,243,243,243,243,243,,,", "243,243,,,,,,,243,,,243,,,243,243,378,378,378,,378,,,,378,378,,,,378", ",378,378,378,378,378,378,378,,,,,,378,378,378,378,378,378,378,,,378", ",,,,,,378,,,378,378,,378,378,378,378,378,,378,378,378,,378,378,,378", "378,,,,,,,,,,,,,,,,,,,,,378,,,378,,,378,,,378,,,,,,378,,,,,,,,378,,", ",,378,378,378,378,378,378,,,,378,378,,,,,,,378,,,378,,,378,378,806,806", "806,,806,,,,806,806,,,,806,,806,806,806,806,806,806,806,,,,,,806,806", "806,806,806,806,806,,,806,,,,,,,806,,,806,806,,806,806,806,806,806,", "806,806,806,,806,806,,806,806,,,,,,,,,,,,,,,,,,,,,806,,,806,,,806,,", "806,,,,,,806,,,,,,,,806,,,,,806,806,806,806,806,806,,,,806,806,,,,,", ",806,,,806,,,806,806,505,505,505,505,505,,,,505,505,,,,505,,505,505", "505,505,505,505,505,,,,,,505,505,505,505,505,505,505,,,505,,,,,,505", "505,,505,505,505,,505,505,505,505,505,,505,505,505,,505,505,,505,505", ",,,,,,,,,,,,,,,,,,,,505,,,505,,,505,,,505,,505,,,,505,,,,,,,,505,,,", ",505,505,505,505,505,505,,,,505,505,,,,,,505,505,,,505,,,505,505,252", "252,252,,252,,,,252,252,,,,252,,252,252,252,252,252,252,252,,,,,,252", "252,252,252,252,252,252,,,252,,,,,,,252,,,252,252,,252,252,252,252,252", ",252,252,252,,252,252,,252,252,,,,,,,,,,,,,,,,,,,,,252,,,252,,,252,", ",252,,,,,,252,,,,,,,,252,,,,,252,252,252,252,252,252,,,,252,252,,,,", ",,252,,,252,,,252,252,787,787,787,787,787,,,,787,787,,,,787,,787,787", "787,787,787,787,787,,,,,,787,787,787,787,787,787,787,,,787,,,,,,787", "787,,787,787,787,,787,787,787,787,787,,787,787,787,,787,787,,787,787", ",,,,,,,,,,,,,,,,,,,,787,,,787,,,787,,,787,,787,,,,787,,,,,,,,787,,,", ",787,787,787,787,787,787,,,,787,787,,,,,,,787,,,787,,,787,787,254,254", "254,,254,,,,254,254,,,,254,,254,254,254,254,254,254,254,,,,,,254,254", "254,254,254,254,254,,,254,,,,,,,254,,,254,254,,254,254,254,254,254,", "254,254,254,,254,254,,254,254,,,,,,,,,,,,,,,,,,,,,254,,,254,,,254,,", "254,,,,,,254,,,,,,,,254,,,,,254,254,254,254,254,254,,,,254,254,,,,,", ",254,,,254,,,254,254,259,259,259,,259,,,,259,259,,,,259,,259,259,259", "259,259,259,259,,,,,,259,259,259,259,259,259,259,,,259,,,,,,,259,,,259", "259,,259,259,259,259,259,,259,259,259,,259,259,,259,259,,,,,,,,,,,,", ",,,,,,,,259,,,259,,,259,,,259,,,,,,259,,,,,,,,259,,,,,259,259,259,259", "259,259,,,,259,259,,,,,,,259,,,259,,,259,259,640,640,640,640,640,,,", "640,640,,,,640,,640,640,640,640,640,640,640,,,,,,640,640,640,640,640", "640,640,,,640,,,,,,640,640,,640,640,640,,640,640,640,640,640,,640,640", "640,,640,640,,640,640,,,,,,,,,,,,,,,,,,,,,640,,,640,,,640,,,640,,640", ",,,640,,,,,,,,640,,,,,640,640,640,640,640,640,,,,640,640,,,,,,,640,", ",640,,,640,640,644,644,644,,644,,,,644,644,,,,644,,644,644,644,644,644", "644,644,,,,,,644,644,644,644,644,644,644,,,644,,,,,,,644,,,644,644,", "644,644,644,644,644,,644,644,644,,644,644,,644,644,,,,,,,,,,,,,,,,,", ",,,644,,,644,,,644,,,644,,,,,,644,,,,,,,,644,,,,,644,644,644,644,644", "644,,,,644,644,,,,,,,644,,,644,,,644,644,651,651,651,651,651,,,,651", "651,,,,651,,651,651,651,651,651,651,651,,,,,,651,651,651,651,651,651", "651,,,651,,,,,,651,651,,651,651,651,,651,651,651,651,651,,651,651,651", ",651,651,,651,651,,,,,,,,,,,,,,,,,,,,,651,,,651,,,651,,,651,,651,,,", "651,,,,,,,,651,,,,,651,651,651,651,651,651,,,,651,651,,,,,,,651,,,651", ",,651,651,265,265,265,,265,,,,265,265,,,,265,,265,265,265,265,265,265", "265,,,,,,265,265,265,265,265,265,265,,,265,,,,,,,265,,,265,265,,265", "265,265,265,265,265,265,265,265,,265,265,,265,265,,,,,,,,,,,,,,,,,,", ",,265,,,265,,,265,,,265,,265,,265,,265,,,,,,,,265,,,,,265,265,265,265", "265,265,,,,265,265,,,,,,,265,,,265,,,265,265,266,266,266,,266,,,,266", "266,,,,266,,266,266,266,266,266,266,266,,,,,,266,266,266,266,266,266", "266,,,266,,,,,,,266,,,266,266,,266,266,266,266,266,266,266,266,266,", "266,266,,266,266,,,,,,,,,,,,,,,,,,,,,266,,,266,,,266,,,266,,266,,266", ",266,,,,,,,,266,,,,,266,266,266,266,266,266,,,,266,266,,,,,,,266,,,266", ",,266,266,274,274,274,,274,,,,274,274,,,,274,,274,274,274,274,274,274", "274,,,,,,274,274,274,274,274,274,274,,,274,,,,,,,274,,,274,274,,274", "274,274,274,274,274,274,274,274,,274,274,,274,274,,,,,,,,,,,,,,,,,,", ",,274,,,274,,274,274,,,274,,274,,274,,274,,,,,,,,274,,,,,274,274,274", "274,274,274,,,,274,274,,,,,,,274,,,274,,,274,274,777,777,777,,777,,", ",777,777,,,,777,,777,777,777,777,777,777,777,,,,,,777,777,777,777,777", "777,777,,,777,,,,,,,777,,,777,777,,777,777,777,777,777,,777,777,777", ",777,777,,777,777,,,,,,,,,,,,,,,,,,,,,777,,,777,,,777,,,777,,777,,,", "777,,,,,,,,777,,,,,777,777,777,777,777,777,,,,777,777,,,,,,,777,,,777", ",,777,777,657,657,657,,657,,,,657,657,,,,657,,657,657,657,657,657,657", "657,,,,,,657,657,657,657,657,657,657,,,657,,,,,,,657,,,657,657,,657", "657,657,657,657,657,657,657,657,,657,657,,657,657,,,,,,,,,,,,,,,,,,", ",,657,,,657,,,657,,,657,,657,,657,,657,,,,,,,,657,,,,,657,657,657,657", "657,657,,,,657,657,,,,,,,657,,,657,,,657,657,762,762,762,,762,,,,762", "762,,,,762,,762,762,762,762,762,762,762,,,,,,762,762,762,762,762,762", "762,,,762,,,,,,,762,,,762,762,,762,762,762,762,762,,762,762,762,,762", "762,,762,762,,,,,,,,,,,,,,,,,,,,,762,,,762,,,762,,,762,,,,,,762,,,,", ",,,762,,,,,762,762,762,762,762,762,,,,762,762,,,,,,,762,,,762,,,762", "762,278,278,278,278,278,,,,278,278,,,,278,,278,278,278,278,278,278,278", ",,,,,278,278,278,278,278,278,278,,,278,,,,,,278,278,,278,278,278,,278", "278,278,278,278,,278,278,278,,278,278,,278,278,,,,,,,,,,,,,,,,,,,,,278", ",,278,,,278,,,278,,278,,,,278,,,,,,,,278,,,,,278,278,278,278,278,278", ",,,278,278,,,,,,,278,,,278,,,278,278,761,761,761,,761,,,,761,761,,,", "761,,761,761,761,761,761,761,761,,,,,,761,761,761,761,761,761,761,,", "761,,,,,,,761,,,761,761,,761,761,761,761,761,,761,761,761,,761,761,", "761,761,,,,,,,,,,,,,,,,,,,,,761,,,761,,,761,,,761,,,,,,761,,,,,,,,761", ",,,,761,761,761,761,761,761,,,,761,761,,,,,,,761,,,761,,,761,761,760", "760,760,,760,,,,760,760,,,,760,,760,760,760,760,760,760,760,,,,,,760", "760,760,760,760,760,760,,,760,,,,,,,760,,,760,760,,760,760,760,760,760", ",760,760,760,,760,760,,760,760,,,,,,,,,,,,,,,,,,,,,760,,,760,,,760,", ",760,,,,,,760,,,,,,,,760,,,,,760,760,760,760,760,760,,,,760,760,,,,", ",,760,,,760,,,760,760,366,366,366,,366,,,,366,366,,,,366,,366,366,366", "366,366,366,366,,,,,,366,366,366,366,366,366,366,,,366,,,,,,,366,,,366", "366,,366,366,366,366,366,,366,366,366,,366,366,823,,823,823,823,,823", ",,,,,,,,,,,,,,,,366,,,366,,,366,,,366,,,,,,823,,,,,,,,823,823,823,823", ",366,366,366,366,366,366,,,,366,366,,,,,,,366,,,366,,,366,366,282,282", "282,,282,,,,282,282,,,,282,,282,282,282,282,282,282,282,,,,,,282,282", "282,282,282,282,282,,,282,,,,,,,282,,,282,282,,282,282,282,282,282,", "282,282,282,,282,282,732,,732,732,732,,732,,,,,,,,,,,,,,,,,282,,,282", ",,282,,,282,,,,,,732,,,,,,,,732,732,732,732,,282,282,282,282,282,282", ",,,282,282,,,,282,,,282,,,282,,,282,282,283,283,283,283,283,,,,283,283", ",,,283,,283,283,283,283,283,283,283,,,,,,283,283,283,283,283,283,283", ",,283,,,,,,283,283,,283,283,283,,283,283,283,283,283,,283,283,283,,283", "283,,283,283,,,,,,,,,,,,,,,,,,,,,283,,,283,,,283,,,283,,283,,,,283,", ",,,,,,283,,,,,283,283,283,283,283,283,,,,283,283,,,,,,,283,,,283,,,283", "283,663,663,663,663,663,,,,663,663,,,,663,,663,663,663,663,663,663,663", ",,,,,663,663,663,663,663,663,663,,,663,,,,,,663,663,,663,663,663,,663", "663,663,663,663,,663,663,663,,663,663,,663,663,,,,,,,,,,,,,,,,,,,,,663", ",,663,,,663,,,663,,663,,,,663,,,,,,,,663,,,,,663,663,663,663,663,663", ",,,663,663,,,,,,,663,,,663,,,663,663,664,664,664,664,664,,,,664,664", ",,,664,,664,664,664,664,664,664,664,,,,,,664,664,664,664,664,664,664", ",,664,,,,,,664,664,,664,664,664,,664,664,664,664,664,,664,664,664,,664", "664,,664,664,,,,,,,,,,,,,,,,,,,,,664,,,664,,,664,,,664,,664,,,,664,", ",,,,,,664,,,,,664,664,664,664,664,664,,,,664,664,,,,,,,664,,,664,,,664", "664,668,668,668,,668,,,,668,668,,,,668,,668,668,668,668,668,668,668", ",,,,,668,668,668,668,668,668,668,,,668,,,,,,,668,,,668,668,,668,668", "668,668,668,,668,668,668,,668,668,,,,,,,,,,,,,,,,,,,,,,,,668,,,668,", ",668,,,668,,,,,,,,,,,,,,,,,,,668,668,668,668,668,668,,,,668,668,,,,", ",,668,,,668,,,668,668,347,347,347,,347,,,,347,347,,,,347,,347,347,347", "347,347,347,347,,,,,,347,347,347,347,347,347,347,,,347,,,,,,,347,,,347", "347,,347,347,347,347,347,,347,347,347,,347,347,,347,347,,,,,,,,,,,,", ",,,,,,,,347,,,347,,,347,,,347,,,,,,347,,,,,,,,347,,,,,347,347,347,347", "347,347,,,,347,347,,,,,,,347,,,347,,,347,347,346,346,346,,346,,,,346", "346,,,,346,,346,346,346,346,346,346,346,,,,,,346,346,346,346,346,346", "346,,,346,,,,,,,346,,,346,346,,346,346,346,346,346,,346,346,346,,346", "346,,346,346,,,,,,,,,,,,,,,,,,,,,346,,,346,,,346,,,346,,,,,,346,,,,", ",,,346,,,,,346,346,346,346,346,346,,,,346,346,,,,,,,346,,,346,,,346", "346,678,678,678,,678,,,,678,678,,,,678,,678,678,678,678,678,678,678", ",,,,,678,678,678,678,678,678,678,,,678,,,,,,,678,,,678,678,,678,678", "678,678,678,,678,678,678,,678,678,,,,,,,,,,,,,,,,,,,,,,,,678,,,678,", ",678,,,678,,,,,,,,,,,,,,,,,,,678,678,678,678,678,678,,,,678,678,,,,", ",,678,,,678,,,678,678,684,684,684,,684,,,,684,684,,,,684,,684,684,684", "684,684,684,684,,,,,,684,684,684,684,684,684,684,,,684,,,,,,,684,,,684", "684,,684,684,684,684,684,,684,684,684,,684,684,,684,684,,,,,,,,,,,,", ",,,,,,,,684,,,684,,,684,,,684,,684,,,,684,,,,,,,,684,,,,,684,684,684", "684,684,684,,,,684,684,,,,,,,684,,,684,,,684,684,750,750,750,,750,,", ",750,750,,,,750,,750,750,750,750,750,750,750,,,,,,750,750,750,750,750", "750,750,,,750,,,,,,,750,,,750,750,,750,750,750,750,750,,750,750,750", ",750,750,,750,750,,,,,,,,,,,,,,,,,,,,,750,,,750,,,750,,,750,,,,,,750", ",,,,,,,750,,,,,750,750,750,750,750,750,,,,750,750,,,,,,,750,,,750,,", "750,750,749,749,749,,749,,,,749,749,,,,749,,749,749,749,749,749,749", "749,,,,,,749,749,749,749,749,749,749,,,749,,,,,,,749,,,749,749,,749", "749,749,749,749,,749,749,749,,749,749,,749,749,,,,,,,,,,,,,,,,,,,,,749", ",,749,,,749,,,749,,,,,,749,,,,,,,,749,,,,,749,749,749,749,749,749,,", ",749,749,,,,,,,749,,,749,,,749,749,295,295,295,,295,,,,295,295,,,,295", ",295,295,295,295,295,295,295,,,,,,295,295,295,295,295,295,295,,,295", ",,,,,,295,,,295,295,,295,295,295,295,295,,295,295,295,,295,295,,,,,", ",,,,,,,,,,,,,,,,,,295,,,295,,,295,,,295,,,,,,,,,,,,,,,,,,,295,295,295", "295,295,295,,,,295,295,,,,,,,295,,,295,,,295,295,715,715,715,,715,,", ",715,715,,,,715,,715,715,715,715,715,715,715,,,,,,715,715,715,715,715", "715,715,,,715,,,,,,,715,,,715,715,,715,715,715,715,715,,715,715,715", ",715,715,,715,715,,,,,,,,,,,,,,,,,,,,,715,,,715,,,715,,,715,,715,,,", "715,,,,,,,,715,,,,,715,715,715,715,715,715,,,,715,715,,,,,,,715,,,715", ",,715,715,743,743,743,743,743,,,,743,743,,,,743,,743,743,743,743,743", "743,743,,,,,,743,743,743,743,743,743,743,,,743,,,,,,743,743,,743,743", "743,,743,743,743,743,743,,743,743,743,,743,743,,743,743,,,,,,,,,,,,", ",,,,,,,,743,,,743,,,743,,,743,,743,,,,743,,,,,,,,743,,,,,743,743,743", "743,743,743,,,,743,743,,,,,,,743,,,743,,,743,743,721,721,721,,721,,", ",721,721,,,,721,,721,721,721,721,721,721,721,,,,,,721,721,721,721,721", "721,721,,,721,,,,,,,721,,,721,721,,721,721,721,721,721,,721,721,721", ",721,721,,721,721,,,,,,,,,,,,,,,,,,,,,721,,,721,,,721,,,721,,,,,,721", ",,,,,,,721,,,,,721,721,721,721,721,721,,,,721,721,,,,,,,721,,,721,,", "721,721,726,726,726,726,726,,,,726,726,,,,726,,726,726,726,726,726,726", "726,,,,,,726,726,726,726,726,726,726,,,726,,,,,,726,726,,726,726,726", ",726,726,726,726,726,,726,726,726,,726,726,,726,726,,,,,,,,,,,,,,,,", ",,,,726,,,726,,,726,,,726,,726,,,,726,,,,,,,,726,,,,,726,726,726,726", "726,726,,,,726,726,,,,,,,726,,,726,,,726,726,731,731,731,731,731,,,", "731,731,,,,731,,731,731,731,731,731,731,731,,,,,,731,731,731,731,731", "731,731,,,731,,,,,,731,731,,731,731,731,,731,731,731,731,731,,731,731", "731,,731,731,,731,731,,,,,,,,,,,,,,,,,,,,,731,,,731,,,731,,,731,,731", ",,,731,,,,,,,,731,,,,,731,731,731,731,731,731,,,,731,731,,,,,,,731,", ",731,,,731,731,304,304,304,,304,,,,304,304,,,,304,,304,304,304,304,304", "304,304,,,,,,304,304,304,304,304,304,304,,,304,,,,,,,304,,,304,304,", "304,304,304,304,304,,304,304,304,,304,304,,304,304,,,,,,,,,,,,,,,,,", ",,,304,,,304,304,,304,,,304,,,,,,304,,,,,,,,304,,,,,304,304,304,304", "304,304,,,,304,304,,,,,,,304,,,304,,,304,304,306,306,306,306,306,,,", "306,306,,,,306,,306,306,306,306,306,306,306,,,,,,306,306,306,306,306", "306,306,,,306,,,,,,306,306,,306,306,306,,306,306,306,306,306,,306,306", "306,,306,306,,306,306,,,,,,,,,,,,,,,,,,,,,306,,,306,,,306,,,306,,306", ",,,306,,,,,,,,306,,,,,306,306,306,306,306,306,,,,306,306,,,,,,,306,", ",306,,,306,306,511,511,511,,511,,,,511,511,,,,511,,511,511,511,511,511", "511,511,,,,,,511,511,511,511,511,511,511,,,511,,,,,,,511,,,511,511,", "511,511,511,511,511,,511,511,511,,511,511,,489,,,,,,,489,489,489,,,489", "489,489,,489,,,,,,511,,,511,489,,511,,,511,,,,,489,489,,489,489,489", "489,489,,,,,,,511,511,511,511,511,511,,,,511,511,,,,,,,511,631,,511", ",,511,511,631,631,631,489,,631,631,631,,631,489,,,,,489,489,,631,631", "631,,,,,,,,,631,631,,631,631,631,631,631,489,,,,,,,,,,,,,489,,489,,", "489,,,,,631,631,631,631,631,631,631,631,631,631,631,631,631,631,,,631", "631,631,,631,631,,,631,,,631,,631,,631,,631,,631,631,631,631,631,631", "631,,631,631,631,,,,,,,,,,,,,631,631,631,631,432,631,,,631,,631,432", "432,432,,,,432,432,,432,,,,,,,,,432,,,,,,,,,,,432,432,,432,432,432,432", "432,,,,,,,,,,,,,,,,,,,,,,,,432,432,432,432,432,432,432,432,432,432,432", "432,432,432,,,432,432,432,,432,,,,432,,,,,,,432,,432,,432,432,432,432", "432,432,432,,432,432,432,,,,,,,,,,,,,432,432,,432,87,432,,,432,,432", "87,87,87,,,87,87,87,,87,,,,,,,,87,,87,87,87,,,,,,,,87,87,,87,87,87,87", "87,,,,,,,,,,,,,,,,,,,,,,,,87,87,87,87,87,87,87,87,87,87,87,87,87,87", ",,87,87,87,,87,87,,,87,,,87,,87,,87,,87,,87,87,87,87,87,87,87,,87,,87", ",,,,,,,,,,,,87,87,87,87,434,87,,87,87,,87,434,434,434,,,,434,434,,434", ",,,,,,,,,,,,,,,,,,,434,434,,434,434,434,434,434,,,,,,,,,,,,,,,,,,,,", ",,,434,434,434,434,434,434,434,434,434,434,434,434,434,434,,,434,434", "434,,434,,,,434,,,,,,,434,,434,,434,434,434,434,434,434,434,,434,,434", ",,,,,,,,,,,,434,434,,434,632,434,,,434,,434,632,632,632,,,632,632,632", ",632,,,,,,,,,,632,632,,,,,,,,,632,632,,632,632,632,632,632,,,,,,,,,", ",,,,,,,,,,,,,,632,632,632,632,632,632,632,632,632,632,632,632,632,632", ",,632,632,632,,632,632,,,632,,,632,,632,,632,,632,,632,632,632,632,632", "632,632,,632,,632,,,,,,,,,,,,,632,632,632,632,84,632,,,632,,632,84,84", "84,,,84,84,84,,84,,,,,,,,84,,84,84,84,,,,,,,,84,84,,84,84,84,84,84,", ",,,,,,,,,,,,,,,,,,,,,,84,84,84,84,84,84,84,84,84,84,84,84,84,84,,,84", "84,84,,84,84,,,84,,,84,,84,,84,,84,,84,84,84,84,84,84,84,,84,,84,,,", ",,,,,,,,,84,84,84,84,437,84,,84,84,,84,437,437,437,,,437,437,437,,437", ",,,,,,,,437,437,437,437,,,,,,,,437,437,,437,437,437,437,437,,,,,,,,", ",,,,,,,,,,,,,,,437,437,437,437,437,437,437,437,437,437,437,437,437,437", ",,437,437,437,,,437,,,437,,,437,,437,,437,,437,,437,437,437,437,437", "437,437,,437,437,437,,,,,,,,,,,,,437,437,437,437,50,437,,437,437,,,50", "50,50,,,50,50,50,,50,,,,,,,,,,50,50,50,,,,,,,,50,50,,50,50,50,50,50", ",,,,,,,,,,,,,,,,,,,,,,,50,50,50,50,50,50,50,50,50,50,50,50,50,50,,,50", "50,50,,,50,,,50,,,50,,50,,50,,50,,50,50,50,50,50,50,50,,50,,50,,,,,", ",,,,,,,50,50,50,50,436,50,,50,50,,,436,436,436,,,436,436,436,,436,,", ",,,,,,436,436,436,436,,,,,,,,436,436,,436,436,436,436,436,,,,,,,,,,", ",,,,,,,,,,,,,436,436,436,436,436,436,436,436,436,436,436,436,436,436", ",,436,436,436,,,436,,,436,,,436,,436,,436,,436,,436,436,436,436,436", "436,436,,436,436,436,,,,,,,,,,,,,436,436,436,436,28,436,,436,436,,,28", "28,28,,,28,28,28,,28,,,,,,,,,,28,28,,,,,,,,,28,28,,28,28,28,28,28,,", ",,,,,,,,,,,,,,,,,,,,,28,28,28,28,28,28,28,28,28,28,28,28,28,28,,,28", "28,28,,,28,,28,28,,,28,,28,,28,,28,,28,28,28,28,28,28,28,,28,,28,,,", ",,,,,,,,,28,28,28,28,27,28,,,28,,,27,27,27,,,27,27,27,,27,,,,,,,,,27", "27,27,,,,,,,,,27,27,,27,27,27,27,27,,,,,,,,,,,,,,,,,,,,,,,,27,27,27", "27,27,27,27,27,27,27,27,27,27,27,,,27,27,27,,,27,,27,27,,,27,,27,,27", ",27,,27,27,27,27,27,27,27,,27,27,27,,,,,,,,,,,,,27,27,27,27,428,27,", ",27,,,428,428,428,,,428,428,428,,428,,,,,,,,,428,428,428,,,,,,,,,428", "428,,428,428,428,428,428,,,,,,,,,,,,,,,,,,,,,,,,428,428,428,428,428", "428,428,428,428,428,428,428,428,428,,,428,428,428,,,428,,428,428,,,428", ",428,,428,,428,,428,428,428,428,428,428,428,,428,428,428,,,,,,,,,,,", ",428,428,428,428,486,428,,,428,,,486,486,486,,,486,486,486,,486,,,,", ",,,,,486,,,,,,,,,,486,486,,486,486,486,486,486,,,,,,575,575,,,575,,", ",,,,,,575,575,,575,575,575,575,575,575,575,,,575,575,,,486,575,575,575", "575,,,486,,,575,,486,486,,,,575,575,,575,575,575,575,575,575,575,575", "575,575,575,,,575,486,,,,,,,,,,,,,486,,486,,,486,8,8,8,8,8,8,8,8,8,8", "8,8,8,8,8,8,8,8,8,8,8,8,8,8,,,,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8", "8,8,,8,8,,,8,,,,,,,,,8,8,,8,8,8,8,8,8,8,,,8,8,,,,8,8,8,8,,,,,,,,,,,", ",8,8,,8,8,8,8,8,8,8,8,8,8,8,,,8,8,,,,,,,,,,8,7,7,7,7,7,7,7,7,7,7,7,7", "7,7,7,7,7,7,7,7,7,7,7,7,,,,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7", ",7,7,7,,7,,,,,,,,,7,7,,7,7,7,7,7,7,7,,,7,7,,,,7,7,7,7,,,,,,,,,,,,,7", "7,,7,7,7,7,7,7,7,7,7,7,7,,,7,7,,,,,,,,,,7,412,412,412,412,412,412,412", "412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412", ",,,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412", "412,412,412,412,,412,412,,,412,,,,,,,,,412,412,,412,412,412,412,412", "412,412,,,412,412,,,,412,412,412,412,,,,,,,,,,,,,412,412,,412,412,412", "412,412,412,412,412,412,412,412,,,412,412,,,,,,,,,,412,408,408,408,408", "408,408,408,408,408,408,408,408,408,408,408,408,408,408,408,408,408", "408,408,408,,,,408,408,408,408,408,408,408,408,408,408,408,408,408,408", "408,408,408,408,408,408,408,,408,408,,,408,,,,,,,,,408,408,,408,408", "408,408,408,408,408,,,408,408,,,,408,408,408,408,,,,,,,,,,,,,408,408", ",408,408,408,408,408,408,408,408,408,408,408,,,408,408,,,,,,,,,,408", "740,740,740,740,740,740,740,740,740,740,740,740,740,740,740,740,740", "740,740,740,740,740,740,740,,,,740,740,740,740,740,740,740,740,740,740", "740,740,740,740,740,740,740,740,740,740,740,,740,740,,,740,,,,,,,,,740", "740,,740,740,740,740,740,740,740,,,740,740,,,,740,740,740,740,,,,,,", ",,,,,,740,740,,740,740,740,740,740,740,740,740,740,740,740,,,740,192", "192,192,192,192,192,192,192,192,192,192,192,192,192,192,192,192,192", "192,192,192,192,192,192,,,,192,192,192,192,192,192,192,192,192,192,192", "192,192,192,192,192,192,192,192,192,192,,192,192,192,192,192,,192,,", ",,,,192,192,,192,192,192,192,192,192,192,,,192,192,,,,192,192,192,192", ",,,,,,,,,,,,192,192,,192,192,192,192,192,192,192,192,192,192,192,,,192", "65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65", "65,,,,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65", ",65,65,65,65,65,,65,,,,,,,65,65,,65,65,65,65,65,65,65,,,65,65,,,,65", "65,65,65,,,,,,65,,,,,,,65,65,,65,65,65,65,65,65,65,65,65,65,65,,,65", "79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79", "79,,,,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79", ",79,79,79,79,79,,79,,,,,,,79,79,,79,79,79,79,79,79,79,,,79,79,,,,79", "79,79,79,,,,,,,,,,,,,79,79,,79,79,79,79,79,79,79,79,79,79,79,201,201", "79,,201,,,,,,,,,201,201,,201,201,201,201,201,201,201,,,201,201,,,,201", "201,201,201,,,,,,,,,,,,,201,201,,201,201,201,201,201,201,201,201,201", "201,201,514,514,201,,514,,,,,,,,,514,514,,514,514,514,514,514,514,514", ",,514,514,,,,514,514,514,514,,,,,,514,,,,,,,514,514,,514,514,514,514", "514,514,514,514,514,514,514,200,200,514,,200,,,,,,,,,200,200,,200,200", "200,200,200,200,200,,,200,200,,,,200,200,200,200,,,,,,200,,,,,,,200", "200,,200,200,200,200,200,200,200,200,200,200,200,515,515,200,,515,,", ",,,,,,515,515,,515,515,515,515,515,515,515,,,515,515,,,,515,515,515", "515,,,,,,,,,,,,,515,515,,515,515,515,515,515,515,515,515,515,515,515", "908,908,515,,908,,,,,,,,,908,908,,908,908,908,908,908,908,908,,,908", "908,,,,908,908,908,908,,,,,,,,,,,,,908,908,,908,908,908,908,908,908", "908,908,908,908,908,583,583,908,,583,,,,,,,,,583,583,,583,583,583,583", "583,583,583,,,583,583,,,,583,583,583,583,,,,,,583,,,,,,,583,583,,583", "583,583,583,583,583,583,583,583,583,583,796,796,583,,796,,,,,,,,,796", "796,,796,796,796,796,796,796,796,,,796,796,,,,796,796,796,796,,,,,,", ",,,,,,796,796,,796,796,796,796,796,796,796,796,796,796,796,526,526,796", ",526,,,,,,,,,526,526,,526,526,526,526,526,526,526,,,526,526,,,,526,526", "526,526,,,,,,,,,,,,,526,526,,526,526,526,526,526,526,526,526,526,526", "526,262,262,526,,262,,,,,,,,,262,262,,262,262,262,262,262,262,262,,", "262,262,,,,262,262,262,262,,,,,,,,,,,,,262,262,,262,262,262,262,262", "262,262,262,262,262,262,907,907,262,,907,,,,,,,,,907,907,,907,907,907", "907,907,907,907,,,907,907,,,,907,907,907,907,,,,,,907,,,,,,,907,907", ",907,907,907,907,907,907,907,907,907,907,907,442,442,907,,442,,,,,,", ",,442,442,,442,442,442,442,442,442,442,,,442,442,,,,442,442,442,442", ",,,,,442,,,,,,,442,442,,442,442,442,442,442,442,442,442,442,442,442", "443,443,442,,443,,,,,,,,,443,443,,443,443,443,443,443,443,443,,,443", "443,,,,443,443,443,443,,,,,,,,,,,,,443,443,,443,443,443,443,443,443", "443,443,443,443,443,263,263,443,,263,,,,,,,,,263,263,,263,263,263,263", "263,263,263,,,263,263,,,,263,263,263,263,,,,,,,,,,,,,263,263,,263,263", "263,263,263,263,263,263,263,263,263,655,655,263,,655,,,,,,,,,655,655", ",655,655,655,655,655,655,655,,,655,655,,,,655,655,655,655,,,,,,,,,,", ",,655,655,,655,655,655,655,655,655,655,655,655,655,655,656,656,655,", "656,,,,,,,,,656,656,,656,656,656,656,656,656,656,,,656,656,,,,656,656", "656,656,,,,,,,,,,,,,656,656,,656,656,656,656,656,656,656,656,656,656", "656,576,576,656,,576,,,,,,,,,576,576,,576,576,576,576,576,576,576,,", "576,576,,,,576,576,576,576,,,,,,,,,,,,,576,576,,576,576,576,576,576", "576,576,576,576,576,576,581,581,576,,581,,,,,,,,,581,581,,581,581,581", "581,581,581,581,,,581,581,,,,581,581,581,581,,,,,,,,,,,,,581,581,,581", "581,581,581,581,581,581,581,581,581,581,525,525,581,,525,,,,,,,,,525", "525,,525,525,525,525,525,525,525,,,525,525,,,,525,525,525,525,,,,,,525", ",,,,,,525,525,,525,525,525,525,525,525,525,525,525,525,525,,,525"];
+      clist = ["0,0,0,0,0,875,719,720,0,0,888,729,729,0,669,0,0,0,0,0,0,0,772,662,842", "605,389,0,0,0,0,0,0,0,718,842,0,384,83,83,384,490,0,0,0,0,0,0,354,0", "0,0,0,0,55,0,0,0,501,0,0,674,0,0,569,659,363,842,842,667,318,772,719", "720,490,307,307,594,594,940,351,37,37,941,0,605,605,0,389,344,0,501", "385,0,605,0,939,384,384,0,729,445,821,842,823,729,667,0,577,868,719", "720,0,0,0,0,0,0,875,345,875,0,0,875,673,717,513,513,513,0,513,822,0", "677,513,513,0,0,718,513,55,513,513,513,513,513,513,513,552,552,445,630", "354,513,513,513,513,513,513,513,500,941,513,569,307,569,594,314,569", "513,314,363,513,513,318,513,513,513,513,513,513,513,513,513,351,513", "513,388,513,513,363,673,940,500,940,363,941,940,941,494,630,941,344", "823,344,823,494,344,823,939,513,939,577,513,939,821,513,821,821,513", "821,513,868,672,868,513,675,868,673,717,704,704,345,513,345,822,673", "345,513,513,513,513,513,513,110,568,494,513,513,110,110,290,511,511", "511,513,511,26,513,284,511,511,513,513,358,511,284,511,511,511,511,511", "511,511,629,834,682,682,359,511,511,511,511,511,511,511,834,784,511", "680,672,391,675,675,784,511,380,453,511,511,681,511,511,511,511,511", "905,511,511,511,209,511,511,905,284,382,290,358,834,834,275,733,26,629", "358,275,733,672,453,358,675,682,453,453,784,672,511,290,675,511,71,207", "511,26,568,511,568,355,71,568,358,391,391,391,834,840,380,380,380,209", "840,905,683,904,511,511,511,511,511,511,904,840,358,511,511,382,382", "382,522,522,522,511,522,386,511,373,522,522,511,511,207,522,373,522", "522,522,522,522,522,522,353,840,840,840,840,522,522,522,522,522,522", "522,287,407,522,42,477,618,904,287,297,522,42,688,522,522,807,522,522", "522,522,522,689,522,522,522,692,522,522,840,522,522,694,386,386,386", "285,695,13,477,25,350,367,285,695,13,579,25,618,367,696,297,522,579", "697,522,618,287,522,297,42,522,807,807,807,807,687,522,698,687,374,919", "701,449,449,522,919,374,654,352,522,522,522,522,522,522,352,919,653", "522,522,285,695,13,523,523,523,522,523,370,522,579,523,523,522,522,370", "523,706,523,523,523,523,523,523,523,712,919,919,919,919,523,523,523", "523,523,523,523,449,372,523,928,368,714,352,416,372,523,928,368,523", "523,14,523,523,523,523,523,413,523,523,523,716,523,523,919,523,523,419", "416,416,416,416,416,416,416,416,416,416,416,722,416,416,361,3,416,416", "722,523,3,361,523,722,14,523,643,928,523,426,342,416,14,416,523,416", "416,416,416,416,416,416,523,416,837,837,427,523,523,523,523,523,523", "791,339,300,523,523,206,416,791,416,300,727,523,206,722,523,727,361", "426,523,523,505,505,505,505,505,426,751,751,505,505,751,751,751,505", "427,505,505,505,505,505,505,505,427,311,15,15,311,505,505,505,505,505", "505,505,348,791,505,300,641,348,206,634,505,505,327,505,505,505,35,505", "505,505,505,505,516,505,505,505,724,505,505,516,505,505,725,634,634", "634,634,634,634,634,634,634,634,634,676,634,634,907,326,634,634,676", "505,371,907,505,676,35,505,310,371,505,310,505,634,35,634,505,634,634", "634,634,634,634,634,505,634,516,293,293,505,505,505,505,505,505,942", "376,947,505,505,421,634,942,376,947,505,505,942,676,505,349,907,349", "505,505,524,524,524,472,524,369,587,324,524,524,323,587,369,524,425", "524,524,524,524,524,524,524,5,5,5,5,5,524,524,524,524,524,524,524,472", "942,524,947,472,472,472,472,914,524,914,315,524,524,633,524,524,524", "524,524,736,524,524,524,433,524,524,740,524,524,741,476,476,476,476", "476,476,476,476,476,476,476,743,476,476,343,343,476,476,744,524,929", "929,524,745,747,524,313,750,524,626,312,476,621,476,524,476,476,476", "476,476,476,476,524,476,757,455,309,524,524,524,524,524,524,546,302", "299,524,524,298,476,476,499,499,499,524,499,616,524,456,499,499,524", "524,292,499,289,499,499,499,499,499,499,499,276,276,276,276,276,499", "499,499,499,499,499,499,609,288,499,775,546,546,546,546,776,499,779", "782,499,499,783,499,499,499,499,499,457,499,499,499,785,499,499,286", "499,499,788,439,439,439,439,439,439,439,439,439,439,439,789,439,439", "790,281,439,439,794,499,280,797,499,798,499,499,279,458,499,571,813", "439,499,439,499,439,439,439,439,439,439,439,499,439,277,816,570,499", "499,499,499,499,499,564,264,253,499,499,250,439,825,528,528,528,499", "528,828,499,829,528,528,499,499,830,528,249,528,528,528,528,528,528", "528,666,666,666,666,666,528,528,528,528,528,528,528,559,812,528,812", "812,812,217,812,211,528,210,555,528,528,852,528,528,528,528,528,853", "528,528,528,208,528,528,544,528,528,860,679,679,679,679,679,679,679", "679,679,679,679,861,679,679,193,492,679,679,97,528,871,872,528,493,877", "528,878,78,528,77,531,679,886,679,528,679,679,679,679,679,679,679,528", "679,671,891,892,528,528,528,528,528,528,893,894,530,528,528,41,679,529", "534,534,534,528,534,36,528,495,534,534,528,528,906,534,34,534,534,534", "534,534,534,534,496,502,20,916,506,534,534,534,534,534,534,534,507,560", "534,560,560,560,924,560,12,534,11,10,534,534,9,534,534,534,534,534,534", "534,534,534,520,534,534,933,534,534,935,763,763,763,763,763,763,763", "763,763,763,763,936,763,763,938,6,763,763,517,534,510,1,534,512,,534", ",,534,,534,763,,763,534,763,763,763,763,763,763,763,534,763,,,,534,534", "534,534,534,534,,,,534,534,,763,,925,925,925,534,925,,534,,925,925,534", "534,,925,,925,925,925,925,925,925,925,,,,,,925,925,925,925,925,925,925", ",,925,,,,,,,925,,,925,925,,925,925,925,925,925,925,925,925,925,,925", "925,,925,925,,761,761,761,761,761,761,761,761,761,761,761,,761,761,", ",761,761,,925,,,925,,,925,,,925,,925,761,,761,925,761,761,761,761,761", "761,761,925,761,,,,925,925,925,925,925,925,,,,925,925,,761,,537,537", "537,925,537,,925,,537,537,925,925,,537,,537,537,537,537,537,537,537", ",,,,,537,537,537,537,537,537,537,,,537,,,,,,,537,,,537,537,,537,537", "537,537,537,537,537,537,537,,537,537,,537,537,,658,658,658,658,658,658", "658,658,658,658,658,,658,658,,,658,658,,537,,,537,,,537,,454,537,,,658", ",658,537,658,658,658,658,658,658,658,537,658,,,,537,537,537,537,537", "537,,,,537,537,454,658,,658,454,454,537,,,537,,,,537,537,923,923,923", "923,923,,,,923,923,,,,923,,923,923,923,923,923,923,923,,,,,,923,923", "923,923,923,923,923,,,923,,,,,,923,923,,923,923,923,,923,923,923,923", "923,,923,923,923,,923,923,,923,923,,247,247,247,247,247,247,247,247", "247,247,247,,247,247,,,247,247,,923,,,923,,,923,,,923,,923,247,,247", "923,247,247,247,247,247,247,247,923,247,,,,923,923,923,923,923,923,", ",,923,923,,247,,,,,923,,,923,,,,923,923,542,542,542,542,542,,,,542,542", ",,,542,,542,542,542,542,542,542,542,,,,,,542,542,542,542,542,542,542", ",,542,,,,,,542,542,,542,542,542,,542,542,542,542,542,,542,542,542,,542", "542,,542,542,,527,527,527,527,527,527,527,527,527,527,527,,527,527,", ",527,527,,542,,,542,,,542,,,542,,542,527,,527,542,527,527,527,527,527", "527,527,542,527,,,,542,542,542,542,542,542,,,,542,542,,527,,17,17,17", "542,17,,542,,17,17,542,542,,17,,17,17,17,17,17,17,17,,,,,,17,17,17,17", "17,17,17,,,17,,,,,,,17,,,17,17,,17,17,17,17,17,,17,17,17,,17,17,,17", "17,,766,766,766,766,766,766,766,766,766,766,766,,766,766,,,766,766,", "17,,,17,17,,17,,,17,,,766,,766,17,766,766,766,766,766,766,766,17,766", ",,,17,17,17,17,17,17,,,,17,17,,766,,18,18,18,17,18,,17,,18,18,17,17", ",18,,18,18,18,18,18,18,18,,,,,,18,18,18,18,18,18,18,,,18,,,,,,,18,,", "18,18,,18,18,18,18,18,,18,18,18,,18,18,,18,18,,768,768,768,768,768,768", "768,768,768,768,768,,768,768,,,768,768,,18,,,18,,,18,,,18,,,768,,768", "18,768,768,768,768,768,768,768,18,768,,,,18,18,18,18,18,18,,,,18,18", ",768,,483,483,483,18,483,,18,,483,483,18,18,,483,,483,483,483,483,483", "483,483,,,,,,483,483,483,483,483,483,483,,,483,,,,,,,483,,,483,483,", "483,483,483,483,483,,483,483,483,,483,483,,483,483,,773,773,773,773", "773,773,773,773,773,773,773,,773,773,,,773,773,,483,,,483,,,483,,,483", ",,773,,773,483,773,773,773,773,773,773,773,483,773,,,,483,483,483,483", "483,483,,,,483,483,,773,,,,,483,,,483,,,,483,483,915,915,915,915,915", ",,,915,915,,,,915,,915,915,915,915,915,915,915,,,,,,915,915,915,915", "915,915,915,,,915,,,,,,915,915,,915,915,915,,915,915,915,915,915,,915", "915,915,,915,915,,915,915,,424,424,424,424,424,424,424,424,424,424,424", ",424,424,,,424,424,,915,,,915,,,915,,,915,,915,424,,424,915,424,424", "424,424,424,424,424,915,424,,,,915,915,915,915,915,915,,,,915,915,,424", ",22,22,22,915,22,,915,,22,22,915,915,,22,,22,22,22,22,22,22,22,,,,,", "22,22,22,22,22,22,22,,,22,,,,,,,22,,,22,22,,22,22,22,22,22,22,22,22", "22,,22,22,,22,22,,756,756,756,756,756,756,756,756,756,756,756,,756,756", ",,756,756,,22,,,22,,,22,,,22,,22,756,22,756,22,756,756,756,756,756,756", "756,22,756,,,,22,22,22,22,22,22,,,,22,22,,756,,23,23,23,22,23,,22,,23", "23,22,22,,23,,23,23,23,23,23,23,23,,,,,,23,23,23,23,23,23,23,,,23,,", ",,,,23,,,23,23,,23,23,23,23,23,23,23,23,23,,23,23,,23,23,,855,855,855", "855,855,855,855,855,855,855,855,,855,855,,,855,855,,23,,,23,,,23,,,23", ",23,855,23,855,23,855,855,855,855,855,855,855,23,855,,,,23,23,23,23", "23,23,,,,23,23,,855,,24,24,24,23,24,,23,,24,24,23,23,,24,,24,24,24,24", "24,24,24,,,,,,24,24,24,24,24,24,24,,,24,,,,,,,24,,,24,24,,24,24,24,24", "24,24,24,24,24,,24,24,,24,24,,19,19,19,19,19,19,19,19,19,19,19,,19,19", ",,19,19,,24,,,24,,,24,,,24,,24,19,24,19,24,19,19,19,19,19,19,19,24,19", ",,,24,24,24,24,24,24,,,,24,24,,19,,,,,24,,,24,,,,24,24,910,910,910,910", "910,,,,910,910,,,,910,,910,910,910,910,910,910,910,,,,,,910,910,910", "910,910,910,910,,335,910,335,335,335,,335,910,910,,910,910,910,,910", "910,910,910,910,,910,910,910,,910,910,,910,910,,557,,557,557,557,,557", "702,335,702,702,702,,702,,,335,,,910,,,910,,,910,,,910,,910,,,,910,", ",550,557,550,550,550,910,550,,702,557,910,910,910,910,910,910,702,,", "910,910,,,,481,481,481,910,481,,910,,481,481,910,910,,481,550,481,481", "481,481,481,481,481,550,550,550,550,,481,481,481,481,481,481,481,,473", "481,,,,,,,481,,,481,481,,481,481,481,481,481,481,481,481,481,,481,481", ",481,481,,464,473,,,,473,473,473,473,,,,,,,,464,464,,481,,,481,,,481", ",,481,,,464,481,464,481,464,464,464,464,,,464,481,464,,,,481,481,481", "481,481,481,,,,481,481,,,,479,479,479,481,479,,481,,479,479,481,481", ",479,,479,479,479,479,479,479,479,,,,,,479,479,479,479,479,479,479,", ",479,,,,,,,479,,,479,479,,479,479,479,479,479,479,479,479,479,,479,479", ",479,479,,451,451,451,451,451,451,451,451,451,451,451,,451,451,,,451", "451,,479,,,479,,,479,,,479,,479,451,479,451,479,451,451,451,451,451", "451,451,479,451,,,,479,479,479,479,479,479,,,,479,479,,,,,,,479,,,479", ",,,479,479,543,543,543,543,543,,,,543,543,,,,543,,543,543,543,543,543", "543,543,,,,,,543,543,543,543,543,543,543,,,543,,,,,,543,543,,543,543", "543,,543,543,543,543,543,,543,543,543,,543,543,,543,543,,475,475,475", "475,475,475,475,475,,475,475,,,,,,475,475,,543,,,543,,,543,,,543,,543", "475,,475,543,475,475,475,475,475,475,475,543,475,,,,543,543,543,543", "543,543,,,,543,543,,,,,,,543,,,543,,,,543,543,30,30,30,30,30,,,,30,30", ",,,30,,30,30,30,30,30,30,30,,,,,,30,30,30,30,30,30,30,,,30,,,,,,30,30", ",30,30,30,,30,30,30,30,30,,30,30,30,,30,30,,30,30,,452,452,452,452,452", "452,452,452,452,452,452,,452,452,,,452,452,,30,,,30,,,30,,,30,,30,452", ",452,30,452,452,452,452,452,452,452,30,452,,,,30,30,30,30,30,30,,,,30", "30,,,,31,31,31,30,31,,30,,31,31,30,30,,31,,31,31,31,31,31,31,31,,,,", ",31,31,31,31,31,31,31,,,31,,,,,,,31,,,31,31,,31,31,31,31,31,,31,31,31", ",31,31,638,,638,638,638,461,638,,,,,,,,,,,,,,,461,461,31,,,31,,,31,", ",31,,31,,461,,638,,461,461,461,461,,,638,638,638,638,,31,31,31,31,31", "31,638,,,31,31,,,,32,32,32,31,32,,31,,32,32,31,31,,32,,32,32,32,32,32", "32,32,,,,,,32,32,32,32,32,32,32,,,32,,,,,,,32,,,32,32,,32,32,32,32,32", ",32,32,32,,32,32,590,,590,590,590,590,590,,,,,,,,,,590,,,,,,,32,,,32", ",,32,,,32,,,,,,590,590,,,,,,,590,590,590,590,,32,32,32,32,32,32,,,,32", "32,,,,32,,,32,,,32,,,,32,32,549,549,549,,549,,,590,549,549,,,,549,,549", "549,549,549,549,549,549,,,,,,549,549,549,549,549,549,549,,,549,,,,,", ",549,,,549,549,,549,549,549,549,549,,549,549,549,,549,549,897,,897,897", "897,897,897,,,,,,,,,,897,,,,,,,549,,,549,,,549,,,549,,,,,,897,897,,", ",,,,897,897,897,897,,549,549,549,549,549,549,,,,549,549,,,,,,,549,,", "549,,,,549,549,563,563,563,563,563,,,897,563,563,,,,563,,563,563,563", "563,563,563,563,,,,,,563,563,563,563,563,563,563,,,563,,,,,,563,563", ",563,563,563,,563,563,563,563,563,,563,563,563,,563,563,,563,563,,465", ",,,,,,,,,,,,,,,465,465,,563,,,563,,,563,,,563,,563,465,,465,563,465", "465,465,465,,,465,563,465,,,,563,563,563,563,563,563,,,,563,563,,,,", ",,563,,,563,,,,563,563,567,567,567,567,567,,,,567,567,,,,567,,567,567", "567,567,567,567,567,,,,,,567,567,567,567,567,567,567,,,567,,,,,,567", "567,,567,567,567,,567,567,567,567,567,,567,567,567,,567,567,,567,567", ",474,474,474,474,474,474,474,,,474,474,,,,,,474,474,,567,,,567,,,567", ",,567,,567,474,,474,567,474,474,474,474,474,474,474,567,474,,,,567,567", "567,567,567,567,,,,567,567,,,,,,,567,,,567,,,,567,567,903,903,903,903", "903,,,,903,903,,,,903,,903,903,903,903,903,903,903,,,,,,903,903,903", "903,903,903,903,,,903,,,,,,903,903,,903,903,903,,903,903,903,903,903", ",903,903,903,,903,903,,903,903,,463,,,,,,,,,,,,,,,,463,463,,903,,,903", ",,903,,,903,,903,463,,463,903,463,463,463,463,,,463,903,463,,,,903,903", "903,903,903,903,,,,903,903,,,,38,38,38,903,38,,903,,38,38,903,903,,38", ",38,38,38,38,38,38,38,,,,,,38,38,38,38,38,38,38,,,38,,,,,,,38,,,38,38", ",38,38,38,38,38,,38,38,38,,38,38,,38,38,,466,,,,,,,,,,,,,,,,466,466", ",38,,,38,,,38,,,38,,,466,,466,38,466,466,466,466,,,466,38,466,,,,38", "38,38,38,38,38,,,,38,38,,,,39,39,39,38,39,,38,,39,39,38,38,,39,,39,39", "39,39,39,39,39,,,,,,39,39,39,39,39,39,39,,,39,,,,,,,39,,,39,39,,39,39", "39,39,39,,39,39,39,,39,39,,39,39,,467,467,467,467,467,467,467,,,467", "467,,,,,,467,467,,39,,,39,,,39,,,39,,,467,,467,39,467,467,467,467,467", "467,467,39,467,,,,39,39,39,39,39,39,,,,39,39,,,,40,40,40,39,40,,39,", "40,40,39,39,,40,,40,40,40,40,40,40,40,,,,,,40,40,40,40,40,40,40,,,40", ",,,,,,40,,,40,40,,40,40,40,40,40,,40,40,40,,40,40,,40,40,,471,471,471", "471,471,471,471,,,471,471,,,,,,471,471,,40,,,40,,,40,,,40,,,471,,471", "40,471,471,471,471,471,471,471,40,471,,,,40,40,40,40,40,40,,,,40,40", ",,,901,901,901,40,901,,40,,901,901,40,40,,901,,901,901,901,901,901,901", "901,,,,,,901,901,901,901,901,901,901,,,901,,,,,,,901,,,901,901,,901", "901,901,901,901,,901,901,901,,901,901,,901,901,,462,462,462,462,462", "462,462,,,462,462,,,,,,462,462,,901,,,901,,,901,,,901,,901,462,901,462", "901,462,462,462,462,462,462,462,901,462,,,,901,901,901,901,901,901,", ",,901,901,,,,,,,901,,,901,,,,901,901,572,572,572,572,572,,,,572,572", ",,,572,,572,572,572,572,572,572,572,,,,,,572,572,572,572,572,572,572", ",,572,,,,,,572,572,,572,572,572,,572,572,572,572,572,,572,572,572,,572", "572,,572,572,,468,468,468,468,468,468,468,,,468,468,,,,,,468,468,,572", ",,572,,,572,,,572,,572,468,,468,572,468,468,468,468,468,468,468,572", "468,,,,572,572,572,572,572,572,,,,572,572,,,,574,574,574,572,574,,572", ",574,574,572,572,,574,,574,574,574,574,574,574,574,,,,,,574,574,574", "574,574,574,574,,,574,,,,,,,574,,,574,574,,574,574,574,574,574,574,574", "574,574,,574,574,,574,574,,470,470,470,470,470,470,470,,,470,470,,,", ",,470,470,,574,,,574,,,574,,,574,,574,470,,470,574,470,470,470,470,470", "470,470,574,470,,,,574,574,574,574,574,574,,,,574,574,,,,52,52,52,574", "52,,574,,52,52,574,574,,52,,52,52,52,52,52,52,52,,,,,,52,52,52,52,52", "52,52,,,52,,,,,,,52,,,52,52,,52,52,52,52,52,,52,52,52,,52,52,,52,52", ",469,469,469,469,469,469,469,,,469,469,,,,,,469,469,,52,,,52,,,52,,", "52,,,469,,469,52,469,469,469,469,469,469,469,52,469,,,,52,52,52,52,52", "52,,,,52,52,,,,53,53,53,52,53,,52,,53,53,52,52,,53,,53,53,53,53,53,53", "53,,,,,,53,53,53,53,53,53,53,,,53,,,,,,,53,,,53,53,,53,53,53,53,53,53", "53,53,53,,53,53,,53,53,,459,,,,,,,,,,,,,,,,459,459,,53,,,53,,,53,,,53", ",53,459,,459,53,459,459,459,459,,,,53,,,,,53,53,53,53,53,53,,,,53,53", ",,,54,54,54,53,54,,53,,54,54,53,53,,54,,54,54,54,54,54,54,54,,,,,,54", "54,54,54,54,54,54,,,54,,,,,,,54,,,54,54,,54,54,54,54,54,54,54,54,54", ",54,54,,54,54,,460,,,,,,,,,,,,,,,,460,460,,54,,,54,,,54,,,54,,,460,", "460,54,460,460,460,460,,,,54,,,,,54,54,54,54,54,54,,,,54,54,,,,582,582", "582,54,582,,54,,582,582,54,54,,582,,582,582,582,582,582,582,582,,,,", ",582,582,582,582,582,582,582,,,582,,,,,,,582,,,582,582,,582,582,582", "582,582,582,582,582,582,,582,582,,582,582,,,,,,,,,,,,,,,,,,,,,582,,", "582,,,582,,,582,,582,,,,582,,,,,,,,582,,,,,582,582,582,582,582,582,", ",,582,582,,,,586,586,586,582,586,,582,,586,586,582,582,,586,,586,586", "586,586,586,586,586,,,,,,586,586,586,586,586,586,586,,,586,,,,,,,586", ",,586,586,,586,586,586,586,586,,586,586,586,,586,586,,586,586,,,,,,", ",,,,,,,,,,,,,,586,,,586,,,586,,,586,,,,,,586,,,,,,,,586,,,,,586,586", "586,586,586,586,,,,586,586,,,,57,57,57,586,57,,586,,57,57,586,586,,57", ",57,57,57,57,57,57,57,,,,,,57,57,57,57,57,57,57,,,57,,,,,,,57,,,57,57", ",57,57,57,57,57,,57,57,57,,57,57,,57,57,,,,,,,,,,,,,,,,,,,,,57,,,57", ",,57,,,57,,,,,,57,,,,,,,,57,,,,,57,57,57,57,57,57,,,,57,57,,,,58,58", "58,57,58,,57,,58,58,57,57,,58,,58,58,58,58,58,58,58,,,,,,58,58,58,58", "58,58,58,,,58,,,,,,,58,,,58,58,,58,58,58,58,58,,58,58,58,,58,58,,58", "58,,,,,,,,,,,,,,,,,,,,,58,,,58,,,58,,,58,,,,,,58,,,,,,,,58,,,,,58,58", "58,58,58,58,,,,58,58,,,,61,61,61,58,61,,58,,61,61,58,58,,61,,61,61,61", "61,61,61,61,,,,,,61,61,61,61,61,61,61,,,61,,,,,,,61,,,61,61,,61,61,61", "61,61,,61,61,61,,61,61,,61,61,,,,,,,,,,,,,,,,,,,,,61,,,61,,,61,,,61", ",,,,,61,,,,,,,,61,,,,,61,61,61,61,61,61,,,,61,61,61,,,,,61,61,,,61,", ",,61,61,62,62,62,,62,,,,62,62,,,,62,,62,62,62,62,62,62,62,,,,,,62,62", "62,62,62,62,62,,,62,,,,,,,62,,,62,62,,62,62,62,62,62,,62,62,62,,62,62", "319,,319,319,319,,319,,,,,,,,,,,,,,,,,62,,,62,,,62,,,62,,62,,,,319,", "319,,,,,,319,319,319,319,,62,62,62,62,62,62,,,,62,62,,,,63,63,63,62", "63,,62,,63,63,62,62,,63,,63,63,63,63,63,63,63,,,,,,63,63,63,63,63,63", "63,,,63,,,,,,,63,,,63,63,,63,63,63,63,63,,63,63,63,,63,63,56,,56,56", "56,,56,,,,,,,,,,,,,,63,,,63,,,63,,,63,,,63,,,,,,56,56,,,,,,,56,56,56", "56,,63,63,63,63,63,63,,,,63,63,,,,588,588,588,63,588,,63,,588,588,63", "63,,588,,588,588,588,588,588,588,588,,,,,,588,588,588,588,588,588,588", ",,588,,,,,,,588,,,588,588,,588,588,588,588,588,,588,588,588,,588,588", ",588,588,,,,,,,,,,,,,,,,,,,,,588,,,588,,,588,,,588,,,,,,588,,,,,,,,588", ",,,,588,588,588,588,588,588,,,,588,588,,,,,,,588,,,588,,,,588,588,883", "883,883,883,883,,,,883,883,,,,883,,883,883,883,883,883,883,883,,,,,", "883,883,883,883,883,883,883,,,883,,,,,,883,883,,883,883,883,,883,883", "883,883,883,,883,883,883,,883,883,,883,883,,,,,,,,,,,,,,,,,,,,,883,", ",883,,,883,,,883,,883,,,,883,,,,,,,,883,,,,,883,883,883,883,883,883", ",,,883,883,,,,,,,883,,,883,,,,883,883,880,880,880,880,880,,,,880,880", ",,,880,,880,880,880,880,880,880,880,,,,,,880,880,880,880,880,880,880", ",,880,,,,,,880,880,,880,880,880,,880,880,880,880,880,,880,880,880,,880", "880,,880,880,,,,,,,,,,,,,,,,,,,,,880,,,880,,,880,,,880,,880,,,,880,", ",,,,,,880,,,,,880,880,880,880,880,880,,,,880,880,,,,879,879,879,880", "879,,880,,879,879,880,880,,879,,879,879,879,879,879,879,879,,,,,,879", "879,879,879,879,879,879,,,879,,,,,,,879,,,879,879,,879,879,879,879,879", ",879,879,879,,879,879,,879,879,,,,,,,,,,,,,,,,,,,,,879,,,879,,,879,", ",879,,879,,,,879,,,,,,,,879,,,,,879,879,879,879,879,879,,,,879,879,", ",,615,615,615,879,615,,879,,615,615,879,879,,615,,615,615,615,615,615", "615,615,,,,,,615,615,615,615,615,615,615,,,615,,,,,,,615,,,615,615,", "615,615,615,615,615,,615,615,615,,615,615,,615,615,,,,,,,,,,,,,,,,,", ",,,615,,,615,,,615,,,615,,,,,,615,,,,,,,,615,,,,,615,615,615,615,615", "615,,,,615,615,,,,617,617,617,615,617,,615,,617,617,615,615,,617,,617", "617,617,617,617,617,617,,,,,,617,617,617,617,617,617,617,,,617,,,,,", ",617,,,617,617,,617,617,617,617,617,,617,617,617,,617,617,,617,617,", ",,,,,,,,,,,,,,,,,,,617,,,617,,,617,,,617,,617,,,,617,,,,,,,,617,,,,", "617,617,617,617,617,617,,,,617,617,,,,619,619,619,617,619,,617,,619", "619,617,617,,619,,619,619,619,619,619,619,619,,,,,,619,619,619,619,619", "619,619,,,619,,,,,,,619,,,619,619,,619,619,619,619,619,,619,619,619", ",619,619,,619,619,,,,,,,,,,,,,,,,,,,,,619,,,619,,,619,,,619,,,,,,619", ",,,,,,,619,,,,,619,619,619,619,619,619,,,,619,619,,,,620,620,620,619", "620,,619,,620,620,619,619,,620,,620,620,620,620,620,620,620,,,,,,620", "620,620,620,620,620,620,,,620,,,,,,,620,,,620,620,,620,620,620,620,620", ",620,620,620,,620,620,,620,620,,,,,,,,,,,,,,,,,,,,,620,,,620,,,620,", ",620,,,,,,620,,,,,,,,620,,,,,620,620,620,620,620,620,,,,620,620,,,,869", "869,869,620,869,,620,,869,869,620,620,,869,,869,869,869,869,869,869", "869,,,,,,869,869,869,869,869,869,869,,,869,,,,,,,869,,,869,869,,869", "869,869,869,869,,869,869,869,,869,869,732,,732,732,732,732,732,,,,,", ",,,,732,,,,,,,869,,,869,,,869,,,869,,,,,,732,,,,,,,,732,732,732,732", ",869,869,869,869,869,869,,,,869,869,,,,,,,869,,,869,,,,869,869,99,99", "99,99,99,,,732,99,99,,,,99,,99,99,99,99,99,99,99,,,,,,99,99,99,99,99", "99,99,,,99,,,,,,99,99,99,99,99,99,,99,99,99,99,99,,99,99,99,,99,99,", "99,99,,,,,,,,,,,,,,,,,,,,,99,,,99,,,99,,,99,,99,,,,99,,,,,,,,99,,,,", "99,99,99,99,99,99,,,,99,99,,,,,,99,99,,,99,,,,99,99,103,103,103,,103", ",,,103,103,,,,103,,103,103,103,103,103,103,103,,,,,,103,103,103,103", "103,103,103,,,103,,,,,,,103,,,103,103,,103,103,103,103,103,,103,103", "103,,103,103,,103,103,,,,,,,,,,,,,,,,,,,,,103,,,103,,,103,,,103,,,,", ",103,,,,,,,,103,,,,,103,103,103,103,103,103,,,,103,103,,,,104,104,104", "103,104,,103,,104,104,103,103,,104,,104,104,104,104,104,104,104,,,,", ",104,104,104,104,104,104,104,,,104,,,,,,,104,,,104,104,,104,104,104", "104,104,,104,104,104,,104,104,,104,104,,,,,,,,,,,,,,,,,,,,,104,,,104", ",,104,,,104,,,,,,104,,,,,,,,104,,,,,104,104,104,104,104,104,,,,104,104", ",,,105,105,105,104,105,,104,,105,105,104,104,,105,,105,105,105,105,105", "105,105,,,,,,105,105,105,105,105,105,105,,,105,,,,,,,105,,,105,105,", "105,105,105,105,105,,105,105,105,,105,105,,105,105,,,,,,,,,,,,,,,,,", ",,,105,,,105,,,105,,,105,,,,,,105,,,,,,,,105,,,,,105,105,105,105,105", "105,,,,105,105,,,,106,106,106,105,106,,105,,106,106,105,105,,106,,106", "106,106,106,106,106,106,,,,,,106,106,106,106,106,106,106,,,106,,,,,", ",106,,,106,106,,106,106,106,106,106,,106,106,106,,106,106,,106,106,", ",,,,,,,,,,,,,,,,,,,106,,,106,,,106,,,106,,,,,,106,,,,,,,,106,,,,,106", "106,106,106,106,106,,,,106,106,,,,,,,106,,,106,,,,106,106,107,107,107", "107,107,,,,107,107,,,,107,,107,107,107,107,107,107,107,,,,,,107,107", "107,107,107,107,107,,,107,,,,,,107,107,,107,107,107,,107,107,107,107", "107,,107,107,107,,107,107,,107,107,,,,,,,,,,,,,,,,,,,,,107,,,107,,,107", ",,107,,107,,,,107,,,,,,,,107,,,,,107,107,107,107,107,107,,,,107,107", ",,,,,,107,,,107,,,,107,107,108,108,108,108,108,,,,108,108,,,,108,,108", "108,108,108,108,108,108,,,,,,108,108,108,108,108,108,108,,,108,,,,,", "108,108,108,108,108,108,,108,108,108,108,108,,108,108,108,,108,108,", "108,108,,,,,,,,,,,,,,,,,,,,,108,,,108,,,108,,,108,,108,,,,108,,,,,,", ",108,,,,,108,108,108,108,108,108,,,,108,108,,,,625,625,625,108,625,", "108,,625,625,108,108,,625,,625,625,625,625,625,625,625,,,,,,625,625", "625,625,625,625,625,,,625,,,,,,,625,,,625,625,,625,625,625,625,625,", "625,625,625,,625,625,,625,625,,,,,,,,,,,,,,,,,,,,,625,,,625,,,625,,", "625,,,,,,625,,,,,,,,625,,,,,625,625,625,625,625,625,,,,625,625,,,,628", "628,628,625,628,,625,,628,628,625,625,,628,,628,628,628,628,628,628", "628,,,,,,628,628,628,628,628,628,628,,,628,,,,,,,628,,,628,628,,628", "628,628,628,628,,628,628,628,,628,628,,628,628,,,,,,,,,,,,,,,,,,,,,628", ",,628,,,628,,,628,,,,,,628,,,,,,,,628,,,,,628,628,628,628,628,628,,", ",628,628,,,,,,,628,,,628,,,,628,628,865,865,865,865,865,,,,865,865,", ",,865,,865,865,865,865,865,865,865,,,,,,865,865,865,865,865,865,865", ",,865,,,,,,865,865,,865,865,865,,865,865,865,865,865,,865,865,865,,865", "865,,865,865,,,,,,,,,,,,,,,,,,,,,865,,,865,,,865,,,865,,865,,,,865,", ",,,,,,865,,,,,865,865,865,865,865,865,,,,865,865,,,,,,,865,,,865,,,", "865,865,195,195,195,195,195,,,,195,195,,,,195,,195,195,195,195,195,195", "195,,,,,,195,195,195,195,195,195,195,,,195,,,,,,195,195,,195,195,195", ",195,195,195,195,195,,195,195,195,,195,195,,195,195,,,,,,,,,,,,,,,,", ",,,,195,,,195,,,195,,,195,,195,,,,195,,,,,,,,195,,,,,195,195,195,195", "195,195,,,,195,195,,,,196,196,196,195,196,,195,,196,196,195,195,,196", ",196,196,196,196,196,196,196,,,,,,196,196,196,196,196,196,196,,,196", ",,,,,,196,,,196,196,,196,196,196,196,196,,196,196,196,,196,196,,196", "196,,,,,,,,,,,,,,,,,,,,,196,,,196,,,196,,,196,,196,,,,196,,,,,,,,196", ",,,,196,196,196,196,196,196,,,,196,196,,,,197,197,197,196,197,,196,", "197,197,196,196,,197,,197,197,197,197,197,197,197,,,,,,197,197,197,197", "197,197,197,,,197,,,,,,,197,,,197,197,,197,197,197,197,197,,197,197", "197,,197,197,,197,197,,,,,,,,,,,,,,,,,,,,,197,,,197,,,197,,,197,,197", ",,,197,,,,,,,,197,,,,,197,197,197,197,197,197,,,,197,197,,,,198,198", "198,197,198,,197,,198,198,197,197,,198,,198,198,198,198,198,198,198", ",,,,,198,198,198,198,198,198,198,,,198,,,,,,,198,,,198,198,,198,198", "198,198,198,,198,198,198,,198,198,,198,198,,,,,,,,,,,,,,,,,,,,,198,", ",198,,,198,,,198,,,,,,198,,,,,,,,198,,,,,198,198,198,198,198,198,,,", "198,198,,,,199,199,199,198,199,,198,,199,199,198,198,,199,,199,199,199", "199,199,199,199,,,,,,199,199,199,199,199,199,199,,,199,,,,,,,199,,,199", "199,,199,199,199,199,199,199,199,199,199,,199,199,,199,199,,,,,,,,,", ",,,,,,,,,,,199,,,199,,,199,,,199,,199,,,,199,,,,,,,,199,,,,,199,199", "199,199,199,199,,,,199,199,,,,448,448,448,199,448,,199,,448,448,199", "199,,448,,448,448,448,448,448,448,448,,,,,,448,448,448,448,448,448,448", ",,448,,,,,,,448,,,448,448,,448,448,448,448,448,,448,448,448,,448,448", ",448,448,,,,,,,,,,,,,,,,,,,,,448,,,448,,,448,,,448,,,,,,448,,,,,,,,448", ",,,,448,448,448,448,448,448,,,,448,448,,,,447,447,447,448,447,,448,", "447,447,448,448,,447,,447,447,447,447,447,447,447,,,,,,447,447,447,447", "447,447,447,,,447,,,,,,,447,,,447,447,,447,447,447,447,447,,447,447", "447,,447,447,,447,447,,,,,,,,,,,,,,,,,,,,,447,,,447,,,447,,,447,,,,", ",447,,,,,,,,447,,,,,447,447,447,447,447,447,,,,447,447,,,,202,202,202", "447,202,,447,,202,202,447,447,,202,,202,202,202,202,202,202,202,,,,", ",202,202,202,202,202,202,202,,,202,,,,,,,202,,,202,202,,202,202,202", "202,202,,202,202,202,,202,202,,202,202,,,,,,,,,,,,,,,,,,,,,202,,,202", ",,202,,,202,,,,,,202,,,,,,,,202,,,,,202,202,202,202,202,202,,,,202,202", ",,,203,203,203,202,203,,202,,203,203,202,202,,203,,203,203,203,203,203", "203,203,,,,,,203,203,203,203,203,203,203,,,203,,,,,,,203,,,203,203,", "203,203,203,203,203,,203,203,203,,203,203,,203,203,,,,,,,,,,,,,,,,,", ",,,203,,,203,,,203,,,203,,,,,,203,,,,,,,,203,,,,,203,203,203,203,203", "203,,,,203,203,,,,204,204,204,203,204,,203,,204,204,203,203,,204,,204", "204,204,204,204,204,204,,,,,,204,204,204,204,204,204,204,,,204,,,,,", ",204,,,204,204,,204,204,204,204,204,,204,204,204,,204,204,,204,204,", ",,,,,,,,,,,,,,,,,,,204,,,204,,,204,,,204,,,,,,204,,,,,,,,204,,,,,204", "204,204,204,204,204,,,,204,204,,,,446,446,446,204,446,,204,,446,446", "204,204,,446,,446,446,446,446,446,446,446,,,,,,446,446,446,446,446,446", "446,,,446,,,,,,,446,,,446,446,,446,446,446,446,446,,446,446,446,,446", "446,,446,446,,,,,,,,,,,,,,,,,,,,,446,,,446,,,446,,,446,,,,,,446,,,,", ",,,446,,,,,446,446,446,446,446,446,,,,446,446,,,,856,856,856,446,856", ",446,,856,856,446,446,,856,,856,856,856,856,856,856,856,,,,,,856,856", "856,856,856,856,856,,,856,,,,,,,856,,,856,856,,856,856,856,856,856,", "856,856,856,,856,856,,856,856,,,,,,,,,,,,,,,,,,,,,856,,,856,,,856,,", "856,,,,,,856,,,,,,,,856,,,,,856,856,856,856,856,856,,,,856,856,,,,444", "444,444,856,444,,856,,444,444,856,856,,444,,444,444,444,444,444,444", "444,,,,,,444,444,444,444,444,444,444,,,444,,,,,,,444,,,444,444,,444", "444,444,444,444,444,444,444,444,,444,444,,444,444,,,,,,,,,,,,,,,,,,", ",,444,,,444,,,444,,,444,,444,,,,444,,,,,,,,444,,,,,444,444,444,444,444", "444,,,,444,444,,,,844,844,844,444,844,,444,,844,844,444,444,,844,,844", "844,844,844,844,844,844,,,,,,844,844,844,844,844,844,844,,,844,,,,,", ",844,,,844,844,,844,844,844,844,844,,844,844,844,,844,844,,844,844,", ",,,,,,,,,,,,,,,,,,,844,,,844,,,844,,,844,,,,,,844,,,,,,,,844,,,,,844", "844,844,844,844,844,,,,844,844,,,,636,636,636,844,636,,844,,636,636", "844,844,,636,,636,636,636,636,636,636,636,,,,,,636,636,636,636,636,636", "636,,,636,,,,,,,636,,,636,636,,636,636,636,636,636,,636,636,636,,636", "636,,636,636,,,,,,,,,,,,,,,,,,,,,636,,,636,,,636,,,636,,,,,,636,,,,", ",,,636,,,,,636,636,636,636,636,636,,,,636,636,,,,,,,636,,,636,,,,636", "636,640,640,640,640,640,,,,640,640,,,,640,,640,640,640,640,640,640,640", ",,,,,640,640,640,640,640,640,640,,,640,,,,,,640,640,,640,640,640,,640", "640,640,640,640,,640,640,640,,640,640,,640,640,,,,,,,,,,,,,,,,,,,,,640", ",,640,,,640,,,640,,640,,,,640,,,,,,,,640,,,,,640,640,640,640,640,640", ",,,640,640,,,,,,,640,,,640,,,,640,640,212,212,212,212,212,,,,212,212", ",,,212,,212,212,212,212,212,212,212,,,,,,212,212,212,212,212,212,212", ",,212,,,,,,212,212,,212,212,212,,212,212,212,212,212,,212,212,212,,212", "212,,212,212,,,,,,,,,,,,,,,,,,,,,212,,,212,,,212,,,212,,212,,,,212,", ",,,,,,212,,,,,212,212,212,212,212,212,,,,212,212,,,,213,213,213,212", "213,,212,,213,213,212,212,,213,,213,213,213,213,213,213,213,,,,,,213", "213,213,213,213,213,213,,,213,,,,,,,213,,,213,213,,213,213,213,213,213", ",213,213,213,,213,213,,213,213,,,,,,,,,,,,,,,,,,,,,213,,,213,,213,213", ",,213,,,,,,213,,,,,,,,213,,,,,213,213,213,213,213,213,,,,213,213,,,", "216,216,216,213,216,,213,,216,216,213,213,,216,,216,216,216,216,216", "216,216,,,,,,216,216,216,216,216,216,216,,,216,,,,,,,216,,,216,216,", "216,216,216,216,216,,216,216,216,,216,216,,216,216,,,,,,,,,,,,,,,,,", ",,,216,,,216,,,216,,,216,,,,,,216,,,,,,,,216,,,,,216,216,216,216,216", "216,,,,216,216,,,,644,644,644,216,644,,216,,644,644,216,216,,644,,644", "644,644,644,644,644,644,,,,,,644,644,644,644,644,644,644,,,644,,,,,", ",644,,,644,644,,644,644,644,644,644,,644,644,644,,644,644,,644,644,", ",,,,,,,,,,,,,,,,,,,644,,,644,,,644,,,644,,,,,,644,,,,,,,,644,,,,,644", "644,644,644,644,644,,,,644,644,,,,218,218,218,644,218,,644,,218,218", "644,644,,218,,218,218,218,218,218,218,218,,,,,,218,218,218,218,218,218", "218,,,218,,,,,,,218,,,218,218,,218,218,218,218,218,,218,218,218,,218", "218,,218,218,,,,,,,,,,,,,,,,,,,,,218,,,218,,,218,,,218,,,,,,218,,,,", ",,,218,,,,,218,218,218,218,218,218,,,,218,218,,,,219,219,219,218,219", ",218,,219,219,218,218,,219,,219,219,219,219,219,219,219,,,,,,219,219", "219,219,219,219,219,,,219,,,,,,,219,,,219,219,,219,219,219,219,219,", "219,219,219,,219,219,,219,219,,,,,,,,,,,,,,,,,,,,,219,,,219,,,219,,", "219,,,,,,219,,,,,,,,219,,,,,219,219,219,219,219,219,,,,219,219,,,,220", "220,220,219,220,,219,,220,220,219,219,,220,,220,220,220,220,220,220", "220,,,,,,220,220,220,220,220,220,220,,,220,,,,,,,220,,,220,220,,220", "220,220,220,220,,220,220,220,,220,220,,220,220,,,,,,,,,,,,,,,,,,,,,220", ",,220,,,220,,,220,,,,,,220,,,,,,,,220,,,,,220,220,220,220,220,220,,", ",220,220,,,,221,221,221,220,221,,220,,221,221,220,220,,221,,221,221", "221,221,221,221,221,,,,,,221,221,221,221,221,221,221,,,221,,,,,,,221", ",,221,221,,221,221,221,221,221,,221,221,221,,221,221,,221,221,,,,,,", ",,,,,,,,,,,,,,221,,,221,,,221,,,221,,,,,,221,,,,,,,,221,,,,,221,221", "221,221,221,221,,,,221,221,,,,222,222,222,221,222,,221,,222,222,221", "221,,222,,222,222,222,222,222,222,222,,,,,,222,222,222,222,222,222,222", ",,222,,,,,,,222,,,222,222,,222,222,222,222,222,,222,222,222,,222,222", ",222,222,,,,,,,,,,,,,,,,,,,,,222,,,222,,,222,,,222,,,,,,222,,,,,,,,222", ",,,,222,222,222,222,222,222,,,,222,222,,,,223,223,223,222,223,,222,", "223,223,222,222,,223,,223,223,223,223,223,223,223,,,,,,223,223,223,223", "223,223,223,,,223,,,,,,,223,,,223,223,,223,223,223,223,223,,223,223", "223,,223,223,,223,223,,,,,,,,,,,,,,,,,,,,,223,,,223,,,223,,,223,,,,", ",223,,,,,,,,223,,,,,223,223,223,223,223,223,,,,223,223,,,,224,224,224", "223,224,,223,,224,224,223,223,,224,,224,224,224,224,224,224,224,,,,", ",224,224,224,224,224,224,224,,,224,,,,,,,224,,,224,224,,224,224,224", "224,224,,224,224,224,,224,224,,224,224,,,,,,,,,,,,,,,,,,,,,224,,,224", ",,224,,,224,,,,,,224,,,,,,,,224,,,,,224,224,224,224,224,224,,,,224,224", ",,,225,225,225,224,225,,224,,225,225,224,224,,225,,225,225,225,225,225", "225,225,,,,,,225,225,225,225,225,225,225,,,225,,,,,,,225,,,225,225,", "225,225,225,225,225,,225,225,225,,225,225,,225,225,,,,,,,,,,,,,,,,,", ",,,225,,,225,,,225,,,225,,,,,,225,,,,,,,,225,,,,,225,225,225,225,225", "225,,,,225,225,,,,226,226,226,225,226,,225,,226,226,225,225,,226,,226", "226,226,226,226,226,226,,,,,,226,226,226,226,226,226,226,,,226,,,,,", ",226,,,226,226,,226,226,226,226,226,,226,226,226,,226,226,,226,226,", ",,,,,,,,,,,,,,,,,,,226,,,226,,,226,,,226,,,,,,226,,,,,,,,226,,,,,226", "226,226,226,226,226,,,,226,226,,,,227,227,227,226,227,,226,,227,227", "226,226,,227,,227,227,227,227,227,227,227,,,,,,227,227,227,227,227,227", "227,,,227,,,,,,,227,,,227,227,,227,227,227,227,227,,227,227,227,,227", "227,,227,227,,,,,,,,,,,,,,,,,,,,,227,,,227,,,227,,,227,,,,,,227,,,,", ",,,227,,,,,227,227,227,227,227,227,,,,227,227,,,,228,228,228,227,228", ",227,,228,228,227,227,,228,,228,228,228,228,228,228,228,,,,,,228,228", "228,228,228,228,228,,,228,,,,,,,228,,,228,228,,228,228,228,228,228,", "228,228,228,,228,228,,228,228,,,,,,,,,,,,,,,,,,,,,228,,,228,,,228,,", "228,,,,,,228,,,,,,,,228,,,,,228,228,228,228,228,228,,,,228,228,,,,229", "229,229,228,229,,228,,229,229,228,228,,229,,229,229,229,229,229,229", "229,,,,,,229,229,229,229,229,229,229,,,229,,,,,,,229,,,229,229,,229", "229,229,229,229,,229,229,229,,229,229,,229,229,,,,,,,,,,,,,,,,,,,,,229", ",,229,,,229,,,229,,,,,,229,,,,,,,,229,,,,,229,229,229,229,229,229,,", ",229,229,,,,230,230,230,229,230,,229,,230,230,229,229,,230,,230,230", "230,230,230,230,230,,,,,,230,230,230,230,230,230,230,,,230,,,,,,,230", ",,230,230,,230,230,230,230,230,,230,230,230,,230,230,,230,230,,,,,,", ",,,,,,,,,,,,,,230,,,230,,,230,,,230,,,,,,230,,,,,,,,230,,,,,230,230", "230,230,230,230,,,,230,230,,,,231,231,231,230,231,,230,,231,231,230", "230,,231,,231,231,231,231,231,231,231,,,,,,231,231,231,231,231,231,231", ",,231,,,,,,,231,,,231,231,,231,231,231,231,231,,231,231,231,,231,231", ",231,231,,,,,,,,,,,,,,,,,,,,,231,,,231,,,231,,,231,,,,,,231,,,,,,,,231", ",,,,231,231,231,231,231,231,,,,231,231,,,,232,232,232,231,232,,231,", "232,232,231,231,,232,,232,232,232,232,232,232,232,,,,,,232,232,232,232", "232,232,232,,,232,,,,,,,232,,,232,232,,232,232,232,232,232,,232,232", "232,,232,232,,232,232,,,,,,,,,,,,,,,,,,,,,232,,,232,,,232,,,232,,,,", ",232,,,,,,,,232,,,,,232,232,232,232,232,232,,,,232,232,,,,233,233,233", "232,233,,232,,233,233,232,232,,233,,233,233,233,233,233,233,233,,,,", ",233,233,233,233,233,233,233,,,233,,,,,,,233,,,233,233,,233,233,233", "233,233,,233,233,233,,233,233,,233,233,,,,,,,,,,,,,,,,,,,,,233,,,233", ",,233,,,233,,,,,,233,,,,,,,,233,,,,,233,233,233,233,233,233,,,,233,233", ",,,234,234,234,233,234,,233,,234,234,233,233,,234,,234,234,234,234,234", "234,234,,,,,,234,234,234,234,234,234,234,,,234,,,,,,,234,,,234,234,", "234,234,234,234,234,,234,234,234,,234,234,,234,234,,,,,,,,,,,,,,,,,", ",,,234,,,234,,,234,,,234,,,,,,234,,,,,,,,234,,,,,234,234,234,234,234", "234,,,,234,234,,,,235,235,235,234,235,,234,,235,235,234,234,,235,,235", "235,235,235,235,235,235,,,,,,235,235,235,235,235,235,235,,,235,,,,,", ",235,,,235,235,,235,235,235,235,235,,235,235,235,,235,235,,235,235,", ",,,,,,,,,,,,,,,,,,,235,,,235,,,235,,,235,,,,,,235,,,,,,,,235,,,,,235", "235,235,235,235,235,,,,235,235,,,,236,236,236,235,236,,235,,236,236", "235,235,,236,,236,236,236,236,236,236,236,,,,,,236,236,236,236,236,236", "236,,,236,,,,,,,236,,,236,236,,236,236,236,236,236,,236,236,236,,236", "236,,236,236,,,,,,,,,,,,,,,,,,,,,236,,,236,,,236,,,236,,,,,,236,,,,", ",,,236,,,,,236,236,236,236,236,236,,,,236,236,,,,237,237,237,236,237", ",236,,237,237,236,236,,237,,237,237,237,237,237,237,237,,,,,,237,237", "237,237,237,237,237,,,237,,,,,,,237,,,237,237,,237,237,237,237,237,", "237,237,237,,237,237,,237,237,,,,,,,,,,,,,,,,,,,,,237,,,237,,,237,,", "237,,,,,,237,,,,,,,,237,,,,,237,237,237,237,237,237,,,,237,237,,,,238", "238,238,237,238,,237,,238,238,237,237,,238,,238,238,238,238,238,238", "238,,,,,,238,238,238,238,238,238,238,,,238,,,,,,,238,,,238,238,,238", "238,238,238,238,,238,238,238,,238,238,,238,238,,,,,,,,,,,,,,,,,,,,,238", ",,238,,,238,,,238,,,,,,238,,,,,,,,238,,,,,238,238,238,238,238,238,,", ",238,238,,,,239,239,239,238,239,,238,,239,239,238,238,,239,,239,239", "239,239,239,239,239,,,,,,239,239,239,239,239,239,239,,,239,,,,,,,239", ",,239,239,,239,239,239,239,239,,239,239,239,,239,239,,239,239,,,,,,", ",,,,,,,,,,,,,,239,,,239,,,239,,,239,,,,,,239,,,,,,,,239,,,,,239,239", "239,239,239,239,,,,239,239,,,,240,240,240,239,240,,239,,240,240,239", "239,,240,,240,240,240,240,240,240,240,,,,,,240,240,240,240,240,240,240", ",,240,,,,,,,240,,,240,240,,240,240,240,240,240,,240,240,240,,240,240", ",240,240,,,,,,,,,,,,,,,,,,,,,240,,,240,,,240,,,240,,,,,,240,,,,,,,,240", ",,,,240,240,240,240,240,240,,,,240,240,,,,241,241,241,240,241,,240,", "241,241,240,240,,241,,241,241,241,241,241,241,241,,,,,,241,241,241,241", "241,241,241,,,241,,,,,,,241,,,241,241,,241,241,241,241,241,,241,241", "241,,241,241,,241,241,,,,,,,,,,,,,,,,,,,,,241,,,241,,,241,,,241,,,,", ",241,,,,,,,,241,,,,,241,241,241,241,241,241,,,,241,241,,,,242,242,242", "241,242,,241,,242,242,241,241,,242,,242,242,242,242,242,242,242,,,,", ",242,242,242,242,242,242,242,,,242,,,,,,,242,,,242,242,,242,242,242", "242,242,,242,242,242,,242,242,,242,242,,,,,,,,,,,,,,,,,,,,,242,,,242", ",,242,,,242,,,,,,242,,,,,,,,242,,,,,242,242,242,242,242,242,,,,242,242", ",,,243,243,243,242,243,,242,,243,243,242,242,,243,,243,243,243,243,243", "243,243,,,,,,243,243,243,243,243,243,243,,,243,,,,,,,243,,,243,243,", "243,243,243,243,243,,243,243,243,,243,243,,243,243,,,,,,,,,,,,,,,,,", ",,,243,,,243,,,243,,,243,,,,,,243,,,,,,,,243,,,,,243,243,243,243,243", "243,,,,243,243,,,,418,418,418,243,418,,243,,418,418,243,243,,418,,418", "418,418,418,418,418,418,,,,,,418,418,418,418,418,418,418,,,418,,,,,", ",418,,,418,418,,418,418,418,418,418,,418,418,418,,418,418,,418,418,", ",,,,,,,,,,,,,,,,,,,418,,,418,,,418,,,418,,,,,,418,,,,,,,,418,,,,,418", "418,418,418,418,418,,,,418,418,,,,,,,418,,,418,,,,418,418,651,651,651", "651,651,,,,651,651,,,,651,,651,651,651,651,651,651,651,,,,,,651,651", "651,651,651,651,651,,,651,,,,,,651,651,,651,651,651,,651,651,651,651", "651,,651,651,651,,651,651,,651,651,,,,,,,,,,,,,,,,,,,,,651,,,651,,,651", ",,651,,651,,,,651,,,,,,,,651,,,,,651,651,651,651,651,651,,,,651,651", ",,,657,657,657,651,657,,651,,657,657,651,651,,657,,657,657,657,657,657", "657,657,,,,,,657,657,657,657,657,657,657,,,657,,,,,,,657,,,657,657,", "657,657,657,657,657,657,657,657,657,,657,657,,657,657,,,,,,,,,,,,,,", ",,,,,,657,,,657,,,657,,,657,,657,,657,,657,,,,,,,,657,,,,,657,657,657", "657,657,657,,,,657,657,,,,252,252,252,657,252,,657,,252,252,657,657", ",252,,252,252,252,252,252,252,252,,,,,,252,252,252,252,252,252,252,", ",252,,,,,,,252,,,252,252,,252,252,252,252,252,,252,252,252,,252,252", ",252,252,,,,,,,,,,,,,,,,,,,,,252,,,252,,,252,,,252,,,,,,252,,,,,,,,252", ",,,,252,252,252,252,252,252,,,,252,252,,,,378,378,378,252,378,,252,", "378,378,252,252,,378,,378,378,378,378,378,378,378,,,,,,378,378,378,378", "378,378,378,,,378,,,,,,,378,,,378,378,,378,378,378,378,378,,378,378", "378,,378,378,,378,378,,,,,,,,,,,,,,,,,,,,,378,,,378,,,378,,,378,,,,", ",378,,,,,,,,378,,,,,378,378,378,378,378,378,,,,378,378,,,,254,254,254", "378,254,,378,,254,254,378,378,,254,,254,254,254,254,254,254,254,,,,", ",254,254,254,254,254,254,254,,,254,,,,,,,254,,,254,254,,254,254,254", "254,254,,254,254,254,,254,254,,254,254,,,,,,,,,,,,,,,,,,,,,254,,,254", ",,254,,,254,,,,,,254,,,,,,,,254,,,,,254,254,254,254,254,254,,,,254,254", ",,,259,259,259,254,259,,254,,259,259,254,254,,259,,259,259,259,259,259", "259,259,,,,,,259,259,259,259,259,259,259,,,259,,,,,,,259,,,259,259,", "259,259,259,259,259,,259,259,259,,259,259,,259,259,,,,,,,,,,,,,,,,,", ",,,259,,,259,,,259,,,259,,,,,,259,,,,,,,,259,,,,,259,259,259,259,259", "259,,,,259,259,,,,,,,259,,,259,,,,259,259,663,663,663,663,663,,,,663", "663,,,,663,,663,663,663,663,663,663,663,,,,,,663,663,663,663,663,663", "663,,,663,,,,,,663,663,,663,663,663,,663,663,663,663,663,,663,663,663", ",663,663,,663,663,,,,,,,,,,,,,,,,,,,,,663,,,663,,,663,,,663,,663,,,", "663,,,,,,,,663,,,,,663,663,663,663,663,663,,,,663,663,,,,,,,663,,,663", ",,,663,663,664,664,664,664,664,,,,664,664,,,,664,,664,664,664,664,664", "664,664,,,,,,664,664,664,664,664,664,664,,,664,,,,,,664,664,,664,664", "664,,664,664,664,664,664,,664,664,664,,664,664,,664,664,,,,,,,,,,,,", ",,,,,,,,664,,,664,,,664,,,664,,664,,,,664,,,,,,,,664,,,,,664,664,664", "664,664,664,,,,664,664,,,,668,668,668,664,668,,664,,668,668,664,664", ",668,,668,668,668,668,668,668,668,,,,,,668,668,668,668,668,668,668,", ",668,,,,,,,668,,,668,668,,668,668,668,668,668,,668,668,668,,668,668", ",,,,,,,,,,,,,,,,,,,,,,,668,,,668,,,668,,,668,,,,,,,,,,,,,,,,,,,668,668", "668,668,668,668,,,,668,668,,,,265,265,265,668,265,,668,,265,265,668", "668,,265,,265,265,265,265,265,265,265,,,,,,265,265,265,265,265,265,265", ",,265,,,,,,,265,,,265,265,,265,265,265,265,265,265,265,265,265,,265", "265,,265,265,,,,,,,,,,,,,,,,,,,,,265,,,265,,,265,,,265,,265,,265,,265", ",,,,,,,265,,,,,265,265,265,265,265,265,,,,265,265,,,,266,266,266,265", "266,,265,,266,266,265,265,,266,,266,266,266,266,266,266,266,,,,,,266", "266,266,266,266,266,266,,,266,,,,,,,266,,,266,266,,266,266,266,266,266", "266,266,266,266,,266,266,,266,266,,,,,,,,,,,,,,,,,,,,,266,,,266,,,266", ",,266,,266,,266,,266,,,,,,,,266,,,,,266,266,266,266,266,266,,,,266,266", ",,,274,274,274,266,274,,266,,274,274,266,266,,274,,274,274,274,274,274", "274,274,,,,,,274,274,274,274,274,274,274,,,274,,,,,,,274,,,274,274,", "274,274,274,274,274,274,274,274,274,,274,274,,274,274,,,,,,,,,,,,,,", ",,,,,,274,,,274,,274,274,,,274,,274,,274,,274,,,,,,,,274,,,,,274,274", "274,274,274,274,,,,274,274,,,,,,,274,,,274,,,,274,274,818,818,818,818", "818,,,,818,818,,,,818,,818,818,818,818,818,818,818,,,,,,818,818,818", "818,818,818,818,,,818,,,,,,818,818,,818,818,818,,818,818,818,818,818", ",818,818,818,,818,818,,818,818,,,,,,,,,,,,,,,,,,,,,818,,,818,,,818,", ",818,,818,,,,818,,,,,,,,818,,,,,818,818,818,818,818,818,,,,818,818,", ",,,,,818,,,818,,,,818,818,817,817,817,817,817,,,,817,817,,,,817,,817", "817,817,817,817,817,817,,,,,,817,817,817,817,817,817,817,,,817,,,,,", "817,817,,817,817,817,,817,817,817,817,817,,817,817,817,,817,817,,817", "817,,,,,,,,,,,,,,,,,,,,,817,,,817,,,817,,,817,,817,,,,817,,,,,,,,817", ",,,,817,817,817,817,817,817,,,,817,817,,,,815,815,815,817,815,,817,", "815,815,817,817,,815,,815,815,815,815,815,815,815,,,,,,815,815,815,815", "815,815,815,,,815,,,,,,,815,,,815,815,,815,815,815,815,815,,815,815", "815,,815,815,,815,815,,,,,,,,,,,,,,,,,,,,,815,,,815,,,815,,,815,,,,", ",815,,,,,,,,815,,,,,815,815,815,815,815,815,,,,815,815,,,,,,,815,,,815", ",,,815,815,278,278,278,278,278,,,,278,278,,,,278,,278,278,278,278,278", "278,278,,,,,,278,278,278,278,278,278,278,,,278,,,,,,278,278,,278,278", "278,,278,278,278,278,278,,278,278,278,,278,278,,278,278,,,,,,,,,,,,", ",,,,,,,,278,,,278,,,278,,,278,,278,,,,278,,,,,,,,278,,,,,278,278,278", "278,278,278,,,,278,278,,,,678,678,678,278,678,,278,,678,678,278,278", ",678,,678,678,678,678,678,678,678,,,,,,678,678,678,678,678,678,678,", ",678,,,,,,,678,,,678,678,,678,678,678,678,678,,678,678,678,,678,678", "838,,838,838,838,838,838,,,,,,,,,,838,,,,,,,678,,,678,,,678,,,678,,", ",,,838,,,,,,,,838,838,838,838,,678,678,678,678,678,678,,,,678,678,,", ",,,,678,,,678,,,,678,678,796,796,796,796,796,,,838,796,796,,,,796,,796", "796,796,796,796,796,796,,,,,,796,796,796,796,796,796,796,,,796,,,,,", "796,796,,796,796,796,,796,796,796,796,796,,796,796,796,,796,796,,796", "796,,,,,,,,,,,,,,,,,,,,,796,,,796,,,796,,,796,,796,,,,796,,,,,,,,796", ",,,,796,796,796,796,796,796,,,,796,796,,,,366,366,366,796,366,,796,", "366,366,796,796,,366,,366,366,366,366,366,366,366,,,,,,366,366,366,366", "366,366,366,,,366,,,,,,,366,,,366,366,,366,366,366,366,366,,366,366", "366,,366,366,,,,,,,,,,,,,,,,,,,,,,,,366,,,366,,,366,,,366,,,,,,,,,,", ",,,,,,,,366,366,366,366,366,366,,,,366,366,,,,282,282,282,366,282,,366", ",282,282,366,366,,282,,282,282,282,282,282,282,282,,,,,,282,282,282", "282,282,282,282,,,282,,,,,,,282,,,282,282,,282,282,282,282,282,,282", "282,282,,282,282,,,,,,,,,,,,,,,,,,,,,,,,282,,,282,,,282,,,282,,,,,,", ",,,,,,,,,,,,282,282,282,282,282,282,,,,282,282,,,,282,,,282,,,282,,", ",282,282,283,283,283,283,283,,,,283,283,,,,283,,283,283,283,283,283", "283,283,,,,,,283,283,283,283,283,283,283,,,283,,,,,,283,283,,283,283", "283,,283,283,283,283,283,,283,283,283,,283,283,,283,283,,,,,,,,,,,,", ",,,,,,,,283,,,283,,,283,,,283,,283,,,,283,,,,,,,,283,,,,,283,283,283", "283,283,283,,,,283,283,,,,684,684,684,283,684,,283,,684,684,283,283", ",684,,684,684,684,684,684,684,684,,,,,,684,684,684,684,684,684,684,", ",684,,,,,,,684,,,684,684,,684,684,684,684,684,,684,684,684,,684,684", ",684,684,,,,,,,,,,,,,,,,,,,,,684,,,684,,,684,,,684,,684,,,,684,,,,,", ",,684,,,,,684,684,684,684,684,684,,,,684,684,,,,759,759,759,684,759", ",684,,759,759,684,684,,759,,759,759,759,759,759,759,759,,,,,,759,759", "759,759,759,759,759,,,759,,,,,,,759,,,759,759,,759,759,759,759,759,", "759,759,759,,759,759,,759,759,,,,,,,,,,,,,,,,,,,,,759,,,759,,,759,,", "759,,,,,,759,,,,,,,,759,,,,,759,759,759,759,759,759,,,,759,759,,,,786", "786,786,759,786,,759,,786,786,759,759,,786,,786,786,786,786,786,786", "786,,,,,,786,786,786,786,786,786,786,,,786,,,,,,,786,,,786,786,,786", "786,786,786,786,,786,786,786,,786,786,,786,786,,,,,,,,,,,,,,,,,,,,,786", ",,786,,,786,,,786,,786,,,,786,,,,,,,,786,,,,,786,786,786,786,786,786", ",,,786,786,,,,347,347,347,786,347,,786,,347,347,786,786,,347,,347,347", "347,347,347,347,347,,,,,,347,347,347,347,347,347,347,,,347,,,,,,,347", ",,347,347,,347,347,347,347,347,,347,347,347,,347,347,,347,347,,,,,,", ",,,,,,,,,,,,,,347,,,347,,,347,,,347,,,,,,347,,,,,,,,347,,,,,347,347", "347,347,347,347,,,,347,347,,,,346,346,346,347,346,,347,,346,346,347", "347,,346,,346,346,346,346,346,346,346,,,,,,346,346,346,346,346,346,346", ",,346,,,,,,,346,,,346,346,,346,346,346,346,346,,346,346,346,,346,346", ",346,346,,,,,,,,,,,,,,,,,,,,,346,,,346,,,346,,,346,,,,,,346,,,,,,,,346", ",,,,346,346,346,346,346,346,,,,346,346,,,,771,771,771,346,771,,346,", "771,771,346,346,,771,,771,771,771,771,771,771,771,,,,,,771,771,771,771", "771,771,771,,,771,,,,,,,771,,,771,771,,771,771,771,771,771,,771,771", "771,,771,771,,771,771,,,,,,,,,,,,,,,,,,,,,771,,,771,,,771,,,771,,,,", ",771,,,,,,,,771,,,,,771,771,771,771,771,771,,,,771,771,,,,721,721,721", "771,721,,771,,721,721,771,771,,721,,721,721,721,721,721,721,721,,,,", ",721,721,721,721,721,721,721,,,721,,,,,,,721,,,721,721,,721,721,721", "721,721,,721,721,721,,721,721,,721,721,,,,,,,,,,,,,,,,,,,,,721,,,721", ",,721,,,721,,,,,,721,,,,,,,,721,,,,,721,721,721,721,721,721,,,,721,721", ",,,770,770,770,721,770,,721,,770,770,721,721,,770,,770,770,770,770,770", "770,770,,,,,,770,770,770,770,770,770,770,,,770,,,,,,,770,,,770,770,", "770,770,770,770,770,,770,770,770,,770,770,,770,770,,,,,,,,,,,,,,,,,", ",,,770,,,770,,,770,,,770,,,,,,770,,,,,,,,770,,,,,770,770,770,770,770", "770,,,,770,770,,,,769,769,769,770,769,,770,,769,769,770,770,,769,,769", "769,769,769,769,769,769,,,,,,769,769,769,769,769,769,769,,,769,,,,,", ",769,,,769,769,,769,769,769,769,769,,769,769,769,,769,769,,769,769,", ",,,,,,,,,,,,,,,,,,,769,,,769,,,769,,,769,,,,,,769,,,,,,,,769,,,,,769", "769,769,769,769,769,,,,769,769,,,,295,295,295,769,295,,769,,295,295", "769,769,,295,,295,295,295,295,295,295,295,,,,,,295,295,295,295,295,295", "295,,,295,,,,,,,295,,,295,295,,295,295,295,295,295,,295,295,295,,295", "295,,,,,,,,,,,,,,,,,,,,,,,,295,,,295,,,295,,,295,,,,,,,,,,,,,,,,,,,295", "295,295,295,295,295,,,,295,295,,,,,,,295,,,295,,,,295,295,726,726,726", "726,726,,,,726,726,,,,726,,726,726,726,726,726,726,726,,,,,,726,726", "726,726,726,726,726,,,726,,,,,,726,726,,726,726,726,,726,726,726,726", "726,,726,726,726,,726,726,,726,726,,,,,,,,,,,,,,,,,,,,,726,,,726,,,726", ",,726,,726,,,,726,,,,,,,,726,,,,,726,726,726,726,726,726,,,,726,726", ",,,,,,726,,,726,,,,726,726,730,730,730,730,730,,,,730,730,,,,730,,730", "730,730,730,730,730,730,,,,,,730,730,730,730,730,730,730,,,730,,,,,", "730,730,,730,730,730,,730,730,730,730,730,,730,730,730,,730,730,,730", "730,,,,,,,,,,,,,,,,,,,,,730,,,730,,,730,,,730,,730,,,,730,,,,,,,,730", ",,,,730,730,730,730,730,730,,,,730,730,,,,,,,730,,,730,,,,730,730,731", "731,731,731,731,,,,731,731,,,,731,,731,731,731,731,731,731,731,,,,,", "731,731,731,731,731,731,731,,,731,,,,,,731,731,,731,731,731,,731,731", "731,731,731,,731,731,731,,731,731,,731,731,,,,,,,,,,,,,,,,,,,,,731,", ",731,,,731,,,731,,731,,,,731,,,,,,,,731,,,,,731,731,731,731,731,731", ",,,731,731,,,,738,738,738,731,738,,731,,738,738,731,731,,738,,738,738", "738,738,738,738,738,,,,,,738,738,738,738,738,738,738,,,738,,,,,,,738", ",,738,738,,738,738,738,738,738,,738,738,738,,738,738,,738,738,,,,,,", ",,,,,,,,,,,,,,738,,,738,,,738,,,738,,,,,,738,,,,,,,,738,,,,,738,738", "738,738,738,738,,,,738,738,,,,,,,738,,,738,,,,738,738,752,752,752,752", "752,,,,752,752,,,,752,,752,752,752,752,752,752,752,,,,,,752,752,752", "752,752,752,752,,,752,,,,,,752,752,,752,752,752,,752,752,752,752,752", ",752,752,752,,752,752,,752,752,,,,,,,,,,,,,,,,,,,,,752,,,752,,,752,", ",752,,752,,,,752,,,,,,,,752,,,,,752,752,752,752,752,752,,,,752,752,", ",,304,304,304,752,304,,752,,304,304,752,752,,304,,304,304,304,304,304", "304,304,,,,,,304,304,304,304,304,304,304,,,304,,,,,,,304,,,304,304,", "304,304,304,304,304,,304,304,304,,304,304,,304,304,,,,,,,,,,,,,,,,,", ",,,304,,,304,304,,304,,,304,,,,,,304,,,,,,,,304,,,,,304,304,304,304", "304,304,,,,304,304,,,,,,,304,,,304,,,,304,304,306,306,306,306,306,,", ",306,306,,,,306,,306,306,306,306,306,306,306,,,,,,306,306,306,306,306", "306,306,,,306,,,,,,306,306,,306,306,306,,306,306,306,306,306,,306,306", "306,,306,306,,306,306,,,,,,,,,,,,,,,,,,,,,306,,,306,,,306,,,306,,306", ",,,306,,,,,,,,306,,,,,306,306,306,306,306,306,,,,306,306,,,,758,758", "758,306,758,,306,,758,758,306,306,,758,,758,758,758,758,758,758,758", ",,,,,758,758,758,758,758,758,758,,,758,,,,,,,758,,,758,758,,758,758", "758,758,758,,758,758,758,,758,758,,758,758,,,,,,,,,,,,,,,,,,,,,758,", ",758,,,758,,,758,,,,,,758,,,,,,,,758,,,,,758,758,758,758,758,758,,,", "758,758,,,,715,715,715,758,715,,758,,715,715,758,758,,715,,715,715,715", "715,715,715,715,,,,,,715,715,715,715,715,715,715,,,715,,,,,,,715,,,715", "715,,715,715,715,715,715,,715,715,715,,715,715,,715,715,,,,,,,,,,,,", ",,,,,,,,715,,,715,,,715,,,715,,715,,,,715,,,,,,,,715,,,,,715,715,715", "715,715,715,,,,715,715,,,,87,,,715,,,715,87,87,87,715,715,87,87,87,", "87,,,,,,,,87,,87,87,87,,,,,,,,87,87,,87,87,87,87,87,,,,,,,,,,,,,,,,", ",,,,,,,87,87,87,87,87,87,87,87,87,87,87,87,87,87,,,87,87,87,,87,87,", ",87,,,87,,87,,87,,87,,87,87,87,87,87,87,87,,87,,87,,,,,,,,,,,,,87,87", "87,87,,87,84,87,87,,,87,,84,84,84,,,84,84,84,,84,,,,,,,,84,,84,84,84", ",,,,,,,84,84,,84,84,84,84,84,,,,,,,,,,,,,,,,,,,,,,,,84,84,84,84,84,84", "84,84,84,84,84,84,84,84,,,84,84,84,,84,84,,,84,,,84,,84,,84,,84,,84", "84,84,84,84,84,84,,84,,84,,,,,,,,,,,,,84,84,84,84,,84,631,84,84,,,84", ",631,631,631,,,631,631,631,,631,,,,,,,,,631,631,631,,,,,,,,,631,631", ",631,631,631,631,631,,,,,,,,,,,,,,,,,,,,,,,,631,631,631,631,631,631", "631,631,631,631,631,631,631,631,,,631,631,631,,631,631,,,631,,,631,", "631,,631,,631,,631,631,631,631,631,631,631,,631,631,631,,,,,,,,,,,,", "631,631,631,631,,631,432,,631,,,631,,432,432,432,,,,432,432,,432,,,", ",,,,,432,,,,,,,,,,,432,432,,432,432,432,432,432,,,,,,,,,,,,,,,,,,,,", ",,,432,432,432,432,432,432,432,432,432,432,432,432,432,432,,,432,432", "432,,432,,,,432,,,,,,,432,,432,,432,432,432,432,432,432,432,,432,432", "432,,,,,,,,,,,,,432,432,,432,,432,632,,432,,,432,,632,632,632,,,632", "632,632,,632,,,,,,,,,,632,632,,,,,,,,,632,632,,632,632,632,632,632,", ",,,,,,,,,,,,,,,,,,,,,,632,632,632,632,632,632,632,632,632,632,632,632", "632,632,,,632,632,632,,632,632,,,632,,,632,,632,,632,,632,,632,632,632", "632,632,632,632,,632,,632,,,,,,,,,,,,,632,632,632,632,,632,434,,632", ",,632,,434,434,434,,,,434,434,,434,,,,,,,,,,,,,,,,,,,,434,434,,434,434", "434,434,434,,,,,,,,,,,,,,,,,,,,,,,,434,434,434,434,434,434,434,434,434", "434,434,434,434,434,,,434,434,434,,434,,,,434,,,,,,,434,,434,,434,434", "434,434,434,434,434,,434,,434,,,,,,,,,,,,,434,434,,434,,434,50,,434", ",,434,,50,50,50,,,50,50,50,,50,,,,,,,,,,50,50,50,,,,,,,,50,50,,50,50", "50,50,50,,,,,,,,,,,,,,,,,,,,,,,,50,50,50,50,50,50,50,50,50,50,50,50", "50,50,,,50,50,50,,,50,,,50,,,50,,50,,50,,50,,50,50,50,50,50,50,50,,50", ",50,,,,,,,,,,,,,50,50,50,50,428,50,,50,50,,,428,428,428,,,428,428,428", ",428,,,,,,,,,428,428,428,,,,,,,,,428,428,,428,428,428,428,428,,,,,,", ",,,,,,,,,,,,,,,,,428,428,428,428,428,428,428,428,428,428,428,428,428", "428,,,428,428,428,,,428,,428,428,,,428,,428,,428,,428,,428,428,428,428", "428,428,428,,428,428,428,,,,,,,,,,,,,428,428,428,428,437,428,,,428,", ",437,437,437,,,437,437,437,,437,,,,,,,,,437,437,437,437,,,,,,,,437,437", ",437,437,437,437,437,,,,,,,,,,,,,,,,,,,,,,,,437,437,437,437,437,437", "437,437,437,437,437,437,437,437,,,437,437,437,,,437,,,437,,,437,,437", ",437,,437,,437,437,437,437,437,437,437,,437,437,437,,,,,,,,,,,,,437", "437,437,437,27,437,,437,437,,,27,27,27,,,27,27,27,,27,,,,,,,,,27,27", "27,,,,,,,,,27,27,,27,27,27,27,27,,,,,,,,,,,,,,,,,,,,,,,,27,27,27,27", "27,27,27,27,27,27,27,27,27,27,,,27,27,27,,,27,,27,27,,,27,,27,,27,,27", ",27,27,27,27,27,27,27,,27,27,27,,,,,,,,,,,,,27,27,27,27,28,27,,,27,", ",28,28,28,,,28,28,28,,28,,,,,,,,,,28,28,,,,,,,,,28,28,,28,28,28,28,28", ",,,,,,,,,,,,,,,,,,,,,,,28,28,28,28,28,28,28,28,28,28,28,28,28,28,,,28", "28,28,,,28,,28,28,,,28,,28,,28,,28,,28,28,28,28,28,28,28,,28,,28,,,", ",,,,,,,,,28,28,28,28,436,28,,,28,,,436,436,436,,,436,436,436,,436,,", ",,,,,,436,436,436,436,,,,,,,,436,436,,436,436,436,436,436,,,,,,,,,,", ",,,,,,,,,,,,,436,436,436,436,436,436,436,436,436,436,436,436,436,436", ",,436,436,436,,,436,,,436,,,436,,436,,436,,436,,436,436,436,436,436", "436,436,,436,436,436,,,,,,,,,,,,,436,436,436,436,486,436,,436,436,,", "486,486,486,,,486,486,486,,486,,,,,,,,,,486,,,,,,,,,,486,486,,486,486", "486,486,486,,,,,,,,,,,,,489,,,,,,,489,489,489,,,489,489,489,,489,,,", ",,486,,,,489,,,486,,,,,486,486,489,489,,489,489,489,489,489,,,,,,,,", ",,,,486,,,,,,,,,,,,,486,,486,,,486,,,,489,,,,,,,489,,,,,489,489,,,,", ",,,,,,,,,,,,,,,,489,,,,,,,,,,,,,489,,489,,,489,8,8,8,8,8,8,8,8,8,8,8", "8,8,8,8,8,8,8,8,8,8,8,8,8,,,,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8", "8,,8,8,,,8,,,,,,,,,8,8,,8,8,8,8,8,8,8,,,8,8,,,,8,8,8,8,,,,,,,,,,,,,8", "8,,8,8,8,8,8,8,8,8,8,8,8,,,8,8,,,,,,,,,,8,412,412,412,412,412,412,412", "412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412", ",,,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412,412", "412,412,412,412,,412,412,,,412,,,,,,,,,412,412,,412,412,412,412,412", "412,412,,,412,412,,,,412,412,412,412,,,,,,,,,,,,,412,412,,412,412,412", "412,412,412,412,412,412,412,412,,,412,412,,,,,,,,,,412,7,7,7,7,7,7,7", "7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,,,,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7", "7,7,7,7,7,,7,7,7,,7,,,,,,,,,7,7,,7,7,7,7,7,7,7,,,7,7,,,,7,7,7,7,,,,", ",,,,,,,,7,7,,7,7,7,7,7,7,7,7,7,7,7,,,7,7,,,,,,,,,,7,408,408,408,408", "408,408,408,408,408,408,408,408,408,408,408,408,408,408,408,408,408", "408,408,408,,,,408,408,408,408,408,408,408,408,408,408,408,408,408,408", "408,408,408,408,408,408,408,,408,408,,,408,,,,,,,,,408,408,,408,408", "408,408,408,408,408,,,408,408,,,,408,408,408,408,,,,,,,,,,,,,408,408", ",408,408,408,408,408,408,408,408,408,408,408,,,408,408,,,,,,,,,,408", "65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65", "65,,,,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65,65", ",65,65,65,65,65,,65,,,,,,,65,65,,65,65,65,65,65,65,65,,,65,65,,,,65", "65,65,65,,,,,,65,,,,,,,65,65,,65,65,65,65,65,65,65,65,65,65,65,,,65", "79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79", "79,,,,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79,79", ",79,79,79,79,79,,79,,,,,,,79,79,,79,79,79,79,79,79,79,,,79,79,,,,79", "79,79,79,,,,,,,,,,,,,79,79,,79,79,79,79,79,79,79,79,79,79,79,,,79,749", "749,749,749,749,749,749,749,749,749,749,749,749,749,749,749,749,749", "749,749,749,749,749,749,,,,749,749,749,749,749,749,749,749,749,749,749", "749,749,749,749,749,749,749,749,749,749,,749,749,,,749,,,,,,,,,749,749", ",749,749,749,749,749,749,749,,,749,749,,,,749,749,749,749,,,,,,,,,,", ",,749,749,,749,749,749,749,749,749,749,749,749,749,749,,,749,192,192", "192,192,192,192,192,192,192,192,192,192,192,192,192,192,192,192,192", "192,192,192,192,192,,,,192,192,192,192,192,192,192,192,192,192,192,192", "192,192,192,192,192,192,192,192,192,,192,192,192,192,192,,192,,,,,,", "192,192,,192,192,192,192,192,192,192,,,192,192,,,,192,192,192,192,,", ",,,,,,,,,,192,192,,192,192,192,192,192,192,192,192,192,192,192,200,200", "192,,200,,,,,,,,,200,200,,200,200,200,200,200,200,200,,,200,200,,,,200", "200,200,200,,,,,,200,,,,,,,200,200,,200,200,200,200,200,200,200,200", "200,200,200,262,262,200,,262,,,,,,,,,262,262,,262,262,262,262,262,262", "262,,,262,262,,,,262,262,262,262,,,,,,,,,,,,,262,262,,262,262,262,262", "262,262,262,262,262,262,262,263,263,262,,263,,,,,,,,,263,263,,263,263", "263,263,263,263,263,,,263,263,,,,263,263,263,263,,,,,,,,,,,,,263,263", ",263,263,263,263,263,263,263,263,263,263,263,514,514,263,,514,,,,,,", ",,514,514,,514,514,514,514,514,514,514,,,514,514,,,,514,514,514,514", ",,,,,514,,,,,,,514,514,,514,514,514,514,514,514,514,514,514,514,514", "442,442,514,,442,,,,,,,,,442,442,,442,442,442,442,442,442,442,,,442", "442,,,,442,442,442,442,,,,,,442,,,,,,,442,442,,442,442,442,442,442,442", "442,442,442,442,442,443,443,442,,443,,,,,,,,,443,443,,443,443,443,443", "443,443,443,,,443,443,,,,443,443,443,443,,,,,,,,,,,,,443,443,,443,443", "443,443,443,443,443,443,443,443,443,575,575,443,,575,,,,,,,,,575,575", ",575,575,575,575,575,575,575,,,575,575,,,,575,575,575,575,,,,,,575,", ",,,,,575,575,,575,575,575,575,575,575,575,575,575,575,575,805,805,575", ",805,,,,,,,,,805,805,,805,805,805,805,805,805,805,,,805,805,,,,805,805", "805,805,,,,,,,,,,,,,805,805,,805,805,805,805,805,805,805,805,805,805", "805,576,576,805,,576,,,,,,,,,576,576,,576,576,576,576,576,576,576,,", "576,576,,,,576,576,576,576,,,,,,,,,,,,,576,576,,576,576,576,576,576", "576,576,576,576,576,576,201,201,576,,201,,,,,,,,,201,201,,201,201,201", "201,201,201,201,,,201,201,,,,201,201,201,201,,,,,,,,,,,,,201,201,,201", "201,201,201,201,201,201,201,201,201,201,655,655,201,,655,,,,,,,,,655", "655,,655,655,655,655,655,655,655,,,655,655,,,,655,655,655,655,,,,,,", ",,,,,,655,655,,655,655,655,655,655,655,655,655,655,655,655,656,656,655", ",656,,,,,,,,,656,656,,656,656,656,656,656,656,656,,,656,656,,,,656,656", "656,656,,,,,,,,,,,,,656,656,,656,656,656,656,656,656,656,656,656,656", "656,525,525,656,,525,,,,,,,,,525,525,,525,525,525,525,525,525,525,,", "525,525,,,,525,525,525,525,,,,,,525,,,,,,,525,525,,525,525,525,525,525", "525,525,525,525,525,525,926,926,525,,926,,,,,,,,,926,926,,926,926,926", "926,926,926,926,,,926,926,,,,926,926,926,926,,,,,,926,,,,,,,926,926", ",926,926,926,926,926,926,926,926,926,926,926,526,526,926,,526,,,,,,", ",,526,526,,526,526,526,526,526,526,526,,,526,526,,,,526,526,526,526", ",,,,,,,,,,,,526,526,,526,526,526,526,526,526,526,526,526,526,526,581", "581,526,,581,,,,,,,,,581,581,,581,581,581,581,581,581,581,,,581,581", ",,,581,581,581,581,,,,,,,,,,,,,581,581,,581,581,581,581,581,581,581", "581,581,581,581,927,927,581,,927,,,,,,,,,927,927,,927,927,927,927,927", "927,927,,,927,927,,,,927,927,927,927,,,,,,,,,,,,,927,927,,927,927,927", "927,927,927,927,927,927,927,927,583,583,927,,583,,,,,,,,,583,583,,583", "583,583,583,583,583,583,,,583,583,,,,583,583,583,583,,,,,,583,,,,,,", "583,583,,583,583,583,583,583,583,583,583,583,583,583,515,515,583,,515", ",,,,,,,,515,515,,515,515,515,515,515,515,515,,,515,515,,,,515,515,515", "515,,,,,,,,,,,,,515,515,,515,515,515,515,515,515,515,515,515,515,515", ",,515"];
 
-      racc_action_check = arr = Opal.get('Array').$new(24653, nil);
+      racc_action_check = arr = Opal.get('Array').$new(23675, nil);
 
       idx = 0;
 
@@ -17024,13 +17861,13 @@ if (i == null) i = nil;
           };
           return idx = idx['$+'](1);}, TMP_4.$$s = self, TMP_4), $a).call($b)}, TMP_3.$$s = self, TMP_3), $a).call($c);
 
-      racc_action_pointer = [-2, 1131, nil, 429, nil, 668, 1009, 22754, 22631, 995, 968, 967, 1014, 128, 318, 192, nil, 1916, 2053, 2190, 1052, nil, 2464, 2601, 2738, 338, 29, 22244, 22115, nil, 3423, 3560, 3697, nil, 942, 181, 1013, 30, 4382, 4519, 4656, 914, 275, nil, nil, nil, nil, nil, nil, nil, 21857, nil, 5204, 5341, 5478, 36, 6312, 5889, 6026, nil, nil, 6163, 6300, 6437, nil, 23347, nil, nil, nil, nil, nil, 120, nil, nil, nil, nil, nil, 888, 874, 23459, nil, nil, nil, 250, 21599, nil, nil, 21212, nil, nil, nil, nil, nil, nil, nil, nil, nil, 1000, nil, 7807, nil, nil, nil, 7944, 8081, 8218, 8355, 8492, 8629, nil, 447, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 23235, 856, nil, 9177, 9314, 9451, 9588, 9725, 23639, 23519, 10136, 10273, 10410, nil, 507, 310, 907, -53, 820, 862, 11369, 11506, nil, nil, 11643, 855, 11917, 12054, 12191, 12328, 12465, 12602, 12739, 12876, 13013, 13150, 13287, 13424, 13561, 13698, 13835, 13972, 14109, 14246, 14383, 14520, 14657, 14794, 14931, 15068, 15205, 15342, nil, nil, nil, 2601, nil, 813, 803, nil, 15890, 825, 16164, nil, nil, nil, nil, 16301, nil, nil, 23999, 24239, 814, 16849, 16986, nil, nil, nil, nil, nil, nil, nil, 17123, 326, 531, 772, 17671, 766, 765, 708, 18219, 18356, 412, 300, 772, 185, 735, 694, -11, nil, 728, 185, nil, 19726, nil, 595, 743, 737, 453, nil, 712, nil, 20548, nil, 20685, 34, nil, 652, 309, 509, 649, 621, 23, 583, nil, nil, -21, 6997, nil, nil, nil, 514, 498, nil, 374, 297, nil, nil, nil, nil, nil, nil, nil, 2753, nil, nil, nil, 311, nil, nil, 287, 399, 84, 0, 19041, 18904, 457, 757, 33, 14, 199, -18, -2, 1021, nil, nil, -2, 121, nil, 418, nil, 73, nil, nil, 18082, 581, 505, 475, 477, 610, 444, 456, 287, nil, 203, nil, 15479, nil, 262, nil, 255, nil, 236, 536, 135, nil, 597, 38, nil, 219, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 662, 23000, nil, nil, nil, 22877, 664, nil, nil, 409, nil, 10821, 652, nil, 680, nil, nil, 1779, 722, 264, 633, 22373, nil, nil, nil, 21083, 776, 21341, nil, 21986, 21728, nil, 2464, nil, nil, 24119, 24179, 7396, 320, 7259, 7122, 6848, 277, nil, 4108, 5204, 984, 850, 835, 865, 866, 889, 5478, 5341, 2761, 4245, 5067, 4930, 4793, 4519, 3286, 3423, 3834, 3971, 3012, 1169, 1032, 4656, 4382, 820, -27, nil, 957, nil, 820, nil, 683, nil, nil, 22502, nil, nil, 20886, 0, nil, 962, 959, 123, 957, 1063, nil, nil, 135, -40, 130, 1042, nil, nil, 15753, 1031, 993, nil, nil, 979, 20822, 1001, 272, 23579, 23699, 387, 988, nil, nil, 941, nil, 409, 546, 1094, 24539, 23939, 2327, 1231, 1043, 1029, 944, nil, nil, 1505, nil, nil, 2190, nil, nil, nil, nil, 2875, 3012, 910, nil, 576, nil, nil, 3149, 3709, nil, 568, nil, nil, 894, nil, 2861, nil, 853, 1354, nil, nil, 3286, 961, nil, nil, 3834, 135, 47, 955, 961, 3971, nil, 4930, 22500, 24419, 53, nil, 315, nil, 24479, 5067, 23819, nil, nil, 5615, 292, 6574, nil, 3572, nil, nil, nil, 66, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, -35, nil, nil, nil, 769, nil, nil, nil, nil, nil, 7533, 736, 8903, 594, 9040, 9862, 716, nil, nil, nil, 9999, 686, nil, 10547, 98, 14, 20954, 21470, 676, 546, nil, 11095, nil, 3161, nil, 16438, 460, nil, 470, 16575, nil, nil, nil, nil, nil, nil, 16712, nil, 359, 313, 24299, 24359, 17397, 683, 139, nil, nil, 125, 18493, 18630, nil, 805, -50, 18767, -62, nil, -14, 217, 207, 92, 43, 265, 207, 19178, 1231, 304, 313, -26, 407, 19315, nil, nil, 468, 347, 460, nil, nil, 340, nil, 363, 316, 453, 393, 402, nil, nil, 445, 2724, nil, 751, nil, 592, nil, nil, nil, nil, nil, 603, nil, 619, 19863, 545, 34, 15, 16, -18, 20137, 409, nil, 656, 655, 20274, 414, nil, 249, 10958, 20411, 18231, -61, 666, 667, 668, nil, 668, nil, 23123, 714, 775, 20000, nil, nil, nil, 1094, 687, 19589, 19452, nil, 1368, nil, 1916, nil, nil, 2053, nil, 957, 17945, 17808, 17534, 213, 1505, nil, 759, 861, nil, nil, 768, nil, nil, 793, 796, 614, 874, 17260, nil, 793, 898, 780, 281, nil, nil, 903, nil, 16027, 786, 828, nil, nil, nil, nil, nil, nil, 23879, nil, 627, nil, nil, nil, nil, 1491, 931, nil, 15616, 933, 11780, 11232, nil, nil, 112, 0, 219, nil, 955, nil, nil, 956, 957, 844, nil, 18094, nil, 762, nil, nil, 597, 10684, nil, nil, nil, nil, nil, nil, nil, 870, 855, nil, 1642, 8766, nil, nil, nil, 902, 866, nil, nil, nil, 7670, nil, nil, 93, 6985, nil, 914, 879, nil, nil, 77, nil, 1011, 1014, 6711, 5752, nil, nil, 4793, nil, nil, 951, 916, -102, nil, 919, 913, nil, nil, 6449, nil, nil, nil, 4245, nil, 4108, 269, 186, 1022, 147, nil, nil, 2327, nil, nil, nil, 629, 1779, 1080, nil, 899, nil, nil, nil, 1642, 1086, 1368, 24059, 23759, 285, 677, nil, nil, nil, 1099, nil, 982, 1109, nil, 1025, -7, 92, 85, 546, nil, nil, nil, nil, 524];
+      racc_action_pointer = [-2, 1244, nil, 459, nil, 763, 1127, 21839, 21593, 1095, 1067, 1066, 1113, 370, 465, 630, nil, 1810, 1936, 2578, 1155, nil, 2326, 2452, 2578, 372, 232, 21021, 21150, nil, 3244, 3370, 3496, nil, 1044, 603, 1108, 20, 4174, 4300, 4426, 1030, 337, nil, nil, nil, nil, nil, nil, nil, 20634, nil, 4942, 5068, 5194, 29, 6100, 5572, 5698, nil, nil, 5824, 5962, 6088, nil, 22085, nil, nil, nil, nil, nil, 225, nil, nil, nil, nil, nil, 997, 995, 22197, nil, nil, nil, -23, 19979, nil, nil, 19848, nil, nil, nil, nil, nil, nil, nil, nil, nil, 1115, nil, 7384, nil, nil, nil, 7522, 7648, 7774, 7900, 8038, 8176, nil, 191, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 22421, 983, nil, 8704, 8830, 8956, 9082, 9208, 22481, 23021, 9586, 9712, 9838, nil, 549, 254, 1035, 223, 940, 987, 10744, 10870, nil, nil, 10996, 982, 11248, 11374, 11500, 11626, 11752, 11878, 12004, 12130, 12256, 12382, 12508, 12634, 12760, 12886, 13012, 13138, 13264, 13390, 13516, 13642, 13768, 13894, 14020, 14146, 14272, 14398, nil, nil, nil, 1546, nil, 918, 901, nil, 14914, 938, 15166, nil, nil, nil, nil, 15292, nil, nil, 22541, 22601, 929, 15820, 15946, nil, nil, nil, nil, nil, nil, nil, 16072, 195, 889, 924, 16612, 906, 900, 858, 17128, 17266, 181, 368, 912, 334, 851, 795, 226, nil, 828, 691, nil, 18526, nil, 333, 836, 833, 546, nil, 832, nil, 19330, nil, 19468, 39, nil, 766, 608, 540, 781, 759, 42, 737, nil, nil, 42, 5974, nil, nil, nil, 662, 651, nil, 594, 558, nil, nil, nil, nil, nil, nil, nil, 2702, nil, nil, nil, 572, nil, nil, 548, 823, 77, 107, 17896, 17770, 551, 761, 321, 56, 411, 345, 24, 323, nil, nil, 239, 223, nil, 505, nil, 65, nil, nil, 17002, 374, 464, 707, 431, 649, 461, 307, 402, nil, 683, nil, 15040, nil, 236, nil, 255, nil, -23, -30, 323, nil, 65, -34, nil, 231, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 301, 21962, nil, nil, nil, 21716, 446, nil, nil, 502, nil, 14524, 440, nil, 637, nil, nil, 2200, 700, 511, 528, 20763, nil, nil, nil, 20241, 748, 20503, nil, 21279, 20892, nil, 904, nil, nil, 22721, 22781, 10216, 14, 9964, 9460, 9334, 447, nil, 2968, 3244, 230, 1435, 823, 846, 893, 931, 5068, 5194, 3371, 4552, 4048, 2842, 3772, 4174, 4300, 4690, 4942, 4816, 4426, 716, 2812, 3910, 3106, 778, 341, nil, 2968, nil, 2842, nil, 2062, nil, nil, 21408, nil, nil, 21464, -34, nil, 1021, 995, 121, 1037, 1153, nil, nil, 904, 85, -17, 1090, nil, nil, 640, 1093, 1064, nil, nil, 1115, 250, 1155, 124, 22661, 23561, 618, 1151, nil, nil, 1088, nil, 376, 502, 778, 23201, 23321, 1684, 1030, 1150, 1143, 1036, nil, nil, 1156, nil, nil, 1408, nil, nil, nil, nil, 1684, 3106, 1002, nil, 847, nil, nil, 3634, 2769, nil, 49, nil, nil, 986, nil, 2732, nil, 938, 1142, nil, nil, 3772, 1012, nil, nil, 3910, 219, 38, 1001, 991, 4690, nil, 4816, 22841, 22961, 84, nil, 378, nil, 23381, 5320, 23501, nil, nil, 5446, 661, 6214, nil, 3508, nil, nil, nil, 41, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, -35, nil, nil, nil, 811, nil, nil, nil, nil, nil, 6742, 783, 6868, 330, 6994, 7120, 781, nil, nil, nil, 8302, 778, nil, 8428, 187, 64, 20110, 20372, 734, 640, nil, 10468, nil, 3382, nil, 10606, 552, nil, 507, 11122, nil, nil, nil, nil, nil, nil, 14662, nil, 407, 397, 23081, 23141, 14788, 1408, -63, nil, nil, -68, 15430, 15568, nil, 1015, -22, 15694, -114, nil, 1047, 199, 100, -29, 202, 640, 43, 16738, 1030, 222, 233, 240, 348, 17392, nil, nil, 351, 311, 423, nil, nil, 300, nil, 314, 369, 405, 336, 350, nil, nil, 391, 2739, nil, 217, nil, 504, nil, nil, nil, nil, nil, 517, nil, 534, 19720, 468, 101, 10, -18, -17, 18148, 502, nil, 610, 612, 18664, 507, nil, -25, 18802, 18940, 7258, 196, nil, nil, 783, nil, 19066, nil, 713, 716, nil, 728, 735, 740, nil, 733, nil, 22309, 781, 595, 19204, nil, nil, nil, 2326, 761, 19594, 17518, nil, 1282, nil, 1156, nil, nil, 1810, nil, 1936, 18400, 18274, 18022, -65, 2062, nil, 835, 939, nil, nil, 838, nil, nil, 861, 864, 209, 937, 17644, nil, 858, 973, 857, 544, nil, nil, 981, nil, 16876, 864, 906, nil, nil, nil, nil, nil, nil, 22901, nil, 375, nil, nil, nil, nil, 1016, 992, nil, 16474, 1007, 16348, 16210, nil, nil, 90, 107, 78, nil, 1022, nil, nil, 1028, 1030, 919, nil, nil, nil, 219, nil, nil, 514, 16750, nil, 304, nil, -32, nil, 10342, nil, nil, nil, nil, nil, nil, nil, 968, 958, nil, 2452, 10090, nil, nil, nil, 1005, 980, nil, nil, nil, 8566, nil, nil, 97, 7246, nil, 1027, 990, nil, nil, -7, nil, 1112, 1114, 6616, 6490, nil, nil, 6352, nil, nil, 1038, nil, -118, nil, nil, 1014, 1015, 1022, 1015, nil, nil, 3646, nil, nil, nil, 4552, nil, 4048, 285, 228, 1115, 643, nil, nil, 2716, nil, nil, nil, 808, 2200, 1174, nil, nil, 430, nil, nil, nil, 1546, 1191, 1282, 23261, 23441, 463, 852, nil, nil, nil, 1210, nil, 1094, 1225, nil, 1143, 84, 67, 71, 682, nil, nil, nil, nil, 684];
 
-      racc_action_default = [-3, -528, -1, -516, -4, -6, -528, -528, -528, -528, -528, -528, -528, -528, -268, -36, -37, -528, -528, -42, -44, -45, -279, -317, -318, -49, -246, -246, -246, -61, -10, -65, -72, -74, -528, -445, -528, -528, -528, -528, -528, -518, -226, -261, -262, -263, -264, -265, -266, -267, -506, -270, -528, -527, -498, -287, -527, -528, -528, -292, -295, -516, -528, -528, -309, -528, -319, -320, -388, -389, -390, -391, -392, -527, -395, -527, -527, -527, -527, -527, -422, -428, -429, -528, -504, -435, -436, -505, -438, -439, -440, -441, -442, -443, -444, -447, -448, -528, -2, -517, -523, -524, -525, -528, -528, -528, -528, -528, -3, -13, -528, -100, -101, -102, -103, -104, -105, -106, -109, -110, -111, -112, -113, -114, -115, -116, -117, -118, -119, -120, -121, -122, -123, -124, -125, -126, -127, -128, -129, -130, -131, -132, -133, -134, -135, -136, -137, -138, -139, -140, -141, -142, -143, -144, -145, -146, -147, -148, -149, -150, -151, -152, -153, -154, -155, -156, -157, -158, -159, -160, -161, -162, -163, -164, -165, -166, -167, -168, -169, -170, -171, -172, -173, -174, -175, -176, -177, -178, -179, -180, -181, -182, -528, -18, -107, -10, -528, -528, -528, -527, -528, -528, -528, -528, -528, -40, -528, -445, -528, -268, -528, -528, -10, -528, -41, -218, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -528, -359, -361, -46, -227, -239, -253, -253, -243, -528, -254, -528, -279, -317, -318, -500, -528, -47, -48, -528, -528, -53, -527, -528, -286, -364, -371, -373, -59, -369, -60, -528, -516, -11, -61, -10, -528, -528, -66, -69, -10, -80, -528, -528, -87, -282, -518, -528, -321, -370, -528, -71, -528, -76, -275, -430, -431, -528, -203, -204, -219, -528, -519, -10, -518, -228, -518, -520, -520, -528, -528, -520, -528, -288, -289, -528, -528, -332, -333, -340, -527, -464, -347, -527, -527, -358, -463, -465, -466, -467, -468, -469, -528, -482, -487, -488, -490, -491, -492, -528, -43, -528, -528, -528, -528, -516, -528, -517, -445, -528, -528, -268, -528, -471, -472, -96, -528, -98, -528, -268, -528, -306, -445, -528, -100, -101, -138, -139, -155, -160, -167, -170, -312, -528, -496, -528, -393, -528, -408, -528, -410, -528, -528, -528, -400, -528, -528, -406, -528, -421, -423, -424, -425, -426, -432, -433, 929, -5, -526, -19, -20, -21, -22, -23, -528, -528, -15, -16, -17, -528, -528, -25, -33, -183, -254, -528, -528, -26, -34, -35, -27, -185, -528, -507, -508, -246, -366, -509, -510, -507, -246, -508, -368, -509, -510, -32, -192, -38, -39, -528, -528, -527, -275, -528, -528, -528, -528, -285, -193, -194, -195, -196, -197, -198, -199, -200, -205, -206, -207, -208, -209, -210, -211, -212, -213, -214, -215, -216, -217, -220, -221, -222, -223, -528, -527, -240, -528, -241, -528, -251, -528, -255, -503, -246, -507, -508, -246, -527, -54, -528, -518, -518, -253, -239, -247, -248, -528, -527, -527, -528, -281, -9, -517, -528, -62, -273, -77, -67, -528, -528, -527, -528, -528, -86, -528, -430, -431, -73, -78, -528, -528, -528, -528, -528, -224, -528, -380, -528, -528, -229, -230, -522, -521, -232, -522, -277, -278, -499, -329, -10, -10, -528, -331, -528, -349, -356, -528, -353, -354, -528, -357, -464, -528, -473, -528, -475, -477, -481, -489, -493, -10, -322, -323, -324, -10, -528, -528, -528, -528, -10, -375, -527, -528, -528, -275, -301, -96, -97, -528, -527, -528, -304, -449, -528, -528, -528, -310, -462, -314, -514, -515, -518, -394, -409, -412, -413, -415, -396, -411, -397, -398, -399, -528, -402, -404, -405, -528, -427, -7, -14, -108, -24, -528, -260, -528, -276, -528, -528, -55, -237, -238, -365, -528, -57, -367, -528, -507, -508, -507, -508, -528, -183, -284, -528, -343, -528, -345, -10, -253, -252, -256, -528, -501, -502, -50, -362, -51, -363, -10, -233, -528, -528, -528, -528, -528, -42, -528, -245, -249, -528, -10, -10, -280, -12, -62, -528, -70, -75, -528, -507, -508, -527, -511, -85, -528, -528, -191, -201, -202, -528, -527, -527, -271, -272, -520, -528, -528, -330, -341, -528, -348, -527, -342, -528, -527, -527, -483, -470, -528, -528, -480, -527, -325, -527, -293, -326, -327, -328, -296, -528, -299, -528, -528, -528, -507, -508, -511, -274, -528, -96, -99, -511, -528, -10, -528, -451, -528, -10, -10, -462, -528, -495, -495, -495, -461, -464, -485, -528, -528, -528, -10, -401, -403, -407, -184, -258, -528, -528, -29, -187, -30, -188, -56, -31, -189, -58, -190, -528, -528, -528, -276, -225, -344, -528, -528, -242, -257, -528, -234, -235, -527, -527, -518, -528, -528, -250, -528, -528, -68, -81, -79, -283, -527, -338, -10, -381, -527, -382, -383, -231, -334, -335, -355, -528, -275, -528, -351, -352, -474, -476, -479, -528, -336, -528, -528, -10, -10, -298, -300, -528, -276, -528, -276, -528, -450, -307, -528, -528, -518, -453, -528, -457, -528, -459, -460, -528, -528, -315, -497, -414, -417, -418, -419, -420, -528, -259, -28, -186, -528, -346, -360, -52, -528, -253, -372, -374, -8, -10, -387, -339, -528, -528, -385, -274, -527, -478, -290, -528, -291, -528, -528, -528, -10, -302, -305, -10, -311, -313, -528, -495, -495, -494, -495, -528, -486, -484, -462, -416, -236, -244, -528, -386, -10, -88, -528, -528, -95, -384, -350, -10, -294, -297, -256, -527, -10, -528, -452, -528, -455, -456, -458, -10, -380, -527, -528, -528, -94, -527, -376, -377, -378, -528, -308, -495, -528, -379, -528, -507, -508, -511, -93, -337, -303, -454, -316, -89];
+      racc_action_default = [-3, -543, -1, -531, -4, -6, -543, -543, -543, -543, -543, -543, -543, -543, -268, -36, -37, -543, -543, -42, -44, -45, -279, -317, -318, -49, -246, -246, -246, -61, -10, -65, -72, -74, -543, -445, -543, -543, -543, -543, -543, -533, -226, -261, -262, -263, -264, -265, -266, -267, -521, -270, -543, -542, -513, -287, -542, -543, -543, -292, -295, -531, -543, -543, -309, -543, -319, -320, -388, -389, -390, -391, -392, -542, -395, -542, -542, -542, -542, -542, -422, -428, -429, -543, -519, -435, -436, -520, -438, -439, -440, -441, -442, -443, -444, -447, -448, -543, -2, -532, -538, -539, -540, -543, -543, -543, -543, -543, -3, -13, -543, -100, -101, -102, -103, -104, -105, -106, -109, -110, -111, -112, -113, -114, -115, -116, -117, -118, -119, -120, -121, -122, -123, -124, -125, -126, -127, -128, -129, -130, -131, -132, -133, -134, -135, -136, -137, -138, -139, -140, -141, -142, -143, -144, -145, -146, -147, -148, -149, -150, -151, -152, -153, -154, -155, -156, -157, -158, -159, -160, -161, -162, -163, -164, -165, -166, -167, -168, -169, -170, -171, -172, -173, -174, -175, -176, -177, -178, -179, -180, -181, -182, -543, -18, -107, -10, -543, -543, -543, -542, -543, -543, -543, -543, -543, -40, -543, -445, -543, -268, -543, -543, -10, -543, -41, -218, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -543, -359, -361, -46, -227, -239, -253, -253, -243, -543, -254, -543, -279, -317, -318, -515, -543, -47, -48, -543, -543, -53, -542, -543, -286, -364, -371, -373, -59, -369, -60, -543, -531, -11, -61, -10, -543, -543, -66, -69, -10, -80, -543, -543, -87, -282, -533, -543, -321, -370, -543, -71, -543, -76, -275, -430, -431, -543, -203, -204, -219, -543, -534, -10, -533, -228, -533, -535, -535, -543, -543, -535, -543, -288, -289, -543, -543, -332, -333, -340, -542, -479, -347, -542, -542, -358, -478, -480, -481, -482, -483, -484, -543, -497, -502, -503, -505, -506, -507, -543, -43, -543, -543, -543, -543, -531, -543, -532, -445, -543, -543, -268, -543, -486, -487, -96, -543, -98, -543, -268, -543, -306, -445, -543, -100, -101, -138, -139, -155, -160, -167, -170, -312, -543, -511, -543, -393, -543, -408, -543, -410, -543, -543, -543, -400, -543, -543, -406, -543, -421, -423, -424, -425, -426, -432, -433, 948, -5, -541, -19, -20, -21, -22, -23, -543, -543, -15, -16, -17, -543, -543, -25, -33, -183, -254, -543, -543, -26, -34, -35, -27, -185, -543, -522, -523, -246, -366, -524, -525, -522, -246, -523, -368, -524, -525, -32, -192, -38, -39, -543, -543, -542, -275, -543, -543, -543, -543, -285, -193, -194, -195, -196, -197, -198, -199, -200, -205, -206, -207, -208, -209, -210, -211, -212, -213, -214, -215, -216, -217, -220, -221, -222, -223, -543, -542, -240, -543, -241, -543, -251, -543, -255, -518, -246, -522, -523, -246, -542, -54, -543, -533, -533, -253, -239, -247, -248, -543, -542, -542, -543, -281, -9, -532, -543, -62, -273, -77, -67, -543, -543, -542, -543, -543, -86, -543, -430, -431, -73, -78, -543, -543, -543, -543, -543, -224, -543, -380, -543, -543, -229, -230, -537, -536, -232, -537, -277, -278, -514, -329, -10, -10, -543, -331, -543, -349, -356, -543, -353, -354, -543, -357, -479, -543, -488, -543, -490, -492, -496, -504, -508, -10, -322, -323, -324, -10, -543, -543, -543, -543, -10, -375, -542, -543, -543, -275, -301, -96, -97, -543, -542, -543, -304, -449, -543, -543, -543, -310, -477, -314, -529, -530, -533, -394, -409, -412, -413, -415, -396, -411, -397, -398, -399, -543, -402, -404, -405, -543, -427, -7, -14, -108, -24, -543, -260, -543, -276, -543, -543, -55, -237, -238, -365, -543, -57, -367, -543, -522, -523, -522, -523, -543, -183, -284, -543, -343, -543, -345, -10, -253, -252, -256, -543, -516, -517, -50, -362, -51, -363, -10, -233, -543, -543, -543, -543, -543, -42, -543, -245, -249, -543, -10, -10, -280, -12, -62, -543, -70, -75, -543, -522, -523, -542, -526, -85, -543, -543, -191, -201, -202, -543, -542, -542, -271, -272, -535, -543, -543, -330, -341, -543, -348, -542, -342, -543, -542, -542, -498, -485, -543, -543, -495, -542, -325, -542, -293, -326, -327, -328, -296, -543, -299, -543, -543, -543, -522, -523, -526, -274, -543, -96, -99, -526, -543, -10, -543, -451, -543, -10, -10, -477, -543, -454, -455, -457, -458, -460, -461, -510, -510, -466, -468, -468, -468, -476, -479, -500, -543, -543, -543, -10, -401, -403, -407, -184, -258, -543, -543, -29, -187, -30, -188, -56, -31, -189, -58, -190, -543, -543, -543, -276, -225, -344, -543, -543, -242, -257, -543, -234, -235, -542, -542, -533, -543, -543, -250, -543, -543, -68, -81, -79, -283, -542, -338, -10, -381, -542, -382, -383, -231, -334, -335, -355, -543, -275, -543, -351, -352, -489, -491, -494, -543, -336, -543, -543, -10, -10, -298, -300, -543, -276, -543, -276, -543, -450, -307, -543, -543, -533, -453, -456, -459, -543, -464, -465, -543, -543, -472, -543, -474, -543, -475, -543, -315, -512, -414, -417, -418, -419, -420, -543, -259, -28, -186, -543, -346, -360, -52, -543, -253, -372, -374, -8, -10, -387, -339, -543, -543, -385, -274, -542, -493, -290, -543, -291, -543, -543, -543, -10, -302, -305, -10, -311, -313, -543, -462, -510, -509, -467, -468, -468, -468, -543, -501, -499, -477, -416, -236, -244, -543, -386, -10, -88, -543, -543, -95, -384, -350, -10, -294, -297, -256, -542, -10, -543, -452, -463, -543, -470, -471, -473, -10, -380, -542, -543, -543, -94, -542, -376, -377, -378, -543, -308, -468, -543, -379, -543, -522, -523, -526, -93, -337, -303, -469, -316, -89];
 
-      clist = ["13,214,5,480,312,281,248,248,248,530,328,375,548,494,571,551,553,206", "206,249,249,249,206,206,206,393,12,683,320,102,13,285,285,99,428,433", "491,309,291,291,114,114,415,422,563,567,533,536,109,194,540,520,206", "206,117,117,12,206,206,556,699,206,352,361,363,642,98,642,304,291,291", "344,345,734,596,348,731,294,580,785,606,264,271,273,804,660,555,102", "691,648,877,737,650,707,711,645,486,489,114,13,2,5,807,206,206,206,206", "13,13,406,5,662,114,306,346,808,347,402,403,404,405,809,640,721,349", "12,897,250,250,250,726,588,868,12,12,651,366,277,393,730,382,384,590", "279,391,663,664,740,879,318,425,645,541,355,697,824,826,827,317,314", "280,316,313,694,377,877,497,698,591,477,500,501,911,715,789,853,379", "380,584,414,420,423,386,309,605,438,376,246,260,261,389,832,742,419", "419,13,206,206,206,206,743,821,206,206,206,872,408,736,407,357,193,849", "13,206,802,734,268,272,400,1,,12,,10,,114,,,,,,,,737,437,712,,,12,,", ",,642,,,,,,496,248,,,10,,,35,,248,,,,495,249,,206,206,669,,521,,249", ",328,206,,428,433,13,,,556,285,13,703,356,35,284,284,291,924,544,912", "901,902,285,903,,,745,723,102,291,,12,505,13,,701,12,,,,,,,517,,351", "365,,365,10,,874,413,874,510,,874,10,10,12,699,531,,532,926,504,866", "691,,280,,,,206,206,674,736,,,,,,35,,,,674,568,569,734,35,35,904,361", "589,,,250,250,,291,102,,648,650,206,250,737,,,795,,277,799,800,,585", "277,506,,755,768,633,512,,758,,,874,,918,,775,,,280,674,,570,,280,,857", "14,674,10,,,,,792,781,,556,,309,816,493,498,,819,820,10,,,,502,873,114", "875,,206,114,14,287,287,612,,35,,613,,117,,,,117,,,,,671,,,,35,642,", ",,,,,437,,354,362,268,,272,621,,521,,,626,773,774,,,,,,736,309,,206", ",10,,,,13,10,666,,,,285,865,206,,14,,916,291,,653,654,,14,14,716,,858", "206,10,790,12,,725,35,,,,284,35,,647,13,13,649,,891,,437,695,,284,,885", ",,291,,309,437,892,913,35,13,,,309,13,12,12,,898,13,,206,,,,,,,,206", ",641,,206,,206,12,,,328,12,708,708,,,12,882,727,,751,753,,,,917,756", "437,766,14,,728,437,,,,623,206,206,741,365,627,,206,,,14,,,,,,,,,,,687", "13,776,521,,,,,,,,,13,783,,,,,206,,,,,,13,13,,12,,285,,,,688,689,,291", "623,12,285,623,,419,,,,291,830,,,12,12,,,704,14,,,706,287,14,,,714,", ",,,,,,,287,812,,,,,,,,,206,14,,,,13,,10,,13,13,,839,,814,,,,,,674,,13", ",,,,,,206,,12,817,,818,12,12,,822,,35,641,,,10,10,284,,12,767,,,114", "846,,,,,,,770,362,,,,10,13,,,10,,,779,780,10,,,35,35,,,845,,,365,206", ",13,13,,,,12,,,,,,35,860,,,35,,,,,35,437,,,,,12,12,,,,,708,,,,,,,,871", ",13,,,,887,,,919,,,,291,,10,623,13,,627,13,,,,,837,10,,12,,,,,,,,,13", "10,10,,,309,12,13,,12,,35,13,,,,,,,13,,206,35,,,,12,,,,,,852,12,35,35", "14,,12,284,,,287,,,12,,,,284,,,,862,863,,437,,,,,,,,10,,,,10,10,,,,14", "14,,,,623,623,362,10,,,,,215,,,,247,247,247,,14,884,,35,14,,,35,35,14", ",,301,302,303,,896,,,,35,,,,,,,247,247,,,10,,,,,905,,,,,,,910,,,,,914", ",,,10,10,,,,,,,,,,,35,,,,,,,,,,,,,14,,,,,,,,35,35,,14,,,,,,10,,,,890", "321,14,14,,,,287,,,,10,,,10,,,287,381,,383,383,387,390,383,,,,,35,,10", ",886,,,,,10,,,,,10,35,,,35,,,10,,,,,,,,,,,,,,35,14,,,,14,14,35,416,247", "424,247,35,,439,,,836,14,35,,,,,,,,,215,,451,452,453,454,455,456,457", "458,459,460,461,462,463,464,465,466,467,468,469,470,471,472,473,474", "475,476,,,,,,,14,,247,,247,,,,,247,,,,,,247,247,,,,,14,14,,247,,,,,", ",,,,,,,,,,,,,,,,,,,,315,,,,527,,,,,,,,,14,,,,889,,,,,,,,,,,14,,,14,", ",492,,,,,205,,,,,,,,,14,,,,,,,14,,,,,14,,,,,,,14,,,,,,,307,,,,,343,343", ",,343,,,,,,,,,547,,,547,547,,,,,290,290,,,,,,290,290,290,,,,,,,,247", ",,,,,290,343,343,343,343,,,,290,290,,,,,,,,,417,421,247,,439,634,424", ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,247,,247,,247,,,,,,,,,,,,,,622,482,658", "484,,,,,485,,,,,,,,247,,,,,,,,,679,680,681,440,441,,,,,,,,247,449,,247", ",,,,,,,,637,,,,,,,,,622,,,622,637,,,,,,,,,,637,637,,,,247,,,,,,,,247", ",,,290,,290,290,290,290,290,290,290,290,290,290,290,290,290,290,290", "290,290,290,290,290,290,290,290,290,290,290,,747,,247,,752,754,,290", ",290,757,,,759,290,,,,,,,764,,,,,,,,247,,,,,,,,290,,,,,247,,,,,,,616", "290,,,343,343,,,,,290,,,,,,,,,,247,,,,,,,,,,,,,,,,594,,,,,,,,,,,,,,", "247,,,,,,,,,,643,,315,,646,,,,,,,290,,,,,,,622,,659,,,,247,840,,786", "791,,,,,,,752,754,757,547,,,547,547,,,,,,786,,786,,247,,,643,,,315,", ",,,290,,,,,,,,,,,,,,,,,,,,,,,,,,,,290,290,290,,,307,,,,,,,,247,,,,,", ",,,,,,840,622,622,,,,,,290,682,290,,290,851,,,,855,,,,,748,247,,,,,", ",,,,,,,,,,,290,,247,,,,,,,769,,290,290,290,,,,,,,,,643,290,,247,290", "343,,729,,,,,,,,,290,,,,,,,547,,,,788,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,", "417,,,,786,,,,,,,,,,,,,,786,,,,,,290,,290,,,,,,,,838,,,290,,,,,,,,290", ",,,,,,,290,,,,,,,,,417,,,,,,,,,,,,,,,290,,,,,343,,,,,290,,,,,,290,,", ",,,,,,,,,,,,,,,,,,878,,,,,,,,,,290,,,,,,,,,,,,,,,,,,,,,,,,,895,,,,,", ",,,290,,,,,,,,,343,895,290,290,290,,,,,,,,,,,,,,,290,,,,,,,,,,,,,,,", ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,290,,,,,,,,,,,,290,,,,,,,,,,,,,290", ",,,,,,,,,290,,,,,,,,,,,,,,,,,,,290"];
+      clist = ["13,480,312,571,683,494,248,248,248,320,363,375,428,433,328,281,743,206", "206,249,249,249,206,206,206,393,415,422,109,194,13,285,285,699,12,520", "10,309,268,272,563,567,731,746,102,813,344,345,214,691,348,548,206,206", "551,553,491,206,206,294,5,206,352,361,12,794,10,530,556,264,271,273", "117,117,486,489,98,533,536,114,114,540,99,648,707,711,650,895,816,555", "277,645,402,403,404,405,580,2,356,13,501,817,102,206,206,206,206,13", "13,279,347,642,818,642,382,384,596,304,391,721,915,726,606,588,291,291", "883,835,836,366,730,660,590,12,349,10,749,114,393,640,897,12,12,10,10", "694,318,645,425,698,541,114,651,376,697,291,291,584,743,5,14,355,663", "664,317,316,895,406,5,313,377,246,260,261,477,500,346,930,715,839,841", "843,798,309,868,746,379,380,591,745,14,287,287,419,419,13,206,206,206", "206,386,605,206,206,206,407,497,389,847,751,752,830,13,206,888,887,280", "662,306,408,891,357,354,362,712,193,414,420,423,12,864,10,438,811,400", "1,,,,,,,,,,,12,,10,496,248,669,,,428,433,,,248,14,,,495,249,114,206", "206,14,14,,943,249,544,437,206,918,,328,13,521,,,285,13,,,,,,642,556", ",,703,,285,931,,,,,,268,,272,,13,,,510,691,701,12,589,10,,102,12,723", "10,,699,,743,,,674,920,921,922,,745,,,,568,569,674,277,881,12,754,10", "277,,,206,206,504,923,746,,,,505,14,,506,,,,205,512,,,517,361,,,,,945", "14,,,291,,,206,648,650,413,,531,,532,,674,291,102,,,777,633,,674,307", "784,280,937,,343,343,,585,343,872,,790,,,,,764,493,498,,,767,,,570,804", "502,,808,809,,309,612,,,,613,,556,,892,14,893,623,,287,14,206,627,,343", "343,343,343,,,,801,287,,,,291,,,671,,280,,14,782,783,280,,621,,117,", ",626,117,,,114,,,,114,,,825,,,,828,829,,,521,745,309,623,206,,623,,", ",13,,,,,,285,,206,799,437,,880,935,,,,,716,,,362,,206,647,35,725,649", "642,,,,,,12,,10,13,13,,873,,440,441,695,,,,,,,,449,309,,35,284,284,13", "903,666,309,13,932,653,654,910,13,,206,727,12,12,10,10,,,206,,,,206", "437,206,,,775,351,365,,365,328,12,437,10,909,12,,10,291,,12,,10,708", "708,,900,,250,250,250,,,206,206,,,,,206,,,728,35,,,,,,,,35,35,,13,785", "291,,916,742,314,,437,760,762,13,521,437,,765,,206,,,,,792,13,13,14", ",,285,,750,287,,,12,,10,,285,,,419,,,936,12,623,10,,627,343,343,,,,845", ",12,12,10,10,,14,14,,,,,,362,823,,821,,,,,,,,,206,594,14,,35,13,14,688", "689,13,13,14,,,,,,674,,,,35,,,,,,,704,,,13,706,,,321,,714,206,12,291", "10,,12,12,10,10,826,,827,291,,381,831,383,383,387,390,383,,,,861,,,12", "742,10,854,,,,,623,623,13,,,,14,,,,875,,,,35,,,14,284,35,,206,,13,13", ",,114,,14,14,284,776,,287,,12,,10,,,,35,779,287,,,,,307,,,,,,788,789", "12,12,10,10,,,250,250,,860,,,,708,13,250,,,905,,,682,,938,,,437,,,13", ",,13,,,14,,,889,14,14,889,742,,742,365,742,,12,,10,,13,,908,886,,,309", "13,851,14,,12,13,10,12,,10,,,,13,,206,,,,,343,,729,,,,,12,852,10,,,", ",12,,10,,,12,,10,742,,,,14,12,,10,,,291,,,492,,,,,,,,,742,,,14,14,,", ",867,,,,,,,,,,,,,,,,,437,,,,877,878,,,,,,,,,,,,,,,,,,,547,,14,547,547", ",907,,,,,,35,,,,,14,284,,14,,,,,,,,902,,,,,,,,,,,,14,,343,914,,,,14", "641,35,35,,14,,,,365,,,,14,,,215,,,924,247,247,247,35,,,929,35,,,,933", "35,,,,301,302,303,,,,,,,,,,,,,247,247,,,,687,,622,,,,315,,,,,,,,,,,", ",,,,,,,,,,,,,,,343,,,,,,,,,,,35,,,,,,,637,,,,35,,,,,622,,,622,637,,", "35,35,,,,284,,637,637,,,,,,,284,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,", ",,,,641,,,,,,,35,,,,35,35,,,416,247,424,247,,,439,,,,417,421,,,,,,,35", ",215,,451,452,453,454,455,456,457,458,459,460,461,462,463,464,465,466", "467,468,469,470,471,472,473,474,475,476,,,,,,,,,247,,247,,,,35,247,", ",482,,484,247,247,,,485,,,,,247,,,,,35,35,,,,,,,,,,,,,,,,,,,,,,,,527", ",622,,,,,,,,,795,800,,,,,,,,,,547,35,,547,547,904,,,,,795,,795,,,,35", ",,35,,,,,,,,,,,,,,,,,,,,35,,,,,,,35,,,,,35,,,,,,,,35,,,,,,,,,,,,,,,", "290,290,,,,,,290,290,290,,,,622,622,,,247,,,,,,290,,866,,616,,870,,290", "290,,,,,,,,,,,247,,439,634,424,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,247,,247", ",247,,,,,,643,,315,,646,,,,,,658,,,,,547,,,,,659,,,,247,,,,,,,,,679", "680,681,,,,,,,,,,247,,,247,,,,,,,643,,795,315,,,,,,,,,,,,,,795,,,,,", ",,,,,,,247,,,,,,,,247,,,,290,,290,290,290,290,290,290,290,290,290,290", "290,290,290,290,290,290,290,290,290,290,290,290,290,290,290,290,,756", ",247,,761,763,,290,,290,766,,757,768,290,,,,,,,773,,,,,,,,247,,,,,,", ",290,,778,,,247,,,,,,,,290,,643,,,,,,,290,,,,,,,,,,247,,,,,,,,,,797", ",,,,,,,,,,,,,,,,,,,,247,,,,,,,,,,417,,,,,,,,,,,290,,247,,,,,,,,,,833", ",,,,,,,,,247,855,,,,,,,,,853,761,763,766,,,,,,,,,,,,,,,247,,290,,,,", ",,,417,,,,,,,,,,,,,,,,,,,,290,290,290,,,,,,,,,,,,,,,,,,,,,,,,,,247,", ",,,290,,290,,290,896,,855,,,,,,,,,,,,,,,,,,,,,,,247,,290,,,,,,,,913", ",,290,290,290,,,,,,,247,,,290,,,290,,,,913,,,,,,,,290,,,,,,247,,,,,", ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,290,,290,,,,,", ",,,,,290,,,,,,,,290,,,,,,,,290,,,,,,,,,,,,,,,,,,,,,,,,290,,,,,,,,,,290", ",,,,,290,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,290,,,,,,,,,,,,,,,,,,,,,,,290", ",,,,,,,,,,,,,,,,,,,290,,,,,,,,,,,290,290,290,,,,,,,,,,,,,,,290,,,,,", ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,290,,,,,,,,,,,,290", ",,,,,,,,,,,,290,,,,,,,,,,290,,,,,,,,,,,,,,,,,,,,,,290"];
 
-      racc_goto_table = arr = Opal.get('Array').$new(2207, nil);
+      racc_goto_table = arr = Opal.get('Array').$new(2340, nil);
 
       idx = 0;
 
@@ -17044,9 +17881,9 @@ if (i == null) i = nil;
           };
           return idx = idx['$+'](1);}, TMP_6.$$s = self, TMP_6), $a).call($b)}, TMP_5.$$s = self, TMP_5), $a).call($d);
 
-      clist = ["21,18,7,59,22,41,29,29,29,8,105,47,107,32,78,107,107,21,21,54,54,54", "21,21,21,47,20,10,102,81,21,21,21,6,33,33,35,29,52,52,48,48,24,24,75", "75,55,55,14,14,55,43,21,21,50,50,20,21,21,136,138,21,21,21,46,60,4,60", "51,52,52,16,16,108,127,16,82,42,45,11,127,34,34,34,76,60,139,81,104", "58,142,106,58,77,77,145,33,33,48,21,2,7,11,21,21,21,21,21,21,7,7,61", "48,85,86,87,88,16,16,16,16,89,36,90,4,20,91,56,56,56,92,93,94,20,20", "36,95,38,47,96,124,124,97,39,124,36,36,98,99,100,22,145,101,79,103,135", "135,135,74,56,9,72,71,109,70,142,62,109,84,111,113,114,115,116,117,118", "122,123,80,18,18,18,125,29,126,18,83,31,31,31,128,129,130,54,54,21,21", "21,21,21,131,133,21,21,21,134,27,109,2,19,15,12,21,21,140,108,57,57", "5,1,,20,,17,,48,,,,,,,,106,48,78,,,20,,,,,60,,,,,,29,29,,,17,,,44,,29", ",,,54,54,,21,21,43,,41,,54,,105,21,,33,33,21,,,136,21,21,136,17,44,44", "44,52,76,102,11,135,135,21,135,,,127,45,81,52,,20,6,21,,139,20,,,,,", ",51,,44,44,,44,17,,106,9,106,42,,106,17,17,20,138,51,,51,135,4,77,104", ",9,,,,21,21,33,109,,,,,,44,,,,33,16,16,108,44,44,82,21,46,,,56,56,,52", "81,,58,58,21,56,106,,,107,,38,107,107,,81,38,39,,35,59,22,39,,35,,,106", ",10,,32,,,9,33,,4,,9,,109,23,33,17,,,,,55,43,,136,,29,8,31,31,,8,8,17", ",,,31,109,48,109,,21,48,23,23,23,14,,44,,14,,50,,,,50,,,,,22,,,,44,60", ",,,,,,48,,23,23,57,,57,34,,41,,,34,33,33,,,,,,109,29,,21,,17,,,,21,17", "7,,,,21,75,21,,23,,109,52,,51,51,,23,23,22,,136,21,17,24,20,,22,44,", ",,44,44,,34,21,21,34,,107,,48,21,,44,,75,,,52,,29,48,75,78,44,21,,,29", "21,20,20,,8,21,,21,,,,,,,,21,,56,,21,,21,20,,,105,20,81,81,,,20,59,16", ",18,18,,,,8,18,48,102,23,,81,48,,,,57,21,21,51,44,57,,21,,,23,,,,,,", ",,,,56,21,29,41,,,,,,,,,21,41,,,,,21,,,,,,21,21,,20,,21,,,,9,9,,52,57", "20,21,57,,54,,,,52,47,,,20,20,,,9,23,,,9,23,23,,,9,,,,,,,,,23,54,,,", ",,,,,21,23,,,,21,,17,,21,21,,18,,16,,,,,,33,,21,,,,,,,21,,20,81,,81", "20,20,,81,,44,56,,,17,17,44,,20,9,,,48,54,,,,,,,9,23,,,,17,21,,,17,", ",9,9,17,,,44,44,,,51,,,44,21,,21,21,,,,20,,,,,,44,16,,,44,,,,,44,48", ",,,,20,20,,,,,81,,,,,,,,51,,21,,,,21,,,22,,,,52,,17,57,21,,57,21,,,", ",9,17,,20,,,,,,,,,21,17,17,,,29,20,21,,20,,44,21,,,,,,,21,,21,44,,,", "20,,,,,,9,20,44,44,23,,20,44,,,23,,,20,,,,44,,,,9,9,,48,,,,,,,,17,,", ",17,17,,,,23,23,,,,57,57,23,17,,,,,28,,,,28,28,28,,23,9,,44,23,,,44", "44,23,,,28,28,28,,9,,,,44,,,,,,,28,28,,,17,,,,,9,,,,,,,9,,,,,9,,,,17", "17,,,,,,,,,,,44,,,,,,,,,,,,,23,,,,,,,,44,44,,23,,,,,,17,,,,17,53,23", "23,,,,23,,,,17,,,17,,,23,53,,53,53,53,53,53,,,,,44,,17,,44,,,,,17,,", ",,17,44,,,44,,,17,,,,,,,,,,,,,,44,23,,,,23,23,44,28,28,28,28,44,,28", ",,23,23,44,,,,,,,,,28,,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28", "28,28,28,28,28,28,28,28,28,28,28,,,,,,,23,,28,,28,,,,,28,,,,,,28,28", ",,,,23,23,,28,,,,,,,,,,,,,,,,,,,,,,,,,,25,,,,28,,,,,,,,,23,,,,23,,,", ",,,,,,,23,,,23,,,53,,,,,26,,,,,,,,,23,,,,,,,23,,,,,23,,,,,,,23,,,,,", ",26,,,,,26,26,,,26,,,,,,,,,53,,,53,53,,,,,37,37,,,,,,37,37,37,,,,,,", ",28,,,,,,37,26,26,26,26,,,,37,37,,,,,,,,,25,25,28,,28,28,28,,,,,,,,", ",,,,,,,,,,,,,,,,,,,,,,28,,28,,28,,,,,,,,,,,,,,53,25,28,25,,,,,25,,,", ",,,,28,,,,,,,,,28,28,28,26,26,,,,,,,,28,26,,28,,,,,,,,,53,,,,,,,,,53", ",,53,53,,,,,,,,,,53,53,,,,28,,,,,,,,28,,,,37,,37,37,37,37,37,37,37,37", "37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,,28,,28,,28,28", ",37,,37,28,,,28,37,,,,,,,28,,,,,,,,28,,,,,,,,37,,,,,28,,,,,,,25,37,", ",26,26,,,,,37,,,,,,,,,,28,,,,,,,,,,,,,,,,26,,,,,,,,,,,,,,,28,,,,,,,", ",,25,,25,,25,,,,,,,37,,,,,,,53,,25,,,,28,28,,53,53,,,,,,,28,28,28,53", ",,53,53,,,,,,53,,53,,28,,,25,,,25,,,,,37,,,,,,,,,,,,,,,,,,,,,,,,,,,", "37,37,37,,,26,,,,,,,,28,,,,,,,,,,,,28,53,53,,,,,,37,26,37,,37,53,,,", "53,,,,,25,28,,,,,,,,,,,,,,,,,37,,28,,,,,,,25,,37,37,37,,,,,,,,,25,37", ",28,37,26,,26,,,,,,,,,37,,,,,,,53,,,,25,,,,,,,,,,,,,,,,,,,,,,,,,,,,", ",,25,,,,53,,,,,,,,,,,,,,53,,,,,,37,,37,,,,,,,,25,,,37,,,,,,,,37,,,,", ",,,37,,,,,,,,,25,,,,,,,,,,,,,,,37,,,,,26,,,,,37,,,,,,37,,,,,,,,,,,,", ",,,,,,,,25,,,,,,,,,,37,,,,,,,,,,,,,,,,,,,,,,,,,25,,,,,,,,,37,,,,,,,", ",26,25,37,37,37,,,,,,,,,,,,,,,37,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,", ",,,,,,,,,,,,,,,,37,,,,,,,,,,,,37,,,,,,,,,,,,,37,,,,,,,,,,37,,,,,,,,", ",,,,,,,,,,37"];
+      clist = ["21,59,22,78,10,32,29,29,29,102,46,47,33,33,105,41,108,21,21,54,54,54", "21,21,21,47,24,24,14,14,21,21,21,145,20,43,17,29,57,57,75,75,82,139", "81,76,16,16,18,104,16,107,21,21,107,107,35,21,21,42,7,21,21,21,20,11", "17,8,143,34,34,34,50,50,33,33,4,55,55,48,48,55,6,58,77,77,58,149,11", "146,38,152,16,16,16,16,45,2,17,21,114,87,81,21,21,21,21,21,21,39,88", "60,89,60,124,124,127,51,124,90,91,92,127,93,52,52,94,140,140,95,96,60", "97,20,4,17,98,48,47,36,99,20,20,17,17,109,100,152,22,109,101,48,36,83", "103,52,52,80,108,7,23,79,36,36,74,72,149,7,7,71,70,31,31,31,111,113", "86,115,116,141,141,141,117,29,118,139,122,123,84,109,23,23,23,54,54", "21,21,21,21,21,125,126,21,21,21,2,62,128,129,130,131,133,21,21,135,137", "9,61,85,27,142,19,23,23,78,15,18,18,18,20,12,17,18,147,5,1,,,,,,,,,", ",20,,17,29,29,43,,,33,33,,,29,23,,,54,54,48,21,21,23,23,,76,54,102,48", "21,140,,105,21,41,,,21,21,,,,,,60,143,,,143,,21,11,,,,,,57,,57,,21,", ",42,104,146,20,46,17,,81,20,45,17,,145,,108,,,33,141,141,141,,109,,", ",16,16,33,38,77,20,127,17,38,,,21,21,4,82,139,,,,6,23,,39,,,,26,39,", ",51,21,,,,,141,23,,,52,,,21,58,58,9,,51,,51,,33,52,81,,,59,22,,33,26", "32,9,10,,26,26,,81,26,109,,43,,,,,35,31,31,,,35,,,4,107,31,,107,107", ",29,14,,,,14,,143,,109,23,109,57,,23,23,21,57,,26,26,26,26,,,,55,23", ",,,52,,,22,,9,,23,33,33,9,,34,,50,,,34,50,,,48,,,,48,,,8,,,,8,8,,,41", "109,29,57,21,,57,,,,21,,,,,,21,,21,24,48,,75,109,,,,,22,,,23,,21,34", "44,22,34,60,,,,,,20,,17,21,21,,143,,26,26,21,,,,,,,,26,29,,44,44,44", "21,75,7,29,21,78,51,51,75,21,,21,16,20,20,17,17,,,21,,,,21,48,21,,,102", "44,44,,44,105,20,48,17,107,20,,17,52,,20,,17,81,81,,59,,56,56,56,,,21", "21,,,,,21,,,81,44,,,,,,,,44,44,,21,29,52,,8,106,56,,48,18,18,21,41,48", ",18,,21,,,,,41,21,21,23,,,21,,51,23,,,20,,17,,21,,,54,,,8,20,57,17,", "57,26,26,,,,47,,20,20,17,17,,23,23,,,,,,23,16,,54,,,,,,,,,21,26,23,", "44,21,23,9,9,21,21,23,,,,,,33,,,,44,,,,,,,9,,,21,9,,,53,,9,21,20,52", "17,,20,20,17,17,81,,81,52,,53,81,53,53,53,53,53,,,,54,,,20,106,17,18", ",,,,57,57,21,,,,23,,,,16,,,,44,,,23,44,44,,21,,21,21,,,48,,23,23,44", "9,,23,,20,,17,,,,44,9,23,,,,,26,,,,,,9,9,20,20,17,17,,,56,56,,51,,,", "81,21,56,,,21,,,26,,22,,,48,,,21,,,21,,,23,,,106,23,23,106,106,,106", "44,106,,20,,17,,21,,17,51,,,29,21,23,23,,20,21,17,20,,17,,,,21,,21,", ",,,26,,26,,,,,20,9,17,,,,,20,,17,,,20,,17,106,,,,23,20,,17,,,52,,,53", ",,,,,,,,106,,,23,23,,,,9,,,,,,,,,,,,,,,,,48,,,,9,9,,,,,,,,,,,,,,,,,", ",53,,23,53,53,,23,,,,,,44,,,,,23,44,,23,,,,,,,,9,,,,,,,,,,,,23,,26,9", ",,,23,56,44,44,,23,,,,44,,,,23,,,28,,,9,28,28,28,44,,,9,44,,,,9,44,", ",,28,28,28,,,,,,,,,,,,,28,28,,,,56,,53,,,,25,,,,,,,,,,,,,,,,,,,,,,,", ",,,26,,,,,,,,,,,44,,,,,,,53,,,,44,,,,,53,,,53,53,,,44,44,,,,44,,53,53", ",,,,,,44,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,56,,,,,,,44,,,,44,44", ",,28,28,28,28,,,28,,,,25,25,,,,,,,44,,28,,28,28,28,28,28,28,28,28,28", "28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,,,,,,,,,28,,28,,", ",44,28,,,25,,25,28,28,,,25,,,,,28,,,,,44,44,,,,,,,,,,,,,,,,,,,,,,,,28", ",53,,,,,,,,,53,53,,,,,,,,,,53,44,,53,53,44,,,,,53,,53,,,,44,,,44,,,", ",,,,,,,,,,,,,,,,44,,,,,,,44,,,,,44,,,,,,,,44,,,,,,,,,,,,,,,,37,37,,", ",,,37,37,37,,,,53,53,,,28,,,,,,37,,53,,25,,53,,37,37,,,,,,,,,,,28,,28", "28,28,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,28,,28,,28,,,,,,25,,25,,25,,,,,", "28,,,,,53,,,,,25,,,,28,,,,,,,,,28,28,28,,,,,,,,,,28,,,28,,,,,,,25,,53", "25,,,,,,,,,,,,,,53,,,,,,,,,,,,,28,,,,,,,,28,,,,37,,37,37,37,37,37,37", "37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,37,,28,,28", ",28,28,,37,,37,28,,25,28,37,,,,,,,28,,,,,,,,28,,,,,,,,37,,25,,,28,,", ",,,,,37,,25,,,,,,,37,,,,,,,,,,28,,,,,,,,,,25,,,,,,,,,,,,,,,,,,,,,28", ",,,,,,,,,25,,,,,,,,,,,37,,28,,,,,,,,,,25,,,,,,,,,,28,28,,,,,,,,,25,28", "28,28,,,,,,,,,,,,,,,28,,37,,,,,,,,25,,,,,,,,,,,,,,,,,,,,37,37,37,,,", ",,,,,,,,,,,,,,,,,,,,,,28,,,,,37,,37,,37,25,,28,,,,,,,,,,,,,,,,,,,,,", ",28,,37,,,,,,,,25,,,37,37,37,,,,,,,28,,,37,,,37,,,,25,,,,,,,,37,,,,", ",28,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,37,,37", ",,,,,,,,,,37,,,,,,,,37,,,,,,,,37,,,,,,,,,,,,,,,,,,,,,,,,37,,,,,,,,,", "37,,,,,,37,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,37,,,,,,,,,,,,,,,,,,,,,,,37", ",,,,,,,,,,,,,,,,,,,37,,,,,,,,,,,37,37,37,,,,,,,,,,,,,,,37,,,,,,,,,,", ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,37,,,,,,,,,,,,37,,,,", ",,,,,,,,37,,,,,,,,,,37,,,,,,,,,,,,,,,,,,,,,,37"];
 
-      racc_goto_check = arr = Opal.get('Array').$new(2207, nil);
+      racc_goto_check = arr = Opal.get('Array').$new(2340, nil);
 
       idx = 0;
 
@@ -17060,25 +17897,25 @@ if (i == null) i = nil;
           };
           return idx = idx['$+'](1);}, TMP_8.$$s = self, TMP_8), $a).call($b)}, TMP_7.$$s = self, TMP_7), $a).call($e);
 
-      racc_goto_pointer = [nil, 219, 100, nil, 63, 119, 30, 2, -297, 130, -502, -604, -574, nil, 41, 202, 14, 223, -17, 147, 26, 0, -49, 416, -154, 1199, 1275, 97, 953, -16, nil, 165, -252, -166, 55, -228, -355, 1323, 107, 113, nil, -26, 45, -244, 256, -281, 1, -54, 33, nil, 47, 27, 7, 1022, -3, -264, 105, 190, -397, -247, -414, -388, -100, nil, nil, nil, nil, nil, nil, nil, 99, 108, 106, nil, 102, -300, -620, -475, -335, 91, -185, 26, -514, 121, -208, 62, 55, -592, 56, -590, -455, -740, -454, -233, -686, 72, -450, -233, -444, -682, 93, -166, -28, -396, -458, -46, -499, -311, -517, -383, nil, -75, nil, -99, -99, -724, -400, -510, -614, nil, nil, nil, 105, 104, 65, 105, -202, -306, 112, -551, -406, -399, nil, -531, -618, -579, -276, nil, -490, -249, -488, nil, -735, nil, nil, -386];
+      racc_goto_pointer = [nil, 235, 97, nil, 73, 135, 79, 60, -239, 186, -525, -618, -564, nil, 21, 217, -11, 36, 30, 159, 34, 0, -51, 160, -170, 1078, 344, 110, 1068, -16, nil, 149, -260, -188, 43, -208, -338, 1438, 60, 79, nil, -16, 27, -260, 530, -263, -53, -54, 72, nil, 65, 76, 93, 700, -3, -233, 592, 12, -403, -249, -368, -282, -60, nil, nil, nil, nil, nil, nil, nil, 105, 115, 110, nil, 108, -304, -659, -484, -346, 99, -206, 41, -548, 88, -188, 167, 117, -606, 50, -599, -459, -761, -463, -241, -701, 65, -459, -243, -455, -705, 90, -168, -47, -396, -497, -42, 55, -272, -574, -401, nil, -70, nil, -94, -170, -737, -395, -502, -614, nil, nil, nil, 115, 114, 39, 123, -185, -264, 129, -543, -389, -389, nil, -521, nil, -620, nil, -619, nil, -547, -613, -564, -618, -267, nil, -517, -246, -469, nil, -753, nil, nil, -390];
 
-      racc_goto_default = [nil, nil, nil, 3, nil, 4, 350, 276, nil, 529, nil, 805, nil, 275, nil, nil, nil, 210, 16, 11, 211, 300, nil, 209, nil, 253, 15, nil, 19, 20, 21, nil, 25, 677, nil, nil, nil, 26, 29, nil, 31, 34, 33, nil, 207, 360, nil, 116, 431, 115, 69, nil, 42, 308, 310, nil, 311, 429, 624, 478, 251, nil, nil, 266, 43, 44, 45, 46, 47, 48, 49, nil, 267, 55, nil, nil, nil, nil, nil, nil, nil, 564, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 323, 322, 693, 325, nil, 326, 327, 245, nil, 435, nil, nil, nil, nil, nil, nil, 68, 70, 71, 72, nil, nil, nil, nil, 601, nil, nil, nil, nil, 392, 733, 735, nil, 334, 329, 336, nil, 558, 559, 739, 339, 342, 258];
+      racc_goto_default = [nil, nil, nil, 3, nil, 4, 350, 276, nil, 529, nil, 814, nil, 275, nil, nil, nil, 210, 16, 11, 211, 300, nil, 209, nil, 253, 15, nil, 19, 20, 21, nil, 25, 677, nil, nil, nil, 26, 29, nil, 31, 34, 33, nil, 207, 360, nil, 116, 431, 115, 69, nil, 42, 308, 310, nil, 311, 429, 624, 478, 251, nil, nil, 266, 43, 44, 45, 46, 47, 48, 49, nil, 267, 55, nil, nil, nil, nil, nil, nil, nil, 564, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 323, 322, 693, 325, nil, 326, 327, 245, nil, 435, nil, nil, nil, nil, nil, nil, 68, 70, 71, 72, nil, nil, nil, nil, 601, nil, nil, nil, nil, 392, 733, 736, 741, 738, 739, 740, 890, nil, nil, 744, 334, 329, 336, nil, 558, 559, 748, 339, 342, 258];
 
-      racc_reduce_table = [0, 0, "racc_error", 1, 140, "_reduce_none", 2, 141, "_reduce_2", 0, 142, "_reduce_3", 1, 142, "_reduce_4", 3, 142, "_reduce_5", 1, 144, "_reduce_none", 4, 144, "_reduce_7", 4, 147, "_reduce_8", 2, 148, "_reduce_9", 0, 152, "_reduce_10", 1, 152, "_reduce_11", 3, 152, "_reduce_12", 0, 166, "_reduce_13", 4, 146, "_reduce_14", 3, 146, "_reduce_15", 3, 146, "_reduce_none", 3, 146, "_reduce_17", 2, 146, "_reduce_18", 3, 146, "_reduce_19", 3, 146, "_reduce_20", 3, 146, "_reduce_21", 3, 146, "_reduce_22", 3, 146, "_reduce_23", 4, 146, "_reduce_none", 3, 146, "_reduce_25", 3, 146, "_reduce_26", 3, 146, "_reduce_27", 6, 146, "_reduce_none", 5, 146, "_reduce_29", 5, 146, "_reduce_none", 5, 146, "_reduce_none", 3, 146, "_reduce_none", 3, 146, "_reduce_33", 3, 146, "_reduce_34", 3, 146, "_reduce_35", 1, 146, "_reduce_none", 1, 165, "_reduce_none", 3, 165, "_reduce_38", 3, 165, "_reduce_39", 2, 165, "_reduce_40", 2, 165, "_reduce_41", 1, 165, "_reduce_none", 1, 155, "_reduce_none", 1, 157, "_reduce_none", 1, 157, "_reduce_none", 2, 157, "_reduce_46", 2, 157, "_reduce_47", 2, 157, "_reduce_48", 1, 169, "_reduce_none", 4, 169, "_reduce_none", 4, 169, "_reduce_none", 4, 174, "_reduce_none", 2, 168, "_reduce_53", 3, 168, "_reduce_none", 4, 168, "_reduce_55", 5, 168, "_reduce_none", 4, 168, "_reduce_57", 5, 168, "_reduce_none", 2, 168, "_reduce_59", 2, 168, "_reduce_60", 1, 158, "_reduce_61", 3, 158, "_reduce_62", 1, 178, "_reduce_63", 3, 178, "_reduce_64", 1, 177, "_reduce_65", 2, 177, "_reduce_66", 3, 177, "_reduce_67", 5, 177, "_reduce_none", 2, 177, "_reduce_69", 4, 177, "_reduce_none", 2, 177, "_reduce_71", 1, 177, "_reduce_72", 3, 177, "_reduce_none", 1, 180, "_reduce_74", 3, 180, "_reduce_75", 2, 179, "_reduce_76", 3, 179, "_reduce_77", 1, 182, "_reduce_none", 3, 182, "_reduce_none", 1, 181, "_reduce_80", 4, 181, "_reduce_81", 3, 181, "_reduce_82", 3, 181, "_reduce_none", 3, 181, "_reduce_none", 3, 181, "_reduce_none", 2, 181, "_reduce_none", 1, 181, "_reduce_none", 1, 156, "_reduce_88", 4, 156, "_reduce_89", 3, 156, "_reduce_90", 3, 156, "_reduce_91", 3, 156, "_reduce_92", 3, 156, "_reduce_93", 2, 156, "_reduce_94", 1, 156, "_reduce_none", 1, 184, "_reduce_none", 2, 185, "_reduce_97", 1, 185, "_reduce_98", 3, 185, "_reduce_99", 1, 186, "_reduce_none", 1, 186, "_reduce_none", 1, 186, "_reduce_none", 1, 186, "_reduce_103", 1, 186, "_reduce_104", 1, 153, "_reduce_105", 1, 153, "_reduce_none", 1, 154, "_reduce_107", 3, 154, "_reduce_108", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 3, 167, "_reduce_183", 5, 167, "_reduce_184", 3, 167, "_reduce_185", 6, 167, "_reduce_186", 5, 167, "_reduce_187", 5, 167, "_reduce_none", 5, 167, "_reduce_none", 5, 167, "_reduce_none", 4, 167, "_reduce_none", 3, 167, "_reduce_none", 3, 167, "_reduce_193", 3, 167, "_reduce_194", 3, 167, "_reduce_195", 3, 167, "_reduce_196", 3, 167, "_reduce_197", 3, 167, "_reduce_198", 3, 167, "_reduce_199", 3, 167, "_reduce_200", 4, 167, "_reduce_201", 4, 167, "_reduce_202", 2, 167, "_reduce_203", 2, 167, "_reduce_204", 3, 167, "_reduce_205", 3, 167, "_reduce_206", 3, 167, "_reduce_207", 3, 167, "_reduce_208", 3, 167, "_reduce_209", 3, 167, "_reduce_210", 3, 167, "_reduce_211", 3, 167, "_reduce_212", 3, 167, "_reduce_213", 3, 167, "_reduce_214", 3, 167, "_reduce_215", 3, 167, "_reduce_216", 3, 167, "_reduce_217", 2, 167, "_reduce_218", 2, 167, "_reduce_219", 3, 167, "_reduce_220", 3, 167, "_reduce_221", 3, 167, "_reduce_222", 3, 167, "_reduce_223", 3, 167, "_reduce_224", 5, 167, "_reduce_225", 1, 167, "_reduce_none", 1, 164, "_reduce_none", 1, 161, "_reduce_228", 2, 161, "_reduce_229", 2, 161, "_reduce_230", 4, 161, "_reduce_231", 2, 161, "_reduce_232", 3, 196, "_reduce_233", 4, 196, "_reduce_234", 4, 196, "_reduce_none", 6, 196, "_reduce_none", 1, 197, "_reduce_237", 1, 197, "_reduce_none", 1, 170, "_reduce_239", 2, 170, "_reduce_240", 2, 170, "_reduce_241", 4, 170, "_reduce_242", 1, 170, "_reduce_243", 4, 200, "_reduce_none", 1, 200, "_reduce_none", 0, 202, "_reduce_246", 2, 173, "_reduce_247", 1, 201, "_reduce_none", 2, 201, "_reduce_249", 3, 201, "_reduce_250", 2, 199, "_reduce_251", 2, 198, "_reduce_252", 0, 198, "_reduce_253", 1, 193, "_reduce_254", 2, 193, "_reduce_255", 3, 193, "_reduce_256", 4, 193, "_reduce_257", 3, 163, "_reduce_258", 4, 163, "_reduce_259", 2, 163, "_reduce_260", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 1, 191, "_reduce_none", 0, 224, "_reduce_270", 4, 191, "_reduce_271", 4, 191, "_reduce_272", 3, 191, "_reduce_273", 3, 191, "_reduce_274", 2, 191, "_reduce_275", 4, 191, "_reduce_276", 3, 191, "_reduce_277", 3, 191, "_reduce_278", 1, 191, "_reduce_279", 4, 191, "_reduce_280", 3, 191, "_reduce_281", 1, 191, "_reduce_282", 5, 191, "_reduce_283", 4, 191, "_reduce_284", 3, 191, "_reduce_285", 2, 191, "_reduce_286", 1, 191, "_reduce_none", 2, 191, "_reduce_288", 2, 191, "_reduce_289", 6, 191, "_reduce_290", 6, 191, "_reduce_291", 0, 225, "_reduce_292", 0, 226, "_reduce_293", 7, 191, "_reduce_294", 0, 227, "_reduce_295", 0, 228, "_reduce_296", 7, 191, "_reduce_297", 5, 191, "_reduce_298", 4, 191, "_reduce_299", 5, 191, "_reduce_300", 0, 229, "_reduce_301", 0, 230, "_reduce_302", 9, 191, "_reduce_303", 0, 231, "_reduce_304", 6, 191, "_reduce_305", 0, 232, "_reduce_306", 0, 233, "_reduce_307", 8, 191, "_reduce_308", 0, 234, "_reduce_309", 0, 235, "_reduce_310", 6, 191, "_reduce_311", 0, 236, "_reduce_312", 6, 191, "_reduce_313", 0, 237, "_reduce_314", 0, 238, "_reduce_315", 9, 191, "_reduce_316", 1, 191, "_reduce_317", 1, 191, "_reduce_318", 1, 191, "_reduce_319", 1, 191, "_reduce_none", 1, 160, "_reduce_none", 1, 214, "_reduce_none", 1, 214, "_reduce_none", 1, 214, "_reduce_none", 2, 214, "_reduce_none", 1, 216, "_reduce_none", 1, 216, "_reduce_none", 1, 216, "_reduce_none", 2, 213, "_reduce_329", 3, 239, "_reduce_330", 2, 239, "_reduce_331", 1, 239, "_reduce_none", 1, 239, "_reduce_none", 3, 240, "_reduce_334", 3, 240, "_reduce_335", 1, 215, "_reduce_336", 5, 215, "_reduce_337", 1, 150, "_reduce_none", 2, 150, "_reduce_339", 1, 242, "_reduce_340", 3, 242, "_reduce_341", 3, 243, "_reduce_342", 1, 175, "_reduce_none", 2, 175, "_reduce_344", 1, 175, "_reduce_345", 3, 175, "_reduce_346", 1, 244, "_reduce_347", 2, 246, "_reduce_348", 1, 246, "_reduce_349", 6, 241, "_reduce_350", 4, 241, "_reduce_351", 4, 241, "_reduce_352", 2, 241, "_reduce_353", 2, 241, "_reduce_354", 4, 241, "_reduce_355", 2, 241, "_reduce_356", 2, 241, "_reduce_357", 1, 241, "_reduce_358", 0, 250, "_reduce_359", 5, 249, "_reduce_360", 2, 171, "_reduce_361", 4, 171, "_reduce_none", 4, 171, "_reduce_none", 2, 212, "_reduce_364", 4, 212, "_reduce_365", 3, 212, "_reduce_366", 4, 212, "_reduce_367", 3, 212, "_reduce_368", 2, 212, "_reduce_369", 1, 212, "_reduce_370", 0, 252, "_reduce_371", 5, 211, "_reduce_372", 0, 253, "_reduce_373", 5, 211, "_reduce_374", 0, 255, "_reduce_375", 6, 217, "_reduce_376", 1, 254, "_reduce_377", 1, 254, "_reduce_none", 6, 149, "_reduce_379", 0, 149, "_reduce_380", 1, 256, "_reduce_381", 1, 256, "_reduce_none", 1, 256, "_reduce_none", 2, 257, "_reduce_384", 1, 257, "_reduce_385", 2, 151, "_reduce_386", 1, 151, "_reduce_none", 1, 203, "_reduce_none", 1, 203, "_reduce_none", 1, 203, "_reduce_none", 1, 204, "_reduce_391", 1, 260, "_reduce_none", 2, 260, "_reduce_393", 3, 261, "_reduce_394", 1, 261, "_reduce_395", 3, 205, "_reduce_396", 3, 206, "_reduce_397", 3, 207, "_reduce_398", 3, 207, "_reduce_399", 1, 264, "_reduce_400", 3, 264, "_reduce_401", 1, 265, "_reduce_402", 2, 265, "_reduce_403", 3, 208, "_reduce_404", 3, 208, "_reduce_405", 1, 267, "_reduce_406", 3, 267, "_reduce_407", 1, 262, "_reduce_408", 2, 262, "_reduce_409", 1, 263, "_reduce_410", 2, 263, "_reduce_411", 1, 266, "_reduce_412", 0, 269, "_reduce_413", 3, 266, "_reduce_414", 0, 270, "_reduce_415", 4, 266, "_reduce_416", 1, 268, "_reduce_417", 1, 268, "_reduce_418", 1, 268, "_reduce_419", 1, 268, "_reduce_none", 2, 189, "_reduce_421", 1, 189, "_reduce_422", 1, 271, "_reduce_none", 1, 271, "_reduce_none", 1, 271, "_reduce_none", 1, 271, "_reduce_none", 3, 259, "_reduce_427", 1, 258, "_reduce_428", 1, 258, "_reduce_429", 2, 258, "_reduce_430", 2, 258, "_reduce_431", 2, 258, "_reduce_432", 2, 258, "_reduce_433", 1, 183, "_reduce_434", 1, 183, "_reduce_435", 1, 183, "_reduce_436", 1, 183, "_reduce_437", 1, 183, "_reduce_438", 1, 183, "_reduce_439", 1, 183, "_reduce_440", 1, 183, "_reduce_441", 1, 183, "_reduce_442", 1, 183, "_reduce_443", 1, 183, "_reduce_444", 1, 209, "_reduce_445", 1, 159, "_reduce_446", 1, 162, "_reduce_447", 1, 162, "_reduce_none", 1, 219, "_reduce_449", 3, 219, "_reduce_450", 2, 219, "_reduce_451", 4, 221, "_reduce_452", 2, 221, "_reduce_453", 6, 272, "_reduce_454", 4, 272, "_reduce_455", 4, 272, "_reduce_456", 2, 272, "_reduce_457", 4, 272, "_reduce_458", 2, 272, "_reduce_459", 2, 272, "_reduce_460", 1, 272, "_reduce_461", 0, 272, "_reduce_462", 1, 275, "_reduce_none", 1, 275, "_reduce_464", 1, 276, "_reduce_465", 1, 276, "_reduce_466", 1, 276, "_reduce_467", 1, 276, "_reduce_468", 1, 277, "_reduce_469", 3, 277, "_reduce_470", 1, 218, "_reduce_none", 1, 218, "_reduce_none", 1, 279, "_reduce_473", 3, 279, "_reduce_none", 1, 280, "_reduce_475", 3, 280, "_reduce_476", 1, 278, "_reduce_none", 4, 278, "_reduce_none", 3, 278, "_reduce_none", 2, 278, "_reduce_none", 1, 278, "_reduce_none", 1, 247, "_reduce_482", 3, 247, "_reduce_483", 3, 281, "_reduce_484", 1, 273, "_reduce_485", 3, 273, "_reduce_486", 1, 282, "_reduce_none", 1, 282, "_reduce_none", 2, 248, "_reduce_489", 1, 248, "_reduce_490", 1, 283, "_reduce_none", 1, 283, "_reduce_none", 2, 245, "_reduce_493", 2, 274, "_reduce_494", 0, 274, "_reduce_495", 1, 222, "_reduce_496", 4, 222, "_reduce_497", 0, 210, "_reduce_498", 2, 210, "_reduce_499", 1, 195, "_reduce_500", 3, 195, "_reduce_501", 3, 284, "_reduce_502", 2, 284, "_reduce_503", 1, 176, "_reduce_none", 1, 176, "_reduce_none", 1, 176, "_reduce_none", 1, 172, "_reduce_none", 1, 172, "_reduce_none", 1, 172, "_reduce_none", 1, 172, "_reduce_none", 1, 251, "_reduce_none", 1, 251, "_reduce_none", 1, 251, "_reduce_none", 1, 223, "_reduce_none", 1, 223, "_reduce_none", 0, 143, "_reduce_none", 1, 143, "_reduce_none", 0, 190, "_reduce_none", 1, 190, "_reduce_none", 0, 194, "_reduce_none", 1, 194, "_reduce_none", 1, 194, "_reduce_none", 1, 220, "_reduce_none", 1, 220, "_reduce_none", 1, 145, "_reduce_none", 2, 145, "_reduce_none", 0, 192, "_reduce_527"];
+      racc_reduce_table = [0, 0, "racc_error", 1, 141, "_reduce_none", 2, 142, "_reduce_2", 0, 143, "_reduce_3", 1, 143, "_reduce_4", 3, 143, "_reduce_5", 1, 145, "_reduce_none", 4, 145, "_reduce_7", 4, 148, "_reduce_8", 2, 149, "_reduce_9", 0, 153, "_reduce_10", 1, 153, "_reduce_11", 3, 153, "_reduce_12", 0, 167, "_reduce_13", 4, 147, "_reduce_14", 3, 147, "_reduce_15", 3, 147, "_reduce_none", 3, 147, "_reduce_17", 2, 147, "_reduce_18", 3, 147, "_reduce_19", 3, 147, "_reduce_20", 3, 147, "_reduce_21", 3, 147, "_reduce_22", 3, 147, "_reduce_23", 4, 147, "_reduce_none", 3, 147, "_reduce_25", 3, 147, "_reduce_26", 3, 147, "_reduce_27", 6, 147, "_reduce_none", 5, 147, "_reduce_29", 5, 147, "_reduce_none", 5, 147, "_reduce_none", 3, 147, "_reduce_none", 3, 147, "_reduce_33", 3, 147, "_reduce_34", 3, 147, "_reduce_35", 1, 147, "_reduce_none", 1, 166, "_reduce_none", 3, 166, "_reduce_38", 3, 166, "_reduce_39", 2, 166, "_reduce_40", 2, 166, "_reduce_41", 1, 166, "_reduce_none", 1, 156, "_reduce_none", 1, 158, "_reduce_none", 1, 158, "_reduce_none", 2, 158, "_reduce_46", 2, 158, "_reduce_47", 2, 158, "_reduce_48", 1, 170, "_reduce_none", 4, 170, "_reduce_none", 4, 170, "_reduce_none", 4, 175, "_reduce_none", 2, 169, "_reduce_53", 3, 169, "_reduce_none", 4, 169, "_reduce_55", 5, 169, "_reduce_none", 4, 169, "_reduce_57", 5, 169, "_reduce_none", 2, 169, "_reduce_59", 2, 169, "_reduce_60", 1, 159, "_reduce_61", 3, 159, "_reduce_62", 1, 179, "_reduce_63", 3, 179, "_reduce_64", 1, 178, "_reduce_65", 2, 178, "_reduce_66", 3, 178, "_reduce_67", 5, 178, "_reduce_none", 2, 178, "_reduce_69", 4, 178, "_reduce_none", 2, 178, "_reduce_71", 1, 178, "_reduce_72", 3, 178, "_reduce_none", 1, 181, "_reduce_74", 3, 181, "_reduce_75", 2, 180, "_reduce_76", 3, 180, "_reduce_77", 1, 183, "_reduce_none", 3, 183, "_reduce_none", 1, 182, "_reduce_80", 4, 182, "_reduce_81", 3, 182, "_reduce_82", 3, 182, "_reduce_none", 3, 182, "_reduce_none", 3, 182, "_reduce_none", 2, 182, "_reduce_none", 1, 182, "_reduce_none", 1, 157, "_reduce_88", 4, 157, "_reduce_89", 3, 157, "_reduce_90", 3, 157, "_reduce_91", 3, 157, "_reduce_92", 3, 157, "_reduce_93", 2, 157, "_reduce_94", 1, 157, "_reduce_none", 1, 185, "_reduce_none", 2, 186, "_reduce_97", 1, 186, "_reduce_98", 3, 186, "_reduce_99", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_none", 1, 187, "_reduce_103", 1, 187, "_reduce_104", 1, 154, "_reduce_105", 1, 154, "_reduce_none", 1, 155, "_reduce_107", 3, 155, "_reduce_108", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 188, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 1, 189, "_reduce_none", 3, 168, "_reduce_183", 5, 168, "_reduce_184", 3, 168, "_reduce_185", 6, 168, "_reduce_186", 5, 168, "_reduce_187", 5, 168, "_reduce_none", 5, 168, "_reduce_none", 5, 168, "_reduce_none", 4, 168, "_reduce_none", 3, 168, "_reduce_none", 3, 168, "_reduce_193", 3, 168, "_reduce_194", 3, 168, "_reduce_195", 3, 168, "_reduce_196", 3, 168, "_reduce_197", 3, 168, "_reduce_198", 3, 168, "_reduce_199", 3, 168, "_reduce_200", 4, 168, "_reduce_201", 4, 168, "_reduce_202", 2, 168, "_reduce_203", 2, 168, "_reduce_204", 3, 168, "_reduce_205", 3, 168, "_reduce_206", 3, 168, "_reduce_207", 3, 168, "_reduce_208", 3, 168, "_reduce_209", 3, 168, "_reduce_210", 3, 168, "_reduce_211", 3, 168, "_reduce_212", 3, 168, "_reduce_213", 3, 168, "_reduce_214", 3, 168, "_reduce_215", 3, 168, "_reduce_216", 3, 168, "_reduce_217", 2, 168, "_reduce_218", 2, 168, "_reduce_219", 3, 168, "_reduce_220", 3, 168, "_reduce_221", 3, 168, "_reduce_222", 3, 168, "_reduce_223", 3, 168, "_reduce_224", 5, 168, "_reduce_225", 1, 168, "_reduce_none", 1, 165, "_reduce_none", 1, 162, "_reduce_228", 2, 162, "_reduce_229", 2, 162, "_reduce_230", 4, 162, "_reduce_231", 2, 162, "_reduce_232", 3, 197, "_reduce_233", 4, 197, "_reduce_234", 4, 197, "_reduce_none", 6, 197, "_reduce_none", 1, 198, "_reduce_237", 1, 198, "_reduce_none", 1, 171, "_reduce_239", 2, 171, "_reduce_240", 2, 171, "_reduce_241", 4, 171, "_reduce_242", 1, 171, "_reduce_243", 4, 201, "_reduce_none", 1, 201, "_reduce_none", 0, 203, "_reduce_246", 2, 174, "_reduce_247", 1, 202, "_reduce_none", 2, 202, "_reduce_249", 3, 202, "_reduce_250", 2, 200, "_reduce_251", 2, 199, "_reduce_252", 0, 199, "_reduce_253", 1, 194, "_reduce_254", 2, 194, "_reduce_255", 3, 194, "_reduce_256", 4, 194, "_reduce_257", 3, 164, "_reduce_258", 4, 164, "_reduce_259", 2, 164, "_reduce_260", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 1, 192, "_reduce_none", 0, 225, "_reduce_270", 4, 192, "_reduce_271", 4, 192, "_reduce_272", 3, 192, "_reduce_273", 3, 192, "_reduce_274", 2, 192, "_reduce_275", 4, 192, "_reduce_276", 3, 192, "_reduce_277", 3, 192, "_reduce_278", 1, 192, "_reduce_279", 4, 192, "_reduce_280", 3, 192, "_reduce_281", 1, 192, "_reduce_282", 5, 192, "_reduce_283", 4, 192, "_reduce_284", 3, 192, "_reduce_285", 2, 192, "_reduce_286", 1, 192, "_reduce_none", 2, 192, "_reduce_288", 2, 192, "_reduce_289", 6, 192, "_reduce_290", 6, 192, "_reduce_291", 0, 226, "_reduce_292", 0, 227, "_reduce_293", 7, 192, "_reduce_294", 0, 228, "_reduce_295", 0, 229, "_reduce_296", 7, 192, "_reduce_297", 5, 192, "_reduce_298", 4, 192, "_reduce_299", 5, 192, "_reduce_300", 0, 230, "_reduce_301", 0, 231, "_reduce_302", 9, 192, "_reduce_303", 0, 232, "_reduce_304", 6, 192, "_reduce_305", 0, 233, "_reduce_306", 0, 234, "_reduce_307", 8, 192, "_reduce_308", 0, 235, "_reduce_309", 0, 236, "_reduce_310", 6, 192, "_reduce_311", 0, 237, "_reduce_312", 6, 192, "_reduce_313", 0, 238, "_reduce_314", 0, 239, "_reduce_315", 9, 192, "_reduce_316", 1, 192, "_reduce_317", 1, 192, "_reduce_318", 1, 192, "_reduce_319", 1, 192, "_reduce_none", 1, 161, "_reduce_none", 1, 215, "_reduce_none", 1, 215, "_reduce_none", 1, 215, "_reduce_none", 2, 215, "_reduce_none", 1, 217, "_reduce_none", 1, 217, "_reduce_none", 1, 217, "_reduce_none", 2, 214, "_reduce_329", 3, 240, "_reduce_330", 2, 240, "_reduce_331", 1, 240, "_reduce_none", 1, 240, "_reduce_none", 3, 241, "_reduce_334", 3, 241, "_reduce_335", 1, 216, "_reduce_336", 5, 216, "_reduce_337", 1, 151, "_reduce_none", 2, 151, "_reduce_339", 1, 243, "_reduce_340", 3, 243, "_reduce_341", 3, 244, "_reduce_342", 1, 176, "_reduce_none", 2, 176, "_reduce_344", 1, 176, "_reduce_345", 3, 176, "_reduce_346", 1, 245, "_reduce_347", 2, 247, "_reduce_348", 1, 247, "_reduce_349", 6, 242, "_reduce_350", 4, 242, "_reduce_351", 4, 242, "_reduce_352", 2, 242, "_reduce_353", 2, 242, "_reduce_354", 4, 242, "_reduce_355", 2, 242, "_reduce_356", 2, 242, "_reduce_357", 1, 242, "_reduce_358", 0, 251, "_reduce_359", 5, 250, "_reduce_360", 2, 172, "_reduce_361", 4, 172, "_reduce_none", 4, 172, "_reduce_none", 2, 213, "_reduce_364", 4, 213, "_reduce_365", 3, 213, "_reduce_366", 4, 213, "_reduce_367", 3, 213, "_reduce_368", 2, 213, "_reduce_369", 1, 213, "_reduce_370", 0, 253, "_reduce_371", 5, 212, "_reduce_372", 0, 254, "_reduce_373", 5, 212, "_reduce_374", 0, 256, "_reduce_375", 6, 218, "_reduce_376", 1, 255, "_reduce_377", 1, 255, "_reduce_none", 6, 150, "_reduce_379", 0, 150, "_reduce_380", 1, 257, "_reduce_381", 1, 257, "_reduce_none", 1, 257, "_reduce_none", 2, 258, "_reduce_384", 1, 258, "_reduce_385", 2, 152, "_reduce_386", 1, 152, "_reduce_none", 1, 204, "_reduce_none", 1, 204, "_reduce_none", 1, 204, "_reduce_none", 1, 205, "_reduce_391", 1, 261, "_reduce_none", 2, 261, "_reduce_393", 3, 262, "_reduce_394", 1, 262, "_reduce_395", 3, 206, "_reduce_396", 3, 207, "_reduce_397", 3, 208, "_reduce_398", 3, 208, "_reduce_399", 1, 265, "_reduce_400", 3, 265, "_reduce_401", 1, 266, "_reduce_402", 2, 266, "_reduce_403", 3, 209, "_reduce_404", 3, 209, "_reduce_405", 1, 268, "_reduce_406", 3, 268, "_reduce_407", 1, 263, "_reduce_408", 2, 263, "_reduce_409", 1, 264, "_reduce_410", 2, 264, "_reduce_411", 1, 267, "_reduce_412", 0, 270, "_reduce_413", 3, 267, "_reduce_414", 0, 271, "_reduce_415", 4, 267, "_reduce_416", 1, 269, "_reduce_417", 1, 269, "_reduce_418", 1, 269, "_reduce_419", 1, 269, "_reduce_none", 2, 190, "_reduce_421", 1, 190, "_reduce_422", 1, 272, "_reduce_none", 1, 272, "_reduce_none", 1, 272, "_reduce_none", 1, 272, "_reduce_none", 3, 260, "_reduce_427", 1, 259, "_reduce_428", 1, 259, "_reduce_429", 2, 259, "_reduce_430", 2, 259, "_reduce_431", 2, 259, "_reduce_432", 2, 259, "_reduce_433", 1, 184, "_reduce_434", 1, 184, "_reduce_435", 1, 184, "_reduce_436", 1, 184, "_reduce_437", 1, 184, "_reduce_438", 1, 184, "_reduce_439", 1, 184, "_reduce_440", 1, 184, "_reduce_441", 1, 184, "_reduce_442", 1, 184, "_reduce_443", 1, 184, "_reduce_444", 1, 210, "_reduce_445", 1, 160, "_reduce_446", 1, 163, "_reduce_447", 1, 163, "_reduce_none", 1, 220, "_reduce_449", 3, 220, "_reduce_450", 2, 220, "_reduce_451", 4, 222, "_reduce_452", 2, 222, "_reduce_453", 1, 274, "_reduce_none", 1, 274, "_reduce_none", 2, 275, "_reduce_456", 1, 275, "_reduce_457", 1, 276, "_reduce_458", 2, 277, "_reduce_459", 1, 277, "_reduce_460", 1, 278, "_reduce_461", 3, 278, "_reduce_462", 4, 279, "_reduce_463", 2, 279, "_reduce_464", 2, 279, "_reduce_465", 1, 279, "_reduce_466", 2, 281, "_reduce_467", 0, 281, "_reduce_468", 6, 273, "_reduce_469", 4, 273, "_reduce_470", 4, 273, "_reduce_471", 2, 273, "_reduce_472", 4, 273, "_reduce_473", 2, 273, "_reduce_474", 2, 273, "_reduce_475", 1, 273, "_reduce_476", 0, 273, "_reduce_477", 1, 283, "_reduce_none", 1, 283, "_reduce_479", 1, 284, "_reduce_480", 1, 284, "_reduce_481", 1, 284, "_reduce_482", 1, 284, "_reduce_483", 1, 285, "_reduce_484", 3, 285, "_reduce_485", 1, 219, "_reduce_none", 1, 219, "_reduce_none", 1, 287, "_reduce_488", 3, 287, "_reduce_none", 1, 288, "_reduce_490", 3, 288, "_reduce_491", 1, 286, "_reduce_none", 4, 286, "_reduce_none", 3, 286, "_reduce_none", 2, 286, "_reduce_none", 1, 286, "_reduce_none", 1, 248, "_reduce_497", 3, 248, "_reduce_498", 3, 289, "_reduce_499", 1, 282, "_reduce_500", 3, 282, "_reduce_501", 1, 290, "_reduce_none", 1, 290, "_reduce_none", 2, 249, "_reduce_504", 1, 249, "_reduce_505", 1, 291, "_reduce_none", 1, 291, "_reduce_none", 2, 246, "_reduce_508", 2, 280, "_reduce_509", 0, 280, "_reduce_510", 1, 223, "_reduce_511", 4, 223, "_reduce_512", 0, 211, "_reduce_513", 2, 211, "_reduce_514", 1, 196, "_reduce_515", 3, 196, "_reduce_516", 3, 292, "_reduce_517", 2, 292, "_reduce_518", 1, 177, "_reduce_none", 1, 177, "_reduce_none", 1, 177, "_reduce_none", 1, 173, "_reduce_none", 1, 173, "_reduce_none", 1, 173, "_reduce_none", 1, 173, "_reduce_none", 1, 252, "_reduce_none", 1, 252, "_reduce_none", 1, 252, "_reduce_none", 1, 224, "_reduce_none", 1, 224, "_reduce_none", 0, 144, "_reduce_none", 1, 144, "_reduce_none", 0, 191, "_reduce_none", 1, 191, "_reduce_none", 0, 195, "_reduce_none", 1, 195, "_reduce_none", 1, 195, "_reduce_none", 1, 221, "_reduce_none", 1, 221, "_reduce_none", 1, 146, "_reduce_none", 2, 146, "_reduce_none", 0, 193, "_reduce_542"];
 
-      racc_reduce_n = 528;
+      racc_reduce_n = 543;
 
-      racc_shift_n = 929;
+      racc_shift_n = 948;
 
-      racc_token_table = $hash(false, 0, "error", 1, "kCLASS", 2, "kMODULE", 3, "kDEF", 4, "kUNDEF", 5, "kBEGIN", 6, "kRESCUE", 7, "kENSURE", 8, "kEND", 9, "kIF", 10, "kUNLESS", 11, "kTHEN", 12, "kELSIF", 13, "kELSE", 14, "kCASE", 15, "kWHEN", 16, "kWHILE", 17, "kUNTIL", 18, "kFOR", 19, "kBREAK", 20, "kNEXT", 21, "kREDO", 22, "kRETRY", 23, "kIN", 24, "kDO", 25, "kDO_COND", 26, "kDO_BLOCK", 27, "kDO_LAMBDA", 28, "kRETURN", 29, "kYIELD", 30, "kSUPER", 31, "kSELF", 32, "kNIL", 33, "kTRUE", 34, "kFALSE", 35, "kAND", 36, "kOR", 37, "kNOT", 38, "kIF_MOD", 39, "kUNLESS_MOD", 40, "kWHILE_MOD", 41, "kUNTIL_MOD", 42, "kRESCUE_MOD", 43, "kALIAS", 44, "kDEFINED", 45, "klBEGIN", 46, "klEND", 47, "k__LINE__", 48, "k__FILE__", 49, "k__ENCODING__", 50, "tIDENTIFIER", 51, "tFID", 52, "tGVAR", 53, "tIVAR", 54, "tCONSTANT", 55, "tLABEL", 56, "tCVAR", 57, "tNTH_REF", 58, "tBACK_REF", 59, "tSTRING_CONTENT", 60, "tINTEGER", 61, "tFLOAT", 62, "tREGEXP_END", 63, "tUPLUS", 64, "tUMINUS", 65, "tUMINUS_NUM", 66, "tPOW", 67, "tCMP", 68, "tEQ", 69, "tEQQ", 70, "tNEQ", 71, "tGEQ", 72, "tLEQ", 73, "tANDOP", 74, "tOROP", 75, "tMATCH", 76, "tNMATCH", 77, "tDOT", 78, "tDOT2", 79, "tDOT3", 80, "tAREF", 81, "tASET", 82, "tLSHFT", 83, "tRSHFT", 84, "tCOLON2", 85, "tCOLON3", 86, "tOP_ASGN", 87, "tASSOC", 88, "tLPAREN", 89, "tLPAREN2", 90, "tRPAREN", 91, "tLPAREN_ARG", 92, "ARRAY_BEG", 93, "tRBRACK", 94, "tLBRACE", 95, "tLBRACE_ARG", 96, "tSTAR", 97, "tSTAR2", 98, "tAMPER", 99, "tAMPER2", 100, "tTILDE", 101, "tPERCENT", 102, "tDIVIDE", 103, "tPLUS", 104, "tMINUS", 105, "tLT", 106, "tGT", 107, "tPIPE", 108, "tBANG", 109, "tCARET", 110, "tLCURLY", 111, "tRCURLY", 112, "tBACK_REF2", 113, "tSYMBEG", 114, "tSTRING_BEG", 115, "tXSTRING_BEG", 116, "tREGEXP_BEG", 117, "tWORDS_BEG", 118, "tAWORDS_BEG", 119, "tSTRING_DBEG", 120, "tSTRING_DVAR", 121, "tSTRING_END", 122, "tSTRING", 123, "tSYMBOL", 124, "tNL", 125, "tEH", 126, "tCOLON", 127, "tCOMMA", 128, "tSPACE", 129, "tSEMI", 130, "tLAMBDA", 131, "tLAMBEG", 132, "tLBRACK2", 133, "tLBRACK", 134, "tEQL", 135, "tLOWEST", 136, "-@NUM", 137, "+@NUM", 138);
+      racc_token_table = $hash(false, 0, "error", 1, "kCLASS", 2, "kMODULE", 3, "kDEF", 4, "kUNDEF", 5, "kBEGIN", 6, "kRESCUE", 7, "kENSURE", 8, "kEND", 9, "kIF", 10, "kUNLESS", 11, "kTHEN", 12, "kELSIF", 13, "kELSE", 14, "kCASE", 15, "kWHEN", 16, "kWHILE", 17, "kUNTIL", 18, "kFOR", 19, "kBREAK", 20, "kNEXT", 21, "kREDO", 22, "kRETRY", 23, "kIN", 24, "kDO", 25, "kDO_COND", 26, "kDO_BLOCK", 27, "kDO_LAMBDA", 28, "kRETURN", 29, "kYIELD", 30, "kSUPER", 31, "kSELF", 32, "kNIL", 33, "kTRUE", 34, "kFALSE", 35, "kAND", 36, "kOR", 37, "kNOT", 38, "kIF_MOD", 39, "kUNLESS_MOD", 40, "kWHILE_MOD", 41, "kUNTIL_MOD", 42, "kRESCUE_MOD", 43, "kALIAS", 44, "kDEFINED", 45, "klBEGIN", 46, "klEND", 47, "k__LINE__", 48, "k__FILE__", 49, "k__ENCODING__", 50, "tIDENTIFIER", 51, "tFID", 52, "tGVAR", 53, "tIVAR", 54, "tCONSTANT", 55, "tLABEL", 56, "tCVAR", 57, "tNTH_REF", 58, "tBACK_REF", 59, "tSTRING_CONTENT", 60, "tINTEGER", 61, "tFLOAT", 62, "tREGEXP_END", 63, "tUPLUS", 64, "tUMINUS", 65, "tUMINUS_NUM", 66, "tPOW", 67, "tCMP", 68, "tEQ", 69, "tEQQ", 70, "tNEQ", 71, "tGEQ", 72, "tLEQ", 73, "tANDOP", 74, "tOROP", 75, "tMATCH", 76, "tNMATCH", 77, "tDOT", 78, "tDOT2", 79, "tDOT3", 80, "tAREF", 81, "tASET", 82, "tLSHFT", 83, "tRSHFT", 84, "tCOLON2", 85, "tCOLON3", 86, "tOP_ASGN", 87, "tASSOC", 88, "tLPAREN", 89, "tLPAREN2", 90, "tRPAREN", 91, "tLPAREN_ARG", 92, "ARRAY_BEG", 93, "tRBRACK", 94, "tLBRACE", 95, "tLBRACE_ARG", 96, "tSTAR", 97, "tSTAR2", 98, "tAMPER", 99, "tAMPER2", 100, "tTILDE", 101, "tPERCENT", 102, "tDIVIDE", 103, "tPLUS", 104, "tMINUS", 105, "tLT", 106, "tGT", 107, "tPIPE", 108, "tBANG", 109, "tCARET", 110, "tLCURLY", 111, "tRCURLY", 112, "tBACK_REF2", 113, "tSYMBEG", 114, "tSTRING_BEG", 115, "tXSTRING_BEG", 116, "tREGEXP_BEG", 117, "tWORDS_BEG", 118, "tAWORDS_BEG", 119, "tSTRING_DBEG", 120, "tSTRING_DVAR", 121, "tSTRING_END", 122, "tSTRING", 123, "tSYMBOL", 124, "tNL", 125, "tEH", 126, "tCOLON", 127, "tCOMMA", 128, "tSPACE", 129, "tSEMI", 130, "tLAMBDA", 131, "tLAMBEG", 132, "tLBRACK2", 133, "tLBRACK", 134, "tDSTAR", 135, "tEQL", 136, "tLOWEST", 137, "-@NUM", 138, "+@NUM", 139);
 
-      racc_nt_base = 139;
+      racc_nt_base = 140;
 
       racc_use_result_var = true;
 
       Opal.cdecl($scope, 'Racc_arg', [racc_action_table, racc_action_check, racc_action_default, racc_action_pointer, racc_goto_table, racc_goto_check, racc_goto_default, racc_goto_pointer, racc_nt_base, racc_reduce_table, racc_token_table, racc_shift_n, racc_reduce_n, racc_use_result_var]);
 
-      Opal.cdecl($scope, 'Racc_token_to_s_table', ["$end", "error", "kCLASS", "kMODULE", "kDEF", "kUNDEF", "kBEGIN", "kRESCUE", "kENSURE", "kEND", "kIF", "kUNLESS", "kTHEN", "kELSIF", "kELSE", "kCASE", "kWHEN", "kWHILE", "kUNTIL", "kFOR", "kBREAK", "kNEXT", "kREDO", "kRETRY", "kIN", "kDO", "kDO_COND", "kDO_BLOCK", "kDO_LAMBDA", "kRETURN", "kYIELD", "kSUPER", "kSELF", "kNIL", "kTRUE", "kFALSE", "kAND", "kOR", "kNOT", "kIF_MOD", "kUNLESS_MOD", "kWHILE_MOD", "kUNTIL_MOD", "kRESCUE_MOD", "kALIAS", "kDEFINED", "klBEGIN", "klEND", "k__LINE__", "k__FILE__", "k__ENCODING__", "tIDENTIFIER", "tFID", "tGVAR", "tIVAR", "tCONSTANT", "tLABEL", "tCVAR", "tNTH_REF", "tBACK_REF", "tSTRING_CONTENT", "tINTEGER", "tFLOAT", "tREGEXP_END", "tUPLUS", "tUMINUS", "tUMINUS_NUM", "tPOW", "tCMP", "tEQ", "tEQQ", "tNEQ", "tGEQ", "tLEQ", "tANDOP", "tOROP", "tMATCH", "tNMATCH", "tDOT", "tDOT2", "tDOT3", "tAREF", "tASET", "tLSHFT", "tRSHFT", "tCOLON2", "tCOLON3", "tOP_ASGN", "tASSOC", "tLPAREN", "tLPAREN2", "tRPAREN", "tLPAREN_ARG", "ARRAY_BEG", "tRBRACK", "tLBRACE", "tLBRACE_ARG", "tSTAR", "tSTAR2", "tAMPER", "tAMPER2", "tTILDE", "tPERCENT", "tDIVIDE", "tPLUS", "tMINUS", "tLT", "tGT", "tPIPE", "tBANG", "tCARET", "tLCURLY", "tRCURLY", "tBACK_REF2", "tSYMBEG", "tSTRING_BEG", "tXSTRING_BEG", "tREGEXP_BEG", "tWORDS_BEG", "tAWORDS_BEG", "tSTRING_DBEG", "tSTRING_DVAR", "tSTRING_END", "tSTRING", "tSYMBOL", "tNL", "tEH", "tCOLON", "tCOMMA", "tSPACE", "tSEMI", "tLAMBDA", "tLAMBEG", "tLBRACK2", "tLBRACK", "tEQL", "tLOWEST", "\"-@NUM\"", "\"+@NUM\"", "$start", "program", "top_compstmt", "top_stmts", "opt_terms", "top_stmt", "terms", "stmt", "bodystmt", "compstmt", "opt_rescue", "opt_else", "opt_ensure", "stmts", "fitem", "undef_list", "expr_value", "lhs", "command_call", "mlhs", "var_lhs", "primary_value", "aref_args", "backref", "mrhs", "arg_value", "expr", "@1", "arg", "command", "block_command", "call_args", "block_call", "operation2", "command_args", "cmd_brace_block", "opt_block_var", "operation", "mlhs_basic", "mlhs_entry", "mlhs_head", "mlhs_item", "mlhs_node", "mlhs_post", "variable", "cname", "cpath", "fname", "op", "reswords", "symbol", "opt_nl", "primary", "none", "args", "trailer", "assocs", "paren_args", "opt_paren_args", "opt_block_arg", "block_arg", "call_args2", "open_args", "@2", "literal", "strings", "xstring", "regexp", "words", "awords", "var_ref", "assoc_list", "brace_block", "method_call", "lambda", "then", "if_tail", "do", "case_body", "for_var", "superclass", "term", "f_arglist", "singleton", "dot_or_colon", "@3", "@4", "@5", "@6", "@7", "@8", "@9", "@10", "@11", "@12", "@13", "@14", "@15", "@16", "@17", "f_larglist", "lambda_body", "block_param", "f_block_optarg", "f_block_opt", "block_args_tail", "f_block_arg", "opt_block_args_tail", "f_arg", "f_rest_arg", "do_block", "@18", "operation3", "@19", "@20", "cases", "@21", "exc_list", "exc_var", "numeric", "dsym", "string", "string1", "string_contents", "xstring_contents", "word_list", "word", "string_content", "qword_list", "string_dvar", "@22", "@23", "sym", "f_args", "f_optarg", "opt_f_block_arg", "f_norm_arg", "f_bad_arg", "f_arg_item", "f_margs", "f_marg", "f_marg_list", "f_opt", "restarg_mark", "blkarg_mark", "assoc"]);
+      Opal.cdecl($scope, 'Racc_token_to_s_table', ["$end", "error", "kCLASS", "kMODULE", "kDEF", "kUNDEF", "kBEGIN", "kRESCUE", "kENSURE", "kEND", "kIF", "kUNLESS", "kTHEN", "kELSIF", "kELSE", "kCASE", "kWHEN", "kWHILE", "kUNTIL", "kFOR", "kBREAK", "kNEXT", "kREDO", "kRETRY", "kIN", "kDO", "kDO_COND", "kDO_BLOCK", "kDO_LAMBDA", "kRETURN", "kYIELD", "kSUPER", "kSELF", "kNIL", "kTRUE", "kFALSE", "kAND", "kOR", "kNOT", "kIF_MOD", "kUNLESS_MOD", "kWHILE_MOD", "kUNTIL_MOD", "kRESCUE_MOD", "kALIAS", "kDEFINED", "klBEGIN", "klEND", "k__LINE__", "k__FILE__", "k__ENCODING__", "tIDENTIFIER", "tFID", "tGVAR", "tIVAR", "tCONSTANT", "tLABEL", "tCVAR", "tNTH_REF", "tBACK_REF", "tSTRING_CONTENT", "tINTEGER", "tFLOAT", "tREGEXP_END", "tUPLUS", "tUMINUS", "tUMINUS_NUM", "tPOW", "tCMP", "tEQ", "tEQQ", "tNEQ", "tGEQ", "tLEQ", "tANDOP", "tOROP", "tMATCH", "tNMATCH", "tDOT", "tDOT2", "tDOT3", "tAREF", "tASET", "tLSHFT", "tRSHFT", "tCOLON2", "tCOLON3", "tOP_ASGN", "tASSOC", "tLPAREN", "tLPAREN2", "tRPAREN", "tLPAREN_ARG", "ARRAY_BEG", "tRBRACK", "tLBRACE", "tLBRACE_ARG", "tSTAR", "tSTAR2", "tAMPER", "tAMPER2", "tTILDE", "tPERCENT", "tDIVIDE", "tPLUS", "tMINUS", "tLT", "tGT", "tPIPE", "tBANG", "tCARET", "tLCURLY", "tRCURLY", "tBACK_REF2", "tSYMBEG", "tSTRING_BEG", "tXSTRING_BEG", "tREGEXP_BEG", "tWORDS_BEG", "tAWORDS_BEG", "tSTRING_DBEG", "tSTRING_DVAR", "tSTRING_END", "tSTRING", "tSYMBOL", "tNL", "tEH", "tCOLON", "tCOMMA", "tSPACE", "tSEMI", "tLAMBDA", "tLAMBEG", "tLBRACK2", "tLBRACK", "tDSTAR", "tEQL", "tLOWEST", "\"-@NUM\"", "\"+@NUM\"", "$start", "program", "top_compstmt", "top_stmts", "opt_terms", "top_stmt", "terms", "stmt", "bodystmt", "compstmt", "opt_rescue", "opt_else", "opt_ensure", "stmts", "fitem", "undef_list", "expr_value", "lhs", "command_call", "mlhs", "var_lhs", "primary_value", "aref_args", "backref", "mrhs", "arg_value", "expr", "@1", "arg", "command", "block_command", "call_args", "block_call", "operation2", "command_args", "cmd_brace_block", "opt_block_var", "operation", "mlhs_basic", "mlhs_entry", "mlhs_head", "mlhs_item", "mlhs_node", "mlhs_post", "variable", "cname", "cpath", "fname", "op", "reswords", "symbol", "opt_nl", "primary", "none", "args", "trailer", "assocs", "paren_args", "opt_paren_args", "opt_block_arg", "block_arg", "call_args2", "open_args", "@2", "literal", "strings", "xstring", "regexp", "words", "awords", "var_ref", "assoc_list", "brace_block", "method_call", "lambda", "then", "if_tail", "do", "case_body", "for_var", "superclass", "term", "f_arglist", "singleton", "dot_or_colon", "@3", "@4", "@5", "@6", "@7", "@8", "@9", "@10", "@11", "@12", "@13", "@14", "@15", "@16", "@17", "f_larglist", "lambda_body", "block_param", "f_block_optarg", "f_block_opt", "block_args_tail", "f_block_arg", "opt_block_args_tail", "f_arg", "f_rest_arg", "do_block", "@18", "operation3", "@19", "@20", "cases", "@21", "exc_list", "exc_var", "numeric", "dsym", "string", "string1", "string_contents", "xstring_contents", "word_list", "word", "string_content", "qword_list", "string_dvar", "@22", "@23", "sym", "f_args", "kwrest_mark", "f_kwrest", "f_label", "f_kw", "f_kwarg", "args_tail", "opt_f_block_arg", "opt_args_tail", "f_optarg", "f_norm_arg", "f_bad_arg", "f_arg_item", "f_margs", "f_marg", "f_marg_list", "f_opt", "restarg_mark", "blkarg_mark", "assoc"]);
 
       Opal.cdecl($scope, 'Racc_debug_parser', false);
 
@@ -19176,70 +20013,162 @@ if (i == null) i = nil;
         return result;
       };
 
-      def.$_reduce_454 = function(val, _values, result) {
-        var self = this;
-
-        result = self.$new_args(val['$[]'](0), val['$[]'](2), val['$[]'](4), val['$[]'](5));
-        return result;
-      };
-
-      def.$_reduce_455 = function(val, _values, result) {
-        var self = this;
-
-        result = self.$new_args(val['$[]'](0), val['$[]'](2), nil, val['$[]'](3));
-        return result;
-      };
-
       def.$_reduce_456 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_args(val['$[]'](0), nil, val['$[]'](2), val['$[]'](3));
+        result = self.$new_kwrestarg(val['$[]'](1));
         return result;
       };
 
       def.$_reduce_457 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_args(val['$[]'](0), nil, nil, val['$[]'](1));
+        result = self.$new_kwrestarg();
         return result;
       };
 
       def.$_reduce_458 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_args(nil, val['$[]'](0), val['$[]'](2), val['$[]'](3));
+        result = self.$new_sym(val['$[]'](0));
         return result;
       };
 
       def.$_reduce_459 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_args(nil, val['$[]'](0), nil, val['$[]'](1));
+        result = self.$new_kwoptarg(val['$[]'](0), val['$[]'](1));
         return result;
       };
 
       def.$_reduce_460 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_args(nil, nil, val['$[]'](0), val['$[]'](1));
+        result = self.$new_kwarg(val['$[]'](0));
         return result;
       };
 
       def.$_reduce_461 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_args(nil, nil, nil, val['$[]'](0));
+        result = [val['$[]'](0)];
         return result;
       };
 
       def.$_reduce_462 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_args(nil, nil, nil, nil);
+        result = val['$[]'](0);
+        result['$<<'](val['$[]'](2));
+        return result;
+      };
+
+      def.$_reduce_463 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args_tail(val['$[]'](0), val['$[]'](2), val['$[]'](3));
         return result;
       };
 
       def.$_reduce_464 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args_tail(val['$[]'](0), nil, val['$[]'](1));
+        return result;
+      };
+
+      def.$_reduce_465 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args_tail(nil, val['$[]'](0), val['$[]'](1));
+        return result;
+      };
+
+      def.$_reduce_466 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args_tail(nil, nil, val['$[]'](0));
+        return result;
+      };
+
+      def.$_reduce_467 = function(val, _values, result) {
+        var self = this;
+
+        result = val['$[]'](1);
+        return result;
+      };
+
+      def.$_reduce_468 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args_tail(nil, nil, nil);
+        return result;
+      };
+
+      def.$_reduce_469 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(val['$[]'](0), val['$[]'](2), val['$[]'](4), val['$[]'](5));
+        return result;
+      };
+
+      def.$_reduce_470 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(val['$[]'](0), val['$[]'](2), nil, val['$[]'](3));
+        return result;
+      };
+
+      def.$_reduce_471 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(val['$[]'](0), nil, val['$[]'](2), val['$[]'](3));
+        return result;
+      };
+
+      def.$_reduce_472 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(val['$[]'](0), nil, nil, val['$[]'](1));
+        return result;
+      };
+
+      def.$_reduce_473 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(nil, val['$[]'](0), val['$[]'](2), val['$[]'](3));
+        return result;
+      };
+
+      def.$_reduce_474 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(nil, val['$[]'](0), nil, val['$[]'](1));
+        return result;
+      };
+
+      def.$_reduce_475 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(nil, nil, val['$[]'](0), val['$[]'](1));
+        return result;
+      };
+
+      def.$_reduce_476 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(nil, nil, nil, val['$[]'](0));
+        return result;
+      };
+
+      def.$_reduce_477 = function(val, _values, result) {
+        var self = this;
+
+        result = self.$new_args(nil, nil, nil, nil);
+        return result;
+      };
+
+      def.$_reduce_479 = function(val, _values, result) {
         var self = this;
 
         result = self.$value(val['$[]'](0)).$to_sym();
@@ -19247,145 +20176,66 @@ if (i == null) i = nil;
         return result;
       };
 
-      def.$_reduce_465 = function(val, _values, result) {
+      def.$_reduce_480 = function(val, _values, result) {
         var self = this;
 
         self.$raise("formal argument cannot be a constant");
         return result;
       };
 
-      def.$_reduce_466 = function(val, _values, result) {
+      def.$_reduce_481 = function(val, _values, result) {
         var self = this;
 
         self.$raise("formal argument cannot be an instance variable");
         return result;
       };
 
-      def.$_reduce_467 = function(val, _values, result) {
+      def.$_reduce_482 = function(val, _values, result) {
         var self = this;
 
         self.$raise("formal argument cannot be a class variable");
         return result;
       };
 
-      def.$_reduce_468 = function(val, _values, result) {
+      def.$_reduce_483 = function(val, _values, result) {
         var self = this;
 
         self.$raise("formal argument cannot be a global variable");
         return result;
       };
 
-      def.$_reduce_469 = function(val, _values, result) {
-        var self = this;
-
-        result = val['$[]'](0);
-        return result;
-      };
-
-      def.$_reduce_470 = function(val, _values, result) {
-        var self = this;
-
-        result = val['$[]'](1);
-        return result;
-      };
-
-      def.$_reduce_473 = function(val, _values, result) {
-        var self = this;
-
-        result = self.$s("lasgn", val['$[]'](0));
-        return result;
-      };
-
-      def.$_reduce_475 = function(val, _values, result) {
-        var self = this;
-
-        result = self.$s("array", val['$[]'](0));
-        return result;
-      };
-
-      def.$_reduce_476 = function(val, _values, result) {
-        var self = this;
-
-        val['$[]'](0)['$<<'](val['$[]'](2));
-        result = val['$[]'](0);
-        return result;
-      };
-
-      def.$_reduce_482 = function(val, _values, result) {
-        var self = this;
-
-        result = [val['$[]'](0)];
-        return result;
-      };
-
-      def.$_reduce_483 = function(val, _values, result) {
-        var self = this;
-
-        val['$[]'](0)['$<<'](val['$[]'](2));
-        result = val['$[]'](0);
-        return result;
-      };
-
       def.$_reduce_484 = function(val, _values, result) {
         var self = this;
 
-        result = self.$new_assign(self.$new_assignable(self.$new_ident(val['$[]'](0))), val['$[]'](1), val['$[]'](2));
+        result = val['$[]'](0);
         return result;
       };
 
       def.$_reduce_485 = function(val, _values, result) {
         var self = this;
 
-        result = self.$s("block", val['$[]'](0));
+        result = val['$[]'](1);
         return result;
       };
 
-      def.$_reduce_486 = function(val, _values, result) {
+      def.$_reduce_488 = function(val, _values, result) {
         var self = this;
 
-        result = val['$[]'](0);
-        val['$[]'](0)['$<<'](val['$[]'](2));
-        return result;
-      };
-
-      def.$_reduce_489 = function(val, _values, result) {
-        var self = this;
-
-        result = (("*") + (self.$value(val['$[]'](1)))).$to_sym();
+        result = self.$s("lasgn", val['$[]'](0));
         return result;
       };
 
       def.$_reduce_490 = function(val, _values, result) {
         var self = this;
 
-        result = "*";
+        result = self.$s("array", val['$[]'](0));
         return result;
       };
 
-      def.$_reduce_493 = function(val, _values, result) {
+      def.$_reduce_491 = function(val, _values, result) {
         var self = this;
 
-        result = (("&") + (self.$value(val['$[]'](1)))).$to_sym();
-        return result;
-      };
-
-      def.$_reduce_494 = function(val, _values, result) {
-        var self = this;
-
-        result = val['$[]'](1);
-        return result;
-      };
-
-      def.$_reduce_495 = function(val, _values, result) {
-        var self = this;
-
-        result = nil;
-        return result;
-      };
-
-      def.$_reduce_496 = function(val, _values, result) {
-        var self = this;
-
+        val['$[]'](0)['$<<'](val['$[]'](2));
         result = val['$[]'](0);
         return result;
       };
@@ -19393,53 +20243,132 @@ if (i == null) i = nil;
       def.$_reduce_497 = function(val, _values, result) {
         var self = this;
 
-        result = val['$[]'](1);
+        result = [val['$[]'](0)];
         return result;
       };
 
       def.$_reduce_498 = function(val, _values, result) {
         var self = this;
 
-        result = [];
+        val['$[]'](0)['$<<'](val['$[]'](2));
+        result = val['$[]'](0);
         return result;
       };
 
       def.$_reduce_499 = function(val, _values, result) {
         var self = this;
 
-        result = val['$[]'](0);
+        result = self.$new_assign(self.$new_assignable(self.$new_ident(val['$[]'](0))), val['$[]'](1), val['$[]'](2));
         return result;
       };
 
       def.$_reduce_500 = function(val, _values, result) {
         var self = this;
 
-        result = val['$[]'](0);
+        result = self.$s("block", val['$[]'](0));
         return result;
       };
 
       def.$_reduce_501 = function(val, _values, result) {
+        var self = this;
+
+        result = val['$[]'](0);
+        val['$[]'](0)['$<<'](val['$[]'](2));
+        return result;
+      };
+
+      def.$_reduce_504 = function(val, _values, result) {
+        var self = this;
+
+        result = (("*") + (self.$value(val['$[]'](1)))).$to_sym();
+        return result;
+      };
+
+      def.$_reduce_505 = function(val, _values, result) {
+        var self = this;
+
+        result = "*";
+        return result;
+      };
+
+      def.$_reduce_508 = function(val, _values, result) {
+        var self = this;
+
+        result = (("&") + (self.$value(val['$[]'](1)))).$to_sym();
+        return result;
+      };
+
+      def.$_reduce_509 = function(val, _values, result) {
+        var self = this;
+
+        result = val['$[]'](1);
+        return result;
+      };
+
+      def.$_reduce_510 = function(val, _values, result) {
+        var self = this;
+
+        result = nil;
+        return result;
+      };
+
+      def.$_reduce_511 = function(val, _values, result) {
+        var self = this;
+
+        result = val['$[]'](0);
+        return result;
+      };
+
+      def.$_reduce_512 = function(val, _values, result) {
+        var self = this;
+
+        result = val['$[]'](1);
+        return result;
+      };
+
+      def.$_reduce_513 = function(val, _values, result) {
+        var self = this;
+
+        result = [];
+        return result;
+      };
+
+      def.$_reduce_514 = function(val, _values, result) {
+        var self = this;
+
+        result = val['$[]'](0);
+        return result;
+      };
+
+      def.$_reduce_515 = function(val, _values, result) {
+        var self = this;
+
+        result = val['$[]'](0);
+        return result;
+      };
+
+      def.$_reduce_516 = function(val, _values, result) {
         var $a, self = this;
 
         result = ($a = val['$[]'](0)).$push.apply($a, [].concat(val['$[]'](2)));
         return result;
       };
 
-      def.$_reduce_502 = function(val, _values, result) {
+      def.$_reduce_517 = function(val, _values, result) {
         var self = this;
 
         result = [val['$[]'](0), val['$[]'](2)];
         return result;
       };
 
-      def.$_reduce_503 = function(val, _values, result) {
+      def.$_reduce_518 = function(val, _values, result) {
         var self = this;
 
         result = [self.$new_sym(val['$[]'](0)), val['$[]'](1)];
         return result;
       };
 
-      def.$_reduce_527 = function(val, _values, result) {
+      def.$_reduce_542 = function(val, _values, result) {
         var self = this;
 
         result = nil;
@@ -19452,13 +20381,12 @@ if (i == null) i = nil;
         return val['$[]'](0);
       }, nil) && '_reduce_none';
     })(self, (($scope.get('Racc')).$$scope.get('Parser')))
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/parser/parser_scope"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$attr_reader', '$attr_accessor', '$==', '$<<', '$include?', '$has_local?']);
@@ -19502,16 +20430,15 @@ Opal.modules["opal/parser/parser_scope"] = function(Opal) {
         return false;
       }, nil) && 'has_local?';
     })(self, null)
-    
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/parser"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
-  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $gvars = Opal.gvars, $range = Opal.range;
+  Opal.dynamic_require_severity = "warning";
+  var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
-  Opal.add_stubs(['$require', '$attr_reader', '$new', '$parser=', '$parse_to_sexp', '$puts', '$line', '$lexer', '$column', '$[]', '$split', '$-', '$+', '$*', '$raise', '$push_scope', '$do_parse', '$pop_scope', '$next_token', '$last', '$parent=', '$<<', '$pop', '$inspect', '$value', '$token_to_str', '$s', '$source=', '$s0', '$source', '$s1', '$file', '$to_sym', '$nil?', '$==', '$length', '$size', '$type', '$each', '$!', '$add_local', '$scope', '$to_s', '$empty?', '$is_a?', '$new_splat', '$new_call', '$[]=', '$array', '$-@', '$===', '$new_gettable', '$type=', '$has_local?', '$>']);
+  Opal.add_stubs(['$require', '$attr_reader', '$new', '$parser=', '$parse_to_sexp', '$join', '$message', '$line', '$lexer', '$column', '$[]', '$split', '$-', '$+', '$*', '$raise', '$class', '$push_scope', '$do_parse', '$pop_scope', '$next_token', '$last', '$parent=', '$<<', '$pop', '$inspect', '$value', '$token_to_str', '$s', '$source=', '$s0', '$source', '$s1', '$file', '$to_sym', '$nil?', '$==', '$length', '$size', '$type', '$each', '$!', '$add_local', '$scope', '$to_s', '$empty?', '$is_a?', '$new_splat', '$new_call', '$[]=', '$array', '$-@', '$===', '$new_gettable', '$type=', '$has_local?', '$>']);
   self.$require("opal/parser/sexp");
   self.$require("opal/parser/lexer");
   self.$require("opal/parser/grammar");
@@ -19531,10 +20458,7 @@ Opal.modules["opal/parser"] = function(Opal) {
       self.$attr_reader("lexer", "file", "scope");
 
       def.$parse = function(source, file) {
-        var $a, $b, self = this, e = nil;
-        if ($gvars.DEBUG == null) $gvars.DEBUG = nil;
-        if ($gvars.VERBOSE == null) $gvars.VERBOSE = nil;
-        if ($gvars.stderr == null) $gvars.stderr = nil;
+        var $a, $b, self = this, error = nil, message = nil;
 
         if (file == null) {
           file = "(string)"
@@ -19545,14 +20469,9 @@ Opal.modules["opal/parser"] = function(Opal) {
           self.lexer = $scope.get('Lexer').$new(source, file);
           (($a = [self]), $b = self.lexer, $b['$parser='].apply($b, $a), $a[$a.length-1]);
           return self.$parse_to_sexp();
-        } catch ($err) {if (true) {e = $err;
-          if ((($a = ((($b = $gvars.DEBUG) !== false && $b !== nil) ? $b : $gvars.VERBOSE)) !== nil && (!$a.$$is_boolean || $a == true))) {
-            $gvars.stderr.$puts();
-            $gvars.stderr.$puts(e);
-            $gvars.stderr.$puts("Source: " + (self.file) + ":" + (self.$lexer().$line()) + ":" + (self.$lexer().$column()));
-            $gvars.stderr.$puts(source.$split("\n")['$[]'](self.$lexer().$line()['$-'](1)));
-            $gvars.stderr.$puts("~"['$*'](self.$lexer().$column())['$+']("^"));};
-          return self.$raise(e);
+        } catch ($err) {if (true) {error = $err;
+          message = [nil, error.$message(), "Source: " + (self.file) + ":" + (self.$lexer().$line()) + ":" + (self.$lexer().$column()), source.$split("\n")['$[]'](self.$lexer().$line()['$-'](1)), "~"['$*']((self.$lexer().$column()['$-'](1)))['$+']("^")].$join("\n");
+          return self.$raise(error.$class(), message);
           }else { throw $err; }
         };
       };
@@ -19948,51 +20867,90 @@ if (r == null) r = nil;
         };
       };
 
-      def.$new_args = function(norm, opt, rest, block) {
-        var $a, $b, TMP_2, $c, TMP_3, self = this, res = nil, rest_str = nil;
+      def.$new_args_tail = function(kwarg, kwrest, block) {
+        var self = this;
+
+        return [kwarg, kwrest, block];
+      };
+
+      def.$new_args = function(norm, opt, rest, tail) {
+        var $a, $b, TMP_2, $c, TMP_3, $d, TMP_4, $e, self = this, res = nil, restname = nil, blockname = nil;
 
         res = self.$s("args");
         if (norm !== false && norm !== nil) {
           ($a = ($b = norm).$each, $a.$$p = (TMP_2 = function(arg){var self = TMP_2.$$s || this;
 if (arg == null) arg = nil;
           self.$scope().$add_local(arg);
-            return res['$<<'](arg);}, TMP_2.$$s = self, TMP_2), $a).call($b)};
+            return res['$<<'](self.$s("arg", arg));}, TMP_2.$$s = self, TMP_2), $a).call($b)};
         if (opt !== false && opt !== nil) {
           ($a = ($c = opt['$[]']($range(1, -1, false))).$each, $a.$$p = (TMP_3 = function(_opt){var self = TMP_3.$$s || this;
 if (_opt == null) _opt = nil;
-          return res['$<<'](_opt['$[]'](1))}, TMP_3.$$s = self, TMP_3), $a).call($c)};
+          return res['$<<'](self.$s("optarg", _opt['$[]'](1), _opt['$[]'](2)))}, TMP_3.$$s = self, TMP_3), $a).call($c)};
         if (rest !== false && rest !== nil) {
-          res['$<<'](rest);
-          rest_str = rest.$to_s()['$[]']($range(1, -1, false));
-          if ((($a = rest_str['$empty?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+          restname = rest.$to_s()['$[]']($range(1, -1, false));
+          if ((($a = restname['$empty?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            res['$<<'](self.$s("restarg"))
             } else {
-            self.$scope().$add_local(rest_str.$to_sym())
+            res['$<<'](self.$s("restarg", restname.$to_sym()));
+            self.$scope().$add_local(restname.$to_sym());
           };};
-        if (block !== false && block !== nil) {
-          res['$<<'](block);
-          self.$scope().$add_local(block.$to_s()['$[]']($range(1, -1, false)).$to_sym());};
-        if (opt !== false && opt !== nil) {
-          res['$<<'](opt)};
+        if ((($a = (($d = tail !== false && tail !== nil) ? tail['$[]'](0) : $d)) !== nil && (!$a.$$is_boolean || $a == true))) {
+          ($a = ($d = tail['$[]'](0)).$each, $a.$$p = (TMP_4 = function(kwarg){var self = TMP_4.$$s || this;
+if (kwarg == null) kwarg = nil;
+          return res['$<<'](kwarg)}, TMP_4.$$s = self, TMP_4), $a).call($d)};
+        if ((($a = (($e = tail !== false && tail !== nil) ? tail['$[]'](1) : $e)) !== nil && (!$a.$$is_boolean || $a == true))) {
+          res['$<<'](tail['$[]'](1))};
+        if ((($a = (($e = tail !== false && tail !== nil) ? tail['$[]'](2) : $e)) !== nil && (!$a.$$is_boolean || $a == true))) {
+          blockname = tail['$[]'](2).$to_s()['$[]']($range(1, -1, false)).$to_sym();
+          self.$scope().$add_local(blockname);
+          res['$<<'](self.$s("blockarg", blockname));};
         return res;
       };
 
+      def.$new_kwarg = function(name) {
+        var self = this;
+
+        self.$scope().$add_local(name['$[]'](1));
+        return self.$s("kwarg", name['$[]'](1));
+      };
+
+      def.$new_kwoptarg = function(name, val) {
+        var self = this;
+
+        self.$scope().$add_local(name['$[]'](1));
+        return self.$s("kwoptarg", name['$[]'](1), val);
+      };
+
+      def.$new_kwrestarg = function(name) {
+        var self = this, result = nil;
+
+        if (name == null) {
+          name = nil
+        }
+        result = self.$s("kwrestarg");
+        if (name !== false && name !== nil) {
+          self.$scope().$add_local(name['$[]'](0).$to_sym());
+          result['$<<'](name['$[]'](0).$to_sym());};
+        return result;
+      };
+
       def.$new_block_args = function(norm, opt, rest, block) {
-        var $a, $b, TMP_4, $c, TMP_5, $d, self = this, res = nil, r = nil, b = nil, args = nil;
+        var $a, $b, TMP_5, $c, TMP_6, $d, self = this, res = nil, r = nil, b = nil, args = nil;
 
         res = self.$s("array");
         if (norm !== false && norm !== nil) {
-          ($a = ($b = norm).$each, $a.$$p = (TMP_4 = function(arg){var self = TMP_4.$$s || this, $a;
+          ($a = ($b = norm).$each, $a.$$p = (TMP_5 = function(arg){var self = TMP_5.$$s || this, $a;
 if (arg == null) arg = nil;
           if ((($a = arg['$is_a?']($scope.get('Symbol'))) !== nil && (!$a.$$is_boolean || $a == true))) {
               self.$scope().$add_local(arg);
               return res['$<<'](self.$s("lasgn", arg));
               } else {
               return res['$<<'](arg)
-            }}, TMP_4.$$s = self, TMP_4), $a).call($b)};
+            }}, TMP_5.$$s = self, TMP_5), $a).call($b)};
         if (opt !== false && opt !== nil) {
-          ($a = ($c = opt['$[]']($range(1, -1, false))).$each, $a.$$p = (TMP_5 = function(_opt){var self = TMP_5.$$s || this;
+          ($a = ($c = opt['$[]']($range(1, -1, false))).$each, $a.$$p = (TMP_6 = function(_opt){var self = TMP_6.$$s || this;
 if (_opt == null) _opt = nil;
-          return res['$<<'](self.$s("lasgn", _opt['$[]'](1)))}, TMP_5.$$s = self, TMP_5), $a).call($c)};
+          return res['$<<'](self.$s("lasgn", _opt['$[]'](1)))}, TMP_6.$$s = self, TMP_6), $a).call($c)};
         if (rest !== false && rest !== nil) {
           r = rest.$to_s()['$[]']($range(1, -1, false)).$to_sym();
           res['$<<'](self.$new_splat(nil, self.$s("lasgn", r)));
@@ -20281,13 +21239,12 @@ if (_opt == null) _opt = nil;
         return self.$s1("str", self.$value(tok), self.$source(tok));
       }, nil) && 'new_str_content';
     })(self, (($scope.get('Racc')).$$scope.get('Parser')))
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/fragment"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$attr_reader', '$to_s', '$line', '$column', '$inspect']);
@@ -20351,13 +21308,12 @@ Opal.modules["opal/fragment"] = function(Opal) {
         };
       }, nil) && 'column';
     })(self, null)
-    
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/helpers"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module;
 
   Opal.add_stubs(['$valid_name?', '$inspect', '$=~', '$!', '$to_s', '$to_sym', '$+', '$indent', '$to_proc', '$compiler', '$parser_indent', '$push', '$current_indent', '$js_truthy_optimize', '$with_temp', '$fragment', '$expr', '$==', '$type', '$[]', '$uses_block!', '$scope', '$block_name', '$include?', '$dup']);
@@ -20384,7 +21340,7 @@ Opal.modules["opal/nodes/helpers"] = function(Opal) {
 
         Opal.cdecl($scope, 'BASIC_IDENTIFIER_RULES', /^[$_a-z][$_a-z\d]*$/i);
 
-        def.$property = function(name) {
+        Opal.defn(self, '$property', function(name) {
           var $a, self = this;
 
           if ((($a = self['$valid_name?'](name)) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -20392,15 +21348,15 @@ Opal.modules["opal/nodes/helpers"] = function(Opal) {
             } else {
             return "[" + (name.$inspect()) + "]"
           };
-        };
+        });
 
-        def['$valid_name?'] = function(name) {
+        Opal.defn(self, '$valid_name?', function(name) {
           var $a, $b, $c, self = this;
 
           return ($a = $scope.get('BASIC_IDENTIFIER_RULES')['$=~'](name), $a !== false && $a !== nil ?(((($b = ((($c = $scope.get('ES51_RESERVED_WORD')['$=~'](name)) !== false && $c !== nil) ? $c : $scope.get('ES3_RESERVED_WORD_EXCLUSIVE')['$=~'](name))) !== false && $b !== nil) ? $b : $scope.get('IMMUTABLE_PROPS')['$=~'](name)))['$!']() : $a);
-        };
+        });
 
-        def.$variable = function(name) {
+        Opal.defn(self, '$variable', function(name) {
           var $a, self = this;
 
           if ((($a = self['$valid_name?'](name.$to_s())) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -20408,9 +21364,9 @@ Opal.modules["opal/nodes/helpers"] = function(Opal) {
             } else {
             return "" + (name) + "$"
           };
-        };
+        });
 
-        def.$lvar_to_js = function(var$) {
+        Opal.defn(self, '$lvar_to_js', function(var$) {
           var $a, self = this;
 
           if ((($a = self['$valid_name?'](var$.$to_s())) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -20418,9 +21374,9 @@ Opal.modules["opal/nodes/helpers"] = function(Opal) {
             var$ = "" + (var$) + "$"
           };
           return var$.$to_sym();
-        };
+        });
 
-        def.$mid_to_jsid = function(mid) {
+        Opal.defn(self, '$mid_to_jsid', function(mid) {
           var $a, self = this;
 
           if ((($a = /\=|\+|\-|\*|\/|\!|\?|\<|\>|\&|\||\^|\%|\~|\[/['$=~'](mid.$to_s())) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -20428,36 +21384,36 @@ Opal.modules["opal/nodes/helpers"] = function(Opal) {
             } else {
             return ".$"['$+'](mid)
           };
-        };
+        });
 
-        def.$indent = TMP_1 = function() {
+        Opal.defn(self, '$indent', TMP_1 = function() {
           var $a, $b, self = this, $iter = TMP_1.$$p, block = $iter || nil;
 
           TMP_1.$$p = null;
           return ($a = ($b = self.$compiler()).$indent, $a.$$p = block.$to_proc(), $a).call($b);
-        };
+        });
 
-        def.$current_indent = function() {
+        Opal.defn(self, '$current_indent', function() {
           var self = this;
 
           return self.$compiler().$parser_indent();
-        };
+        });
 
-        def.$line = function(strs) {
+        Opal.defn(self, '$line', function(strs) {
           var $a, self = this;
 
           strs = $slice.call(arguments, 0);
           self.$push("\n" + (self.$current_indent()));
           return ($a = self).$push.apply($a, [].concat(strs));
-        };
+        });
 
-        def.$empty_line = function() {
+        Opal.defn(self, '$empty_line', function() {
           var self = this;
 
           return self.$push("\n");
-        };
+        });
 
-        def.$js_truthy = function(sexp) {
+        Opal.defn(self, '$js_truthy', function(sexp) {
           var $a, $b, TMP_2, self = this, optimize = nil;
 
           if ((($a = optimize = self.$js_truthy_optimize(sexp)) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -20465,9 +21421,9 @@ Opal.modules["opal/nodes/helpers"] = function(Opal) {
           return ($a = ($b = self).$with_temp, $a.$$p = (TMP_2 = function(tmp){var self = TMP_2.$$s || this;
 if (tmp == null) tmp = nil;
           return [self.$fragment("((" + (tmp) + " = "), self.$expr(sexp), self.$fragment(") !== nil && (!" + (tmp) + ".$$is_boolean || " + (tmp) + " == true))")]}, TMP_2.$$s = self, TMP_2), $a).call($b);
-        };
+        });
 
-        def.$js_falsy = function(sexp) {
+        Opal.defn(self, '$js_falsy', function(sexp) {
           var $a, $b, TMP_3, self = this, mid = nil;
 
           if (sexp.$type()['$==']("call")) {
@@ -20478,9 +21434,9 @@ if (tmp == null) tmp = nil;
           return ($a = ($b = self).$with_temp, $a.$$p = (TMP_3 = function(tmp){var self = TMP_3.$$s || this;
 if (tmp == null) tmp = nil;
           return [self.$fragment("((" + (tmp) + " = "), self.$expr(sexp), self.$fragment(") === nil || (" + (tmp) + ".$$is_boolean && " + (tmp) + " == false))")]}, TMP_3.$$s = self, TMP_3), $a).call($b);
-        };
+        });
 
-        def.$js_truthy_optimize = function(sexp) {
+        Opal.defn(self, '$js_truthy_optimize', function(sexp) {
           var $a, self = this, mid = nil;
 
           if (sexp.$type()['$==']("call")) {
@@ -20499,18 +21455,15 @@ if (tmp == null) tmp = nil;
             } else {
             return nil
           };
-        };
-                ;Opal.donate(self, ["$property", "$valid_name?", "$variable", "$lvar_to_js", "$mid_to_jsid", "$indent", "$current_indent", "$line", "$empty_line", "$js_truthy", "$js_falsy", "$js_truthy_optimize"]);
+        });
       })(self)
-      
     })(self)
-    
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/base"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $hash2 = Opal.hash2, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$include', '$each', '$[]=', '$handlers', '$each_with_index', '$define_method', '$[]', '$+', '$attr_reader', '$type', '$compile', '$raise', '$is_a?', '$fragment', '$<<', '$unshift', '$reverse', '$push', '$new', '$error', '$scope', '$s', '$==', '$process', '$expr', '$add_scope_local', '$to_sym', '$add_scope_ivar', '$add_scope_gvar', '$add_scope_temp', '$helper', '$with_temp', '$to_proc', '$in_while?', '$instance_variable_get']);
@@ -20755,15 +21708,13 @@ if (str == null) str = nil;
           return self.compiler.$instance_variable_get("@while_loop");
         }, nil) && 'while_loop';
       })(self, null)
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/literal"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$push', '$to_s', '$type', '$children', '$value', '$recv?', '$wrap', '$inspect', '$===', '$new', '$flags', '$each_line', '$==', '$s', '$source=', '$+', '$line', '$include', '$stmt?', '$!', '$include?', '$compile_split_lines', '$needs_semicolon?', '$each_with_index', '$expr', '$[]', '$raise', '$last', '$each', '$requires_semicolon', '$helper', '$start', '$finish']);
@@ -20872,7 +21823,7 @@ Opal.modules["opal/nodes/literal"] = function(Opal) {
 
         var def = self.$$proto, $scope = self.$$scope;
 
-        def.$compile_split_lines = function(value, sexp) {
+        Opal.defn(self, '$compile_split_lines', function(value, sexp) {
           var $a, $b, TMP_1, self = this, idx = nil;
 
           idx = 0;
@@ -20887,8 +21838,7 @@ if (line == null) line = nil;
               self.$push(frag);
             };
             return idx = idx['$+'](1);}, TMP_1.$$s = self, TMP_1), $a).call($b);
-        }
-                ;Opal.donate(self, ["$compile_split_lines"]);
+        })
       })(self);
 
       (function($base, $super) {
@@ -21115,15 +22065,13 @@ if (part == null) part = nil;if (idx == null) idx = nil;
           return self.$push("$range(", self.$expr(self.$start()), ", ", self.$expr(self.$finish()), ", true)");
         }, nil) && 'compile';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/variables"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$irb?', '$compiler', '$top?', '$scope', '$using_irb?', '$push', '$variable', '$to_s', '$var_name', '$with_temp', '$property', '$wrap', '$expr', '$value', '$add_local', '$recv?', '$[]', '$name', '$add_ivar', '$helper', '$==', '$handle_global_match', '$handle_post_match', '$handle_pre_match', '$add_gvar', '$index']);
@@ -21411,15 +22359,13 @@ if (tmp == null) tmp = nil;
           return self.$push(")");
         }, nil) && 'compile';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/constants"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$==', '$name', '$eof_content', '$compiler', '$push', '$expr', '$base', '$wrap', '$value']);
@@ -21548,15 +22494,13 @@ Opal.modules["opal/nodes/constants"] = function(Opal) {
           return self.$push(")");
         }, nil) && 'compile';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["pathname"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $module = Opal.module;
 
   Opal.add_stubs(['$==', '$raise', '$attr_reader', '$path', '$start_with?', '$!', '$absolute?', '$sub', '$new']);
@@ -21648,18 +22592,17 @@ Opal.modules["pathname"] = function(Opal) {
 
     var def = self.$$proto, $scope = self.$$scope;
 
-    def.$Pathname = function(path) {
+    Opal.defn(self, '$Pathname', function(path) {
       var self = this;
 
       return $scope.get('Pathname').$new(path);
-    }
-        ;Opal.donate(self, ["$Pathname"]);
+    })
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/runtime_helpers"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$new', '$children', '$==', '$include?', '$to_sym', '$<<', '$define_method', '$to_proc', '$meth', '$__send__', '$raise', '$helper', '$[]', '$arglist', '$js_truthy', '$js_falsy']);
@@ -21725,15 +22668,13 @@ Opal.modules["opal/nodes/runtime_helpers"] = function(Opal) {
           };
           return self.$js_falsy(sexp);}, TMP_3.$$s = self, TMP_3), $a).call($c, "falsy?");
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/call"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $hash2 = Opal.hash2, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$[]=', '$define_method', '$to_proc', '$handle_special', '$compile_default?', '$<<', '$method_calls', '$compiler', '$to_sym', '$meth', '$using_irb?', '$compile_irb_var', '$default_compile', '$mid_to_jsid', '$to_s', '$any?', '$==', '$first', '$[]', '$arglist', '$===', '$last', '$type', '$pop', '$iter', '$new_temp', '$scope', '$expr', '$recv', '$recv_sexp', '$s', '$!', '$insert', '$push', '$unshift', '$queue_temp', '$recvr', '$=~', '$with_temp', '$variable', '$intern', '$+', '$irb?', '$top?', '$nil?', '$include?', '$__send__', '$compatible?', '$compile', '$new', '$each', '$add_special', '$inline_operators?', '$operator_helpers', '$fragment', '$compile_default!', '$resolve', '$requires', '$file', '$dirname', '$cleanpath', '$join', '$Pathname', '$inspect', '$process', '$class_scope?', '$required_trees', '$handle_block_given_call', '$def?', '$mid', '$handle_part', '$map', '$expand_path', '$split', '$dynamic_require_severity', '$error', '$line', '$warning', '$inject']);
@@ -22050,15 +22991,13 @@ if (p == null) p = nil;if (part == null) part = nil;
           }, nil) && 'expand_path';
         })(self, null);
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/call_special"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$=~', '$to_s', '$meth', '$with_temp', '$expr', '$arglist', '$mid_to_jsid', '$push', '$+', '$recv', '$recv_sexp', '$s', '$lhs', '$rhs', '$process', '$recvr', '$[]', '$args', '$op', '$===', '$compile_or', '$compile_and', '$compile_operator', '$to_sym', '$first_arg', '$mid']);
@@ -22275,18 +23214,16 @@ if (tmp == null) tmp = nil;
             return self.$push("(" + (tmp) + " = ", self.$expr(self.$lhs()), ", ", self.$expr(asgn), ")");}, TMP_12.$$s = self, TMP_12), $a).call($b);
         }, nil) && 'compile_operator';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/scope"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $hash2 = Opal.hash2;
 
-  Opal.add_stubs(['$require', '$attr_accessor', '$attr_reader', '$indent', '$scope', '$compiler', '$scope=', '$call', '$==', '$!', '$class?', '$dup', '$push', '$map', '$ivars', '$gvars', '$parser_indent', '$empty?', '$join', '$+', '$proto', '$%', '$fragment', '$should_donate?', '$to_proc', '$def_in_class?', '$add_proto_ivar', '$include?', '$<<', '$has_local?', '$pop', '$next_temp', '$succ', '$uses_block!', '$identify!', '$unique_temp', '$add_scope_temp', '$parent', '$def?', '$type', '$mid']);
+  Opal.add_stubs(['$require', '$attr_accessor', '$attr_reader', '$indent', '$scope', '$compiler', '$scope=', '$call', '$==', '$!', '$class?', '$dup', '$push', '$map', '$ivars', '$gvars', '$parser_indent', '$empty?', '$join', '$+', '$proto', '$%', '$fragment', '$def_in_class?', '$add_proto_ivar', '$include?', '$<<', '$has_local?', '$pop', '$next_temp', '$succ', '$uses_block!', '$identify!', '$unique_temp', '$add_scope_temp', '$parent', '$def?', '$type', '$mid']);
   self.$require("opal/nodes/base");
   return (function($base) {
     var self = $module($base, 'Opal');
@@ -22304,7 +23241,7 @@ Opal.modules["opal/nodes/scope"] = function(Opal) {
 
         var def = self.$$proto, $scope = self.$$scope, TMP_1, TMP_2;
 
-        def.type = def.defs = def.parent = def.temps = def.locals = def.compiler = def.proto_ivars = def.methods = def.ivars = def.gvars = def.args = def.queue = def.unique = def.while_stack = def.identity = def.uses_block = nil;
+        def.type = def.defs = def.parent = def.temps = def.locals = def.compiler = def.proto_ivars = def.ivars = def.gvars = def.args = def.queue = def.unique = def.while_stack = def.identity = def.uses_block = nil;
         self.$attr_accessor("parent");
 
         self.$attr_accessor("name");
@@ -22417,12 +23354,6 @@ Opal.modules["opal/nodes/scope"] = function(Opal) {
           return "def";
         };
 
-        def['$should_donate?'] = function() {
-          var self = this;
-
-          return self.type['$==']("module");
-        };
-
         def.$to_vars = function() {
           var $a, $b, $c, TMP_4, $d, TMP_5, $e, TMP_6, $f, TMP_7, self = this, vars = nil, iv = nil, gv = nil, indent = nil, str = nil, pvars = nil, result = nil;
 
@@ -22459,16 +23390,6 @@ if (i == null) i = nil;
             result = str
           };
           return self.$fragment(result);
-        };
-
-        def.$to_donate_methods = function() {
-          var $a, $b, self = this;
-
-          if ((($a = ($b = self['$should_donate?'](), $b !== false && $b !== nil ?self.methods['$empty?']()['$!']() : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
-            return self.$fragment("%s;Opal.donate(self, [%s]);"['$%']([self.compiler.$parser_indent(), ($a = ($b = self.methods).$map, $a.$$p = "inspect".$to_proc(), $a).call($b).$join(", ")]))
-            } else {
-            return self.$fragment("")
-          };
         };
 
         def.$add_scope_ivar = function(ivar) {
@@ -22653,18 +23574,16 @@ if (i == null) i = nil;
           return self.uses_block;
         }, nil) && 'uses_block?';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/module"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
-  Opal.add_stubs(['$require', '$handle', '$children', '$name_and_base', '$helper', '$push', '$line', '$in_scope', '$name=', '$scope', '$add_temp', '$proto', '$stmt', '$body', '$s', '$empty_line', '$to_vars', '$to_donate_methods', '$==', '$type', '$cid', '$to_s', '$[]', '$expr', '$raise']);
+  Opal.add_stubs(['$require', '$handle', '$children', '$name_and_base', '$helper', '$push', '$line', '$in_scope', '$name=', '$scope', '$add_temp', '$proto', '$stmt', '$body', '$s', '$empty_line', '$to_vars', '$==', '$type', '$cid', '$to_s', '$[]', '$expr', '$raise']);
   self.$require("opal/nodes/scope");
   return (function($base) {
     var self = $module($base, 'Opal');
@@ -22701,8 +23620,7 @@ Opal.modules["opal/nodes/module"] = function(Opal) {
             body_code = self.$stmt(((($a = self.$body()) !== false && $a !== nil) ? $a : self.$s("nil")));
             self.$empty_line();
             self.$line(self.$scope().$to_vars());
-            self.$line(body_code);
-            return self.$line(self.$scope().$to_donate_methods());}, TMP_1.$$s = self, TMP_1), $a).call($b);
+            return self.$line(body_code);}, TMP_1.$$s = self, TMP_1), $a).call($b);
           return self.$line("})(", base, ")");
         };
 
@@ -22720,15 +23638,13 @@ Opal.modules["opal/nodes/module"] = function(Opal) {
           };
         }, nil) && 'name_and_base';
       })(self, $scope.get('ScopeNode'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/class"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$name_and_base', '$helper', '$push', '$line', '$in_scope', '$name=', '$scope', '$add_temp', '$proto', '$body_code', '$empty_line', '$to_vars', '$super_code', '$sup', '$expr', '$stmt', '$returns', '$compiler', '$body', '$s']);
@@ -22789,15 +23705,13 @@ Opal.modules["opal/nodes/class"] = function(Opal) {
           return self.$stmt(self.$compiler().$returns(((($a = self.$body()) !== false && $a !== nil) ? $a : self.$s("nil"))));
         }, nil) && 'body_code';
       })(self, $scope.get('ModuleNode'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/singleton_class"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$push', '$in_scope', '$add_temp', '$line', '$to_vars', '$scope', '$stmt', '$returns', '$compiler', '$body', '$recv', '$object']);
@@ -22835,15 +23749,13 @@ Opal.modules["opal/nodes/singleton_class"] = function(Opal) {
           return self.$line("})(", self.$recv(self.$object()), ".$singleton_class())");
         }, nil) && 'compile';
       })(self, $scope.get('ScopeNode'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/iter"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$extract_opt_args', '$extract_block_arg', '$is_a?', '$last', '$args', '$==', '$type', '$[]', '$pop', '$length', '$args_to_params', '$<<', '$in_scope', '$identify!', '$scope', '$add_temp', '$compile_args', '$add_arg', '$push', '$-', '$block_name=', '$line', '$stmt', '$body', '$to_vars', '$unshift', '$join', '$each_with_index', '$variable', '$find', '$to_sym', '$expr', '$raise', '$shift', '$===', '$args_sexp', '$nil?', '$s', '$returns', '$compiler', '$body_sexp', '$each', '$next_temp']);
@@ -22985,18 +23897,16 @@ if (arg == null) arg = nil;
           return result;
         }, nil) && 'args_to_params';
       })(self, $scope.get('ScopeNode'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/def"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
-  Opal.add_stubs(['$require', '$handle', '$children', '$mid_to_jsid', '$to_s', '$mid', '$===', '$last', '$args', '$pop', '$-', '$length', '$start_with?', '$to_sym', '$variable', '$[]', '$==', '$[]=', '$arity_check?', '$compiler', '$arity_check', '$in_scope', '$mid=', '$scope', '$recvr', '$defs=', '$uses_block!', '$add_arg', '$block_name=', '$process', '$stmt', '$returns', '$stmts', '$add_temp', '$line', '$each', '$expr', '$identity', '$uses_block?', '$unshift', '$current_indent', '$to_vars', '$uses_zuper', '$catch_return', '$push', '$recv', '$class?', '$include?', '$name', '$wrap', '$class_scope?', '$<<', '$methods', '$proto', '$iter?', '$type', '$top?', '$expr?', '$inspect', '$size', '$-@', '$<', '$+', '$each_with_index']);
+  Opal.add_stubs(['$require', '$handle', '$children', '$select', '$==', '$first', '$[]', '$args', '$find', '$include?', '$-', '$length', '$block_arg', '$rest_arg', '$size', '$keyword_args', '$mid_to_jsid', '$to_s', '$mid', '$to_sym', '$variable', '$arity_check?', '$compiler', '$arity_check', '$opt_args', '$in_scope', '$mid=', '$scope', '$recvr', '$defs=', '$uses_block!', '$add_arg', '$block_name=', '$process', '$stmt', '$returns', '$stmts', '$add_temp', '$compile_rest_arg', '$compile_opt_args', '$compile_keyword_args', '$identity', '$compile_block_arg', '$unshift', '$current_indent', '$to_vars', '$line', '$uses_zuper', '$catch_return', '$push', '$recv', '$uses_defn?', '$wrap', '$class?', '$proto', '$sclass?', '$top?', '$expr?', '$uses_block?', '$block_name', '$argc', '$each', '$expr', '$empty?', '$helper', '$with_temp', '$last', '$===', '$add_local', '$map', '$inspect', '$join', '$raise', '$iter?', '$module?', '$name', '$!', '$-@', '$<', '$+', '$each_with_index', '$nil?']);
   self.$require("opal/nodes/scope");
   return (function($base) {
     var self = $module($base, 'Opal');
@@ -23014,34 +23924,68 @@ Opal.modules["opal/nodes/def"] = function(Opal) {
 
         var def = self.$$proto, $scope = self.$$scope;
 
+        def.opt_args = def.rest_arg = def.keyword_args = def.block_arg = def.argc = nil;
         self.$handle("def");
 
         self.$children("recvr", "mid", "args", "stmts");
 
+        def.$opt_args = function() {
+          var $a, $b, $c, TMP_1, self = this;
+
+          return ((($a = self.opt_args) !== false && $a !== nil) ? $a : self.opt_args = ($b = ($c = self.$args()['$[]']($range(1, -1, false))).$select, $b.$$p = (TMP_1 = function(arg){var self = TMP_1.$$s || this;
+if (arg == null) arg = nil;
+          return arg.$first()['$==']("optarg")}, TMP_1.$$s = self, TMP_1), $b).call($c));
+        };
+
+        def.$rest_arg = function() {
+          var $a, $b, $c, TMP_2, self = this;
+
+          return ((($a = self.rest_arg) !== false && $a !== nil) ? $a : self.rest_arg = ($b = ($c = self.$args()['$[]']($range(1, -1, false))).$find, $b.$$p = (TMP_2 = function(arg){var self = TMP_2.$$s || this;
+if (arg == null) arg = nil;
+          return arg.$first()['$==']("restarg")}, TMP_2.$$s = self, TMP_2), $b).call($c));
+        };
+
+        def.$keyword_args = function() {
+          var $a, $b, $c, TMP_3, self = this;
+
+          return ((($a = self.keyword_args) !== false && $a !== nil) ? $a : self.keyword_args = ($b = ($c = self.$args()['$[]']($range(1, -1, false))).$select, $b.$$p = (TMP_3 = function(arg){var self = TMP_3.$$s || this;
+if (arg == null) arg = nil;
+          return ["kwarg", "kwoptarg", "kwrestarg"]['$include?'](arg.$first())}, TMP_3.$$s = self, TMP_3), $b).call($c));
+        };
+
+        def.$block_arg = function() {
+          var $a, $b, $c, TMP_4, self = this;
+
+          return ((($a = self.block_arg) !== false && $a !== nil) ? $a : self.block_arg = ($b = ($c = self.$args()['$[]']($range(1, -1, false))).$find, $b.$$p = (TMP_4 = function(arg){var self = TMP_4.$$s || this;
+if (arg == null) arg = nil;
+          return arg.$first()['$==']("blockarg")}, TMP_4.$$s = self, TMP_4), $b).call($c));
+        };
+
+        def.$argc = function() {
+          var $a, self = this;
+
+          if ((($a = self.argc) !== nil && (!$a.$$is_boolean || $a == true))) {
+            return self.argc};
+          self.argc = self.$args().$length()['$-'](1);
+          if ((($a = self.$block_arg()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            self.argc = self.argc['$-'](1)};
+          if ((($a = self.$rest_arg()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            self.argc = self.argc['$-'](1)};
+          self.argc = self.argc['$-'](self.$keyword_args().$size());
+          return self.argc;
+        };
+
         def.$compile = function() {
-          var $a, $b, TMP_1, $c, self = this, jsid = nil, params = nil, scope_name = nil, opt = nil, argc = nil, block_name = nil, uses_splat = nil, splat = nil, arity_code = nil;
+          var $a, $b, TMP_5, self = this, jsid = nil, params = nil, scope_name = nil, block_name = nil, arity_code = nil;
 
           jsid = self.$mid_to_jsid(self.$mid().$to_s());
           params = nil;
           scope_name = nil;
-          if ((($a = $scope.get('Sexp')['$==='](self.$args().$last())) !== nil && (!$a.$$is_boolean || $a == true))) {
-            opt = self.$args().$pop()};
-          argc = self.$args().$length()['$-'](1);
-          if ((($a = self.$args().$last().$to_s()['$start_with?']("&")) !== nil && (!$a.$$is_boolean || $a == true))) {
-            block_name = self.$variable(self.$args().$pop().$to_s()['$[]']($range(1, -1, false))).$to_sym();
-            argc = argc['$-'](1);};
-          if ((($a = self.$args().$last().$to_s()['$start_with?']("*")) !== nil && (!$a.$$is_boolean || $a == true))) {
-            uses_splat = true;
-            if (self.$args().$last()['$==']("*")) {
-              argc = argc['$-'](1)
-              } else {
-              splat = self.$args()['$[]'](-1).$to_s()['$[]']($range(1, -1, false)).$to_sym();
-              self.$args()['$[]='](-1, splat);
-              argc = argc['$-'](1);
-            };};
+          if ((($a = self.$block_arg()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            block_name = self.$variable(self.$block_arg()['$[]'](1)).$to_sym()};
           if ((($a = self.$compiler()['$arity_check?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
-            arity_code = self.$arity_check(self.$args(), opt, uses_splat, block_name, self.$mid())};
-          ($a = ($b = self).$in_scope, $a.$$p = (TMP_1 = function(){var self = TMP_1.$$s || this, $a, $b, TMP_2, yielder = nil, stmt_code = nil;
+            arity_code = self.$arity_check(self.$args(), self.$opt_args(), self.$rest_arg(), self.$keyword_args(), block_name, self.$mid())};
+          ($a = ($b = self).$in_scope, $a.$$p = (TMP_5 = function(){var self = TMP_5.$$s || this, $a, $b, $c, stmt_code = nil;
 
           (($a = [self.$mid()]), $b = self.$scope(), $b['$mid='].apply($b, $a), $a[$a.length-1]);
             if ((($a = self.$recvr()) !== nil && (!$a.$$is_boolean || $a == true))) {
@@ -23049,26 +23993,15 @@ Opal.modules["opal/nodes/def"] = function(Opal) {
             if (block_name !== false && block_name !== nil) {
               self.$scope()['$uses_block!']();
               self.$scope().$add_arg(block_name);};
-            yielder = ((($a = block_name) !== false && $a !== nil) ? $a : "$yield");
-            (($a = [yielder]), $b = self.$scope(), $b['$block_name='].apply($b, $a), $a[$a.length-1]);
+            (($a = [((($c = block_name) !== false && $c !== nil) ? $c : "$yield")]), $b = self.$scope(), $b['$block_name='].apply($b, $a), $a[$a.length-1]);
             params = self.$process(self.$args());
             stmt_code = self.$stmt(self.$compiler().$returns(self.$stmts()));
             self.$add_temp("self = this");
-            if (splat !== false && splat !== nil) {
-              self.$line("" + (self.$variable(splat)) + " = $slice.call(arguments, " + (argc) + ");")};
-            if (opt !== false && opt !== nil) {
-              ($a = ($b = opt['$[]']($range(1, -1, false))).$each, $a.$$p = (TMP_2 = function(o){var self = TMP_2.$$s || this;
-if (o == null) o = nil;
-              if (o['$[]'](2)['$[]'](2)['$==']("undefined")) {
-                  return nil;};
-                self.$line("if (" + (self.$variable(o['$[]'](1))) + " == null) {");
-                self.$line("  ", self.$expr(o));
-                return self.$line("}");}, TMP_2.$$s = self, TMP_2), $a).call($b)};
+            self.$compile_rest_arg();
+            self.$compile_opt_args();
+            self.$compile_keyword_args();
             scope_name = self.$scope().$identity();
-            if ((($a = self.$scope()['$uses_block?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
-              self.$add_temp("$iter = " + (scope_name) + ".$$p");
-              self.$add_temp("" + (yielder) + " = $iter || nil");
-              self.$line("" + (scope_name) + ".$$p = null;");};
+            self.$compile_block_arg();
             self.$unshift("\n" + (self.$current_indent()), self.$scope().$to_vars());
             self.$line(stmt_code);
             if (arity_code !== false && arity_code !== nil) {
@@ -23081,7 +24014,7 @@ if (o == null) o = nil;
               return self.$push(" throw $returner; }");
               } else {
               return nil
-            };}, TMP_1.$$s = self, TMP_1), $a).call($b);
+            };}, TMP_5.$$s = self, TMP_5), $a).call($b);
           self.$unshift(") {");
           self.$unshift(params);
           self.$unshift("function(");
@@ -23091,14 +24024,11 @@ if (o == null) o = nil;
           if ((($a = self.$recvr()) !== nil && (!$a.$$is_boolean || $a == true))) {
             self.$unshift("Opal.defs(", self.$recv(self.$recvr()), ", '$" + (self.$mid()) + "', ");
             self.$push(")");
-          } else if ((($a = ($c = self.$scope()['$class?'](), $c !== false && $c !== nil ?["Object", "BasicObject"]['$include?'](self.$scope().$name()) : $c)) !== nil && (!$a.$$is_boolean || $a == true))) {
+          } else if ((($a = self['$uses_defn?'](self.$scope())) !== nil && (!$a.$$is_boolean || $a == true))) {
             self.$wrap("Opal.defn(self, '$" + (self.$mid()) + "', ", ")")
-          } else if ((($a = self.$scope()['$class_scope?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
-            self.$scope().$methods()['$<<']("$" + (self.$mid()));
-            self.$unshift("" + (self.$scope().$proto()) + (jsid) + " = ");
-          } else if ((($a = self.$scope()['$iter?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
-            self.$wrap("Opal.defn(self, '$" + (self.$mid()) + "', ", ")")
-          } else if (self.$scope().$type()['$==']("sclass")) {
+          } else if ((($a = self.$scope()['$class?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            self.$unshift("" + (self.$scope().$proto()) + (jsid) + " = ")
+          } else if ((($a = self.$scope()['$sclass?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
             self.$unshift("self.$$proto" + (jsid) + " = ")
           } else if ((($a = self.$scope()['$top?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
             self.$unshift("Opal.Object.$$proto" + (jsid) + " = ")
@@ -23112,16 +24042,124 @@ if (o == null) o = nil;
           };
         };
 
-        return (def.$arity_check = function(args, opt, splat, block_name, mid) {
-          var $a, $b, self = this, meth = nil, arity = nil, aritycode = nil;
+        def.$compile_block_arg = function() {
+          var $a, self = this, scope_name = nil, yielder = nil;
+
+          if ((($a = self.$scope()['$uses_block?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            scope_name = self.$scope().$identity();
+            yielder = self.$scope().$block_name();
+            self.$add_temp("$iter = " + (scope_name) + ".$$p");
+            self.$add_temp("" + (yielder) + " = $iter || nil");
+            return self.$line("" + (scope_name) + ".$$p = null;");
+            } else {
+            return nil
+          };
+        };
+
+        def.$compile_rest_arg = function() {
+          var $a, $b, self = this, splat = nil;
+
+          if ((($a = ($b = self.$rest_arg(), $b !== false && $b !== nil ?self.$rest_arg()['$[]'](1) : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
+            splat = self.$variable(self.$rest_arg()['$[]'](1).$to_sym());
+            return self.$line("" + (splat) + " = $slice.call(arguments, " + (self.$argc()) + ");");
+            } else {
+            return nil
+          };
+        };
+
+        def.$compile_opt_args = function() {
+          var $a, $b, TMP_6, self = this;
+
+          return ($a = ($b = self.$opt_args()).$each, $a.$$p = (TMP_6 = function(arg){var self = TMP_6.$$s || this;
+if (arg == null) arg = nil;
+          if (arg['$[]'](2)['$[]'](2)['$==']("undefined")) {
+              return nil;};
+            self.$line("if (" + (self.$variable(arg['$[]'](1))) + " == null) {");
+            self.$line("  " + (self.$variable(arg['$[]'](1))) + " = ", self.$expr(arg['$[]'](2)));
+            return self.$line("}");}, TMP_6.$$s = self, TMP_6), $a).call($b);
+        };
+
+        def.$compile_keyword_args = function() {
+          var $a, $b, TMP_7, $c, TMP_8, self = this, last_opt_arg = nil, opt_arg_name = nil;
+
+          if ((($a = self.$keyword_args()['$empty?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            return nil};
+          self.$helper("hash2");
+          if ((($a = self.$rest_arg()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            ($a = ($b = self).$with_temp, $a.$$p = (TMP_7 = function(tmp){var self = TMP_7.$$s || this, rest_arg_name = nil;
+if (tmp == null) tmp = nil;
+            rest_arg_name = self.$variable(self.$rest_arg()['$[]'](1).$to_sym());
+              self.$line("" + (tmp) + " = " + (rest_arg_name) + "[" + (rest_arg_name) + ".length - 1];");
+              self.$line("if (" + (tmp) + " == null || !" + (tmp) + ".$$is_hash) {");
+              self.$line("  $kwargs = $hash2([], {});");
+              self.$line("} else {");
+              self.$line("  $kwargs = " + (rest_arg_name) + ".pop();");
+              return self.$line("}");}, TMP_7.$$s = self, TMP_7), $a).call($b)
+          } else if ((($a = last_opt_arg = self.$opt_args().$last()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            opt_arg_name = self.$variable(last_opt_arg['$[]'](1));
+            self.$line("if (" + (opt_arg_name) + " == null) {");
+            self.$line("  $kwargs = $hash2([], {});");
+            self.$line("}");
+            self.$line("else if (" + (opt_arg_name) + ".$$is_hash) {");
+            self.$line("  $kwargs = " + (opt_arg_name) + ";");
+            self.$line("  " + (opt_arg_name) + " = ", self.$expr(last_opt_arg['$[]'](2)), ";");
+            self.$line("}");
+            } else {
+            self.$line("if ($kwargs == null) {");
+            self.$line("  $kwargs = $hash2([], {});");
+            self.$line("}");
+          };
+          self.$line("if (!$kwargs.$$is_hash) {");
+          self.$line("  throw Opal.ArgumentError.$new('expecting keyword args');");
+          self.$line("}");
+          return ($a = ($c = self.$keyword_args()).$each, $a.$$p = (TMP_8 = function(kwarg){var self = TMP_8.$$s || this, $a, $b, TMP_9, $c, $d, TMP_10, $case = nil, arg_name = nil, var_name = nil, kwarg_names = nil, used_args = nil;
+if (kwarg == null) kwarg = nil;
+          return (function() {$case = kwarg.$first();if ("kwoptarg"['$===']($case)) {arg_name = kwarg['$[]'](1);
+            var_name = self.$variable(arg_name.$to_s());
+            self.$add_local(var_name);
+            self.$line("if ((" + (var_name) + " = $kwargs.smap['" + (arg_name) + "']) == null) {");
+            self.$line("  " + (var_name) + " = ", self.$expr(kwarg['$[]'](2)));
+            return self.$line("}");}else if ("kwarg"['$===']($case)) {arg_name = kwarg['$[]'](1);
+            var_name = self.$variable(arg_name.$to_s());
+            self.$add_local(var_name);
+            self.$line("if ((" + (var_name) + " = $kwargs.smap['" + (arg_name) + "']) == null) {");
+            self.$line("  throw new Error('expecting keyword arg: " + (arg_name) + "')");
+            return self.$line("}");}else if ("kwrestarg"['$===']($case)) {arg_name = kwarg['$[]'](1);
+            var_name = self.$variable(arg_name.$to_s());
+            self.$add_local(var_name);
+            kwarg_names = ($a = ($b = ($c = ($d = self.$keyword_args()).$select, $c.$$p = (TMP_10 = function(kw){var self = TMP_10.$$s || this;
+if (kw == null) kw = nil;
+            return ["kwoptarg", "kwarg"]['$include?'](kw.$first())}, TMP_10.$$s = self, TMP_10), $c).call($d)).$map, $a.$$p = (TMP_9 = function(kw){var self = TMP_9.$$s || this;
+if (kw == null) kw = nil;
+            return "" + (kw['$[]'](1).$to_s().$inspect()) + ": true"}, TMP_9.$$s = self, TMP_9), $a).call($b);
+            used_args = "{" + (kwarg_names.$join(",")) + "}";
+            return self.$line("" + (var_name) + " = Opal.kwrestargs($kwargs, " + (used_args) + ");");}else {return self.$raise("unknown kwarg type " + (kwarg.$first()))}})()}, TMP_8.$$s = self, TMP_8), $a).call($c);
+        };
+
+        def['$uses_defn?'] = function(scope) {
+          var $a, $b, self = this;
+
+          if ((($a = ((($b = scope['$iter?']()) !== false && $b !== nil) ? $b : scope['$module?']())) !== nil && (!$a.$$is_boolean || $a == true))) {
+            return true
+          } else if ((($a = ($b = scope['$class?'](), $b !== false && $b !== nil ?["Object", "BasicObject"]['$include?'](scope.$name()) : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
+            return true
+            } else {
+            return false
+          };
+        };
+
+        return (def.$arity_check = function(args, opt, splat, kwargs, block_name, mid) {
+          var $a, $b, $c, self = this, meth = nil, arity = nil, aritycode = nil;
 
           meth = mid.$to_s().$inspect();
           arity = args.$size()['$-'](1);
-          if (opt !== false && opt !== nil) {
-            arity = arity['$-']((opt.$size()['$-'](1)))};
+          arity = arity['$-']((opt.$size()));
           if (splat !== false && splat !== nil) {
             arity = arity['$-'](1)};
-          if ((($a = ((($b = opt) !== false && $b !== nil) ? $b : splat)) !== nil && (!$a.$$is_boolean || $a == true))) {
+          arity = arity['$-']((kwargs.$size()));
+          if (block_name !== false && block_name !== nil) {
+            arity = arity['$-'](1)};
+          if ((($a = ((($b = ((($c = opt['$empty?']()['$!']()) !== false && $c !== nil) ? $c : kwargs['$empty?']()['$!']())) !== false && $b !== nil) ? $b : splat)) !== nil && (!$a.$$is_boolean || $a == true))) {
             arity = arity['$-@']()['$-'](1)};
           aritycode = "var $arity = arguments.length;";
           if (arity['$<'](0)) {
@@ -23141,34 +24179,45 @@ if (o == null) o = nil;
         self.$handle("args");
 
         return (def.$compile = function() {
-          var $a, $b, TMP_3, self = this;
+          var $a, $b, TMP_11, self = this, done_kwargs = nil;
 
-          return ($a = ($b = self.$children()).$each_with_index, $a.$$p = (TMP_3 = function(child, idx){var self = TMP_3.$$s || this;
+          done_kwargs = false;
+          return ($a = ($b = self.$children()).$each_with_index, $a.$$p = (TMP_11 = function(child, idx){var self = TMP_11.$$s || this, $a, $b, $case = nil;
 if (child == null) child = nil;if (idx == null) idx = nil;
-          if (child.$to_s()['$==']("*")) {
+          if ("blockarg"['$=='](child.$first())) {
               return nil;};
-            child = child.$to_sym();
+            if ((($a = (($b = "restarg"['$=='](child.$first())) ? child['$[]'](1)['$nil?']() : $b)) !== nil && (!$a.$$is_boolean || $a == true))) {
+              return nil;};
+            return (function() {$case = child.$first();if ("kwarg"['$===']($case) || "kwoptarg"['$===']($case) || "kwrestarg"['$===']($case)) {if (done_kwargs !== false && done_kwargs !== nil) {
+              return nil
+              } else {
+              done_kwargs = true;
+              if (idx['$=='](0)) {
+                } else {
+                self.$push(", ")
+              };
+              self.$scope().$add_arg("$kwargs");
+              return self.$push("$kwargs");
+            }}else {child = child['$[]'](1).$to_sym();
             if (idx['$=='](0)) {
               } else {
               self.$push(", ")
             };
             child = self.$variable(child);
             self.$scope().$add_arg(child.$to_sym());
-            return self.$push(child.$to_s());}, TMP_3.$$s = self, TMP_3), $a).call($b);
+            return self.$push(child.$to_s());}})();}, TMP_11.$$s = self, TMP_11), $a).call($b);
         }, nil) && 'compile';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/if"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
-  Opal.add_stubs(['$require', '$handle', '$children', '$truthy', '$falsy', '$skip_check_present?', '$push', '$js_truthy', '$test', '$indent', '$line', '$stmt', '$==', '$type', '$needs_wrapper?', '$wrap', '$returns', '$compiler', '$true_body', '$s', '$false_body', '$expr?', '$recv?']);
+  Opal.add_stubs(['$require', '$handle', '$children', '$truthy', '$falsy', '$skip_check_present?', '$skip_check_present_not?', '$push', '$js_truthy', '$test', '$indent', '$line', '$stmt', '$==', '$type', '$needs_wrapper?', '$wrap', '$returns', '$compiler', '$true_body', '$s', '$false_body', '$expr?', '$recv?']);
   self.$require("opal/nodes/base");
   return (function($base) {
     var self = $module($base, 'Opal');
@@ -23194,12 +24243,18 @@ Opal.modules["opal/nodes/if"] = function(Opal) {
 
         Opal.cdecl($scope, 'RUBY_PLATFORM_CHECK', ["call", ["const", "RUBY_PLATFORM"], "==", ["arglist", ["str", "opal"]]]);
 
+        Opal.cdecl($scope, 'RUBY_ENGINE_CHECK_NOT', ["call", ["call", ["const", "RUBY_ENGINE"], "==", ["arglist", ["str", "opal"]]], "!", ["arglist"]]);
+
+        Opal.cdecl($scope, 'RUBY_PLATFORM_CHECK_NOT', ["call", ["call", ["const", "RUBY_PLATFORM"], "==", ["arglist", ["str", "opal"]]], "!", ["arglist"]]);
+
         def.$compile = function() {
           var $a, $b, TMP_1, $c, TMP_2, self = this, truthy = nil, falsy = nil;
 
           $a = [self.$truthy(), self.$falsy()], truthy = $a[0], falsy = $a[1];
           if ((($a = self['$skip_check_present?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
             falsy = nil};
+          if ((($a = self['$skip_check_present_not?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            truthy = nil};
           self.$push("if (", self.$js_truthy(self.$test()), ") {");
           if (truthy !== false && truthy !== nil) {
             ($a = ($b = self).$indent, $a.$$p = (TMP_1 = function(){var self = TMP_1.$$s || this;
@@ -23231,6 +24286,12 @@ Opal.modules["opal/nodes/if"] = function(Opal) {
           return ((($a = self.$test()['$==']($scope.get('RUBY_ENGINE_CHECK'))) !== false && $a !== nil) ? $a : self.$test()['$==']($scope.get('RUBY_PLATFORM_CHECK')));
         };
 
+        def['$skip_check_present_not?'] = function() {
+          var $a, self = this;
+
+          return ((($a = self.$test()['$==']($scope.get('RUBY_ENGINE_CHECK_NOT'))) !== false && $a !== nil) ? $a : self.$test()['$==']($scope.get('RUBY_PLATFORM_CHECK_NOT')));
+        };
+
         def.$truthy = function() {
           var $a, self = this;
 
@@ -23257,15 +24318,13 @@ Opal.modules["opal/nodes/if"] = function(Opal) {
           return ((($a = self['$expr?']()) !== false && $a !== nil) ? $a : self['$recv?']());
         }, nil) && 'needs_wrapper?';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/logic"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$in_while?', '$push', '$expr_or_nil', '$value', '$wrap', '$compile_while', '$iter?', '$scope', '$compile_iter', '$error', '$[]', '$while_loop', '$stmt?', '$[]=', '$identity', '$with_temp', '$expr', '$==', '$empty_splat?', '$type', '$recv', '$lhs', '$rhs', '$js_truthy_optimize', '$nil?', '$s', '$>', '$size', '$find_parent_def', '$expr?', '$def?', '$return_in_iter?', '$return_expr_in_def?', '$scope_to_catch_return', '$catch_return=', '$return_val', '$raise', '$to_s']);
@@ -23594,15 +24653,13 @@ if (tmp == null) tmp = nil;
           return self.$push(self.$expr(self.$s("call", self.$value(), "to_proc", self.$s("arglist"))));
         }, nil) && 'compile';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/definitions"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$push', '$process', '$value', '$proto', '$scope', '$mid_to_jsid', '$to_s', '$[]', '$mid', '$new_name', '$old_name', '$class?', '$module?', '$<<', '$methods', '$old_mid', '$new_mid', '$!', '$stmt?', '$==', '$type', '$body', '$stmt', '$returns', '$compiler', '$wrap', '$each_with_index', '$expr', '$empty?', '$stmt_join', '$find_inline_yield', '$child_is_expr?', '$class_scope?', '$current_indent', '$raw_expression?', '$include?', '$first', '$===', '$[]=', '$+', '$s', '$has_temp?', '$add_temp']);
@@ -23829,15 +24886,13 @@ if (el == null) el = nil;if (idx == null) idx = nil;
           };
         }, nil) && 'find_inline_yield';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/yield"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$find_yielding_scope', '$uses_block!', '$block_name', '$yields_single_arg?', '$push', '$expr', '$first', '$wrap', '$s', '$uses_splat?', '$scope', '$def?', '$parent', '$!', '$==', '$size', '$any?', '$type', '$handle', '$compile_call', '$children', '$stmt?', '$with_temp', '$[]', '$yield_args', '$var_name']);
@@ -23962,18 +25017,16 @@ if (tmp == null) tmp = nil;
           return self.$wrap("return " + (tmp) + " = ", ", " + (tmp) + " === $breaker ? " + (tmp) + " : " + (tmp))}, TMP_3.$$s = self, TMP_3), $a).call($b);
         }, nil) && 'compile';
       })(self, $scope.get('BaseYieldNode'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/rescue"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
-  Opal.add_stubs(['$require', '$handle', '$children', '$stmt?', '$lhs', '$returns', '$compiler', '$rhs', '$push', '$expr', '$body', '$rescue_val', '$wrap', '$line', '$process', '$body_sexp', '$ensr_sexp', '$wrap_in_closure?', '$begn', '$ensr', '$s', '$recv?', '$expr?', '$indent', '$body_code', '$each_with_index', '$==', '$type', '$[]', '$empty?', '$rescue_exprs', '$rescue_variable', '$[]=', '$rescue_body', '$===', '$include?', '$rescue_variable?', '$last', '$args', '$dup', '$pop']);
+  Opal.add_stubs(['$require', '$handle', '$children', '$stmt?', '$lhs', '$returns', '$compiler', '$rhs', '$push', '$expr', '$body', '$rescue_val', '$wrap', '$line', '$process', '$body_sexp', '$ensr_sexp', '$wrap_in_closure?', '$begn', '$ensr', '$s', '$recv?', '$expr?', '$indent', '$body_code', '$each_with_index', '$==', '$type', '$[]', '$!', '$empty?', '$rescue_exprs', '$rescue_variable', '$[]=', '$rescue_body', '$===', '$include?', '$rescue_variable?', '$last', '$args', '$dup', '$pop']);
   self.$require("opal/nodes/base");
   return (function($base) {
     var self = $module($base, 'Opal');
@@ -24123,12 +25176,17 @@ if (child == null) child = nil;if (idx == null) idx = nil;
         };
 
         return (def.$body_code = function() {
-          var self = this;
+          var $a, self = this, body_code = nil;
 
-          if (self.$body().$type()['$==']("resbody")) {
+          body_code = ((function() {if (self.$body().$type()['$==']("resbody")) {
             return self.$s("nil")
             } else {
             return self.$body()
+          }; return nil; })());
+          if ((($a = self['$stmt?']()['$!']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            return self.$compiler().$returns(body_code)
+            } else {
+            return body_code
           };
         }, nil) && 'body_code';
       })(self, $scope.get('Base'));
@@ -24195,20 +25253,21 @@ if (rexpr == null) rexpr = nil;if (idx == null) idx = nil;
         };
 
         return (def.$rescue_body = function() {
-          var $a, self = this;
+          var $a, self = this, body_code = nil;
 
-          return ((($a = self.$body()) !== false && $a !== nil) ? $a : self.$s("nil"));
+          body_code = (((($a = self.$body()) !== false && $a !== nil) ? $a : self.$s("nil")));
+          if ((($a = self['$stmt?']()['$!']()) !== nil && (!$a.$$is_boolean || $a == true))) {
+            body_code = self.$compiler().$returns(body_code)};
+          return body_code;
         }, nil) && 'rescue_body';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/case"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$in_case', '$condition', '$[]=', '$case_stmt', '$add_local', '$push', '$expr', '$each_with_index', '$==', '$type', '$needs_closure?', '$returns', '$compiler', '$stmt', '$case_parts', '$!', '$wrap', '$stmt?', '$[]', '$s', '$js_truthy', '$when_checks', '$process', '$body_code', '$whens', '$body']);
@@ -24341,15 +25400,13 @@ if (check == null) check = nil;if (idx == null) idx = nil;
           return ((($a = self.$body()) !== false && $a !== nil) ? $a : self.$s("nil"));
         }, nil) && 'body_code';
       })(self, $scope.get('Base'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/super"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$children', '$arglist', '$iter', '$expr', '$iter_sexp', '$uses_block!', '$scope', '$def?', '$identify!', '$name', '$parent', '$defs', '$push', '$to_s', '$mid', '$iter?', '$get_super_chain', '$join', '$map', '$raise', '$s', '$handle', '$compile_dispatcher', '$wrap', '$has_splat?', '$args', '$fragment', '$uses_zuper=', '$any?', '$==', '$type']);
@@ -24478,15 +25535,13 @@ if (child == null) child = nil;
           return child.$type()['$==']("splat")}, TMP_2.$$s = self, TMP_2), $a).call($b);
         }, nil) && 'has_splat?';
       })(self, $scope.get('BaseSuperNode'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/version"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module;
 
   return (function($base) {
@@ -24494,14 +25549,13 @@ Opal.modules["opal/version"] = function(Opal) {
 
     var def = self.$$proto, $scope = self.$$scope;
 
-    Opal.cdecl($scope, 'VERSION', "0.7.0.beta3")
-    
+    Opal.cdecl($scope, 'VERSION', "0.7.1")
   })(self)
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/top"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$push', '$version_comment', '$opening', '$in_scope', '$line', '$inspect', '$to_s', '$dynamic_require_severity', '$compiler', '$stmt', '$stmts', '$is_a?', '$add_temp', '$add_used_helpers', '$add_used_operators', '$to_vars', '$scope', '$compile_method_stubs', '$compile_irb_vars', '$compile_end_construct', '$closing', '$requirable?', '$cleanpath', '$Pathname', '$file', '$returns', '$body', '$irb?', '$to_a', '$helpers', '$each', '$operator_helpers', '$[]', '$method_missing?', '$method_calls', '$join', '$map', '$empty?', '$eof_content']);
@@ -24647,15 +25701,13 @@ if (k == null) k = nil;
           return "/* Generated by Opal " + ((($scope.get('Opal')).$$scope.get('VERSION'))) + " */";
         }, nil) && 'version_comment';
       })(self, $scope.get('ScopeNode'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/while"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$with_temp', '$js_truthy', '$test', '$in_while', '$wrap_in_closure?', '$[]=', '$while_loop', '$stmt', '$body', '$uses_redo?', '$push', '$while_open', '$while_close', '$line', '$compiler', '$wrap', '$[]', '$expr?', '$recv?']);
@@ -24754,15 +25806,13 @@ if (redo_var == null) redo_var = nil;
           return ")) {";
         }, nil) && 'while_close';
       })(self, $scope.get('WhileNode'));
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/for"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$with_temp', '$==', '$type', '$args_sexp', '$s', '$<<', '$body_sexp', '$first', '$insert', '$value', '$push', '$expr']);
@@ -24810,15 +25860,13 @@ if (loop_var == null) loop_var = nil;
             return self.$push(self.$expr(sexp));}, TMP_1.$$s = self, TMP_1), $a).call($b);
         }, nil) && 'compile';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/hash"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $hash2 = Opal.hash2;
 
   Opal.add_stubs(['$require', '$handle', '$each_with_index', '$even?', '$<<', '$children', '$all?', '$include?', '$type', '$keys_and_values', '$simple_keys?', '$compile_hash2', '$compile_hash', '$helper', '$==', '$push', '$expr', '$wrap', '$times', '$inspect', '$to_s', '$[]', '$[]=', '$size', '$join']);
@@ -24912,15 +25960,13 @@ if (key == null) key = nil;if (idx == null) idx = nil;
           return self.$wrap("$hash2([" + (hash_keys.$join(", ")) + "], {", "})");
         }, nil) && 'compile_hash2';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/array"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$empty?', '$children', '$push', '$each', '$==', '$type', '$expr', '$<<', '$fragment']);
@@ -24988,15 +26034,13 @@ if (child == null) child = nil;
           return self.$push(code);
         }, nil) && 'compile';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/defined"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $range = Opal.range;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$type', '$value', '$===', '$push', '$inspect', '$to_s', '$expr', '$s', '$[]', '$respond_to?', '$__send__', '$mid_to_jsid', '$with_temp', '$handle_block_given_call', '$compiler', '$wrap', '$include?']);
@@ -25132,15 +26176,13 @@ if (tmp == null) tmp = nil;
             return self.$push("'global-variable' : nil)");}, TMP_4.$$s = self, TMP_4), $a).call($b);
         }, nil) && 'compile_nth_ref';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/masgn"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$children', '$new_temp', '$scope', '$==', '$type', '$rhs', '$-', '$size', '$push', '$expr', '$[]', '$raise', '$each_with_index', '$dup', '$<<', '$s', '$>=', '$[]=', '$to_sym', '$last', '$lhs', '$queue_temp']);
@@ -25214,15 +26256,13 @@ if (child == null) child = nil;if (idx == null) idx = nil;
           return self.$scope().$queue_temp(tmp);
         }, nil) && 'compile';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes/arglist"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass;
 
   Opal.add_stubs(['$require', '$handle', '$each', '$==', '$first', '$expr', '$empty?', '$<<', '$fragment', '$+', '$children', '$push']);
@@ -25290,15 +26330,13 @@ if (current == null) current = nil;
           return ($a = self).$push.apply($a, [].concat(code));
         }, nil) && 'compile';
       })(self, $scope.get('Base'))
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/nodes"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice;
 
   Opal.add_stubs(['$require']);
@@ -25330,12 +26368,12 @@ Opal.modules["opal/nodes"] = function(Opal) {
   return self.$require("opal/nodes/arglist");
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/compiler"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $hash2 = Opal.hash2, $klass = Opal.klass;
 
-  Opal.add_stubs(['$require', '$compile', '$new', '$[]', '$define_method', '$fetch', '$!', '$include?', '$raise', '$compiler_option', '$attr_reader', '$attr_accessor', '$s', '$parse', '$file', '$eof_content', '$lexer', '$flatten', '$process', '$join', '$map', '$to_proc', '$warn', '$+', '$<<', '$helpers', '$new_temp', '$queue_temp', '$push_while', '$pop_while', '$in_while?', '$==', '$fragment', '$handlers', '$type', '$compile_to_fragments', '$returns', '$===', '$[]=', '$>', '$length', '$=~', '$tap', '$source=', '$source', '$uses_block!', '$block_name', '$find_parent_def']);
+  Opal.add_stubs(['$require', '$compile', '$new', '$[]', '$define_method', '$fetch', '$!', '$include?', '$raise', '$compiler_option', '$attr_reader', '$attr_accessor', '$s', '$parse', '$file', '$eof_content', '$lexer', '$flatten', '$process', '$join', '$map', '$to_proc', '$message', '$class', '$warn', '$+', '$<<', '$helpers', '$new_temp', '$queue_temp', '$push_while', '$pop_while', '$in_while?', '$==', '$fragment', '$handlers', '$type', '$compile_to_fragments', '$returns', '$===', '$[]=', '$>', '$length', '$=~', '$tap', '$source=', '$source', '$uses_block!', '$block_name', '$find_parent_def']);
   self.$require("set");
   self.$require("opal/parser");
   self.$require("opal/fragment");
@@ -25398,7 +26436,9 @@ Opal.modules["opal/compiler"] = function(Opal) {
 
       self.$compiler_option("inline_operators", false, $hash2(["as"], {"as": "inline_operators?"}));
 
-      self.$attr_reader("result", "fragments");
+      self.$attr_reader("result");
+
+      self.$attr_reader("fragments");
 
       self.$attr_accessor("scope");
 
@@ -25419,13 +26459,19 @@ Opal.modules["opal/compiler"] = function(Opal) {
       };
 
       def.$compile = function() {
-        var $a, $b, self = this;
+        var $a, $b, self = this, error = nil, message = nil;
 
+        try {
         self.parser = $scope.get('Parser').$new();
-        self.sexp = self.$s("top", ((($a = self.parser.$parse(self.source, self.$file())) !== false && $a !== nil) ? $a : self.$s("nil")));
-        self.eof_content = self.parser.$lexer().$eof_content();
-        self.fragments = self.$process(self.sexp).$flatten();
-        return self.result = ($a = ($b = self.fragments).$map, $a.$$p = "code".$to_proc(), $a).call($b).$join("");
+          self.sexp = self.$s("top", ((($a = self.parser.$parse(self.source, self.$file())) !== false && $a !== nil) ? $a : self.$s("nil")));
+          self.eof_content = self.parser.$lexer().$eof_content();
+          self.fragments = self.$process(self.sexp).$flatten();
+          return self.result = ($a = ($b = self.fragments).$map, $a.$$p = "code".$to_proc(), $a).call($b).$join("");
+        } catch ($err) {if (true) {error = $err;
+          message = "An error occurred while compiling: " + (self.$file()) + "\n" + (error.$message());
+          return self.$raise(error.$class(), message);
+          }else { throw $err; }
+        };
       };
 
       def.$source_map = function(source_file) {
@@ -25651,13 +26697,12 @@ if (s == null) s = nil;
         };
       }, nil) && 'handle_block_given_call';
     })(self, null);
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal/erb"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $klass = Opal.klass, $gvars = Opal.gvars;
 
   Opal.add_stubs(['$require', '$compile', '$new', '$fix_quotes', '$find_contents', '$find_code', '$wrap_compiled', '$require_erb', '$prepared_source', '$gsub', '$+', '$=~', '$sub']);
@@ -25688,6 +26733,8 @@ Opal.modules["opal/erb"] = function(Opal) {
         var def = self.$$proto, $scope = self.$$scope;
 
         def.prepared_source = def.source = def.file_name = nil;
+        Opal.cdecl($scope, 'BLOCK_EXPR', /\s+(do|\{)(\s*\|[^|]*\|)?\s*\Z/);
+
         def.$initialize = function(source, file_name) {
           var $a, self = this;
 
@@ -25720,8 +26767,6 @@ Opal.modules["opal/erb"] = function(Opal) {
 
           return result.$gsub("\"", "\\\"");
         };
-
-        Opal.cdecl($scope, 'BLOCK_EXPR', /\s+(do|\{)(\s*\|[^|]*\|)?\s*\Z/);
 
         def.$require_erb = function(result) {
           var self = this;
@@ -25757,15 +26802,13 @@ Opal.modules["opal/erb"] = function(Opal) {
           return result = "Template.new('" + (path) + "') do |output_buffer|\noutput_buffer.append(\"" + (result) + "\")\noutput_buffer.join\nend\n";
         }, nil) && 'wrap_compiled';
       })(self, null);
-      
     })(self)
-    
   })(self);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal-parser"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $module = Opal.module, $hash2 = Opal.hash2;
 
   Opal.add_stubs(['$require', '$compile', '$eval']);
@@ -25777,14 +26820,14 @@ Opal.modules["opal-parser"] = function(Opal) {
 
     var def = self.$$proto, $scope = self.$$scope;
 
-    def.$eval = function(str) {
+    Opal.defn(self, '$eval', function(str) {
       var self = this, code = nil;
 
       code = $scope.get('Opal').$compile(str, $hash2(["file"], {"file": "(eval)"}));
       return eval(code);
-    };
+    });
 
-    def.$require_remote = function(url) {
+    Opal.defn(self, '$require_remote', function(url) {
       var self = this;
 
       
@@ -25793,8 +26836,7 @@ Opal.modules["opal-parser"] = function(Opal) {
       r.send('');
     
       return self.$eval(r.responseText);
-    };
-        ;Opal.donate(self, ["$eval", "$require_remote"]);
+    });
   })(self);
   
   Opal.compile = function(str, options) {
@@ -25831,9 +26873,9 @@ Opal.modules["opal-parser"] = function(Opal) {
 
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["object_extensions"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass;
 
   Opal.add_stubs(['$sort', '$reject', '$include?', '$instance_variables', '$map', '$instance_variable_get', '$irb_instance_variables']);
@@ -25875,12 +26917,12 @@ if (var_name == null) var_name = nil;
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal_irb"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars, $hash2 = Opal.hash2;
 
-  Opal.add_stubs(['$require', '$Native', '$each', '$[]', '$is_a?', '$<<', '$sort_by', '$to_proc', '$uniq', '$attr_reader', '$compile', '$new']);
+  Opal.add_stubs(['$require', '$Native', '$each', '$[]', '$is_a?', '$<<', '$sort_by', '$name', '$uniq', '$attr_reader', '$compile', '$new']);
   self.$require("opal");
   self.$require("opal/compiler");
   self.$require("object_extensions");
@@ -25903,7 +26945,7 @@ Opal.modules["opal_irb"] = function(Opal) {
     };
 
     def.$opal_classes = function() {
-      var $a, $b, TMP_1, $c, self = this, classes = nil;
+      var $a, $b, TMP_1, $c, TMP_2, self = this, classes = nil;
       if ($gvars.opal_js_object == null) $gvars.opal_js_object = nil;
 
       classes = [];
@@ -25917,7 +26959,9 @@ if (k == null) k = nil;
           } else {
           return nil
         };}, TMP_1.$$s = self, TMP_1), $a).call($b);
-      return ($a = ($c = classes.$uniq()).$sort_by, $a.$$p = "name".$to_proc(), $a).call($c);
+      return ($a = ($c = classes.$uniq()).$sort_by, $a.$$p = (TMP_2 = function(cls){var self = TMP_2.$$s || this;
+if (cls == null) cls = nil;
+      return cls.$name()}, TMP_2.$$s = self, TMP_2), $a).call($c);
     };
 
     self.$attr_reader("parser");
@@ -25930,9 +26974,9 @@ if (k == null) k = nil;
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 Opal.modules["opal_irb_homebrew_console"] = function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $hash2 = Opal.hash2, $range = Opal.range, $gvars = Opal.gvars;
 
   Opal.add_stubs(['$require', '$map', '$-', '$width', '$value', '$html', '$height', '$+', '$gsub', '$attr_reader', '$clone', '$new', '$on', '$handle_keypress', '$initialize_window', '$print_header', '$html=', '$inspect', '$unshift', '$==', '$[]', '$add_to_history', '$parse', '$log', '$backtrace', '$join', '$print', '$each_with_index', '$reverse', '$which', '$===', '$prevent_default', '$value=', '$escape_html', '$add_to_saved', '$!', '$process_saved', '$open_multiline_dialog', '$show_previous_history', '$show_next_history', '$ctrl_key', '$<', '$length', '$>', '$resize_input', '$focus', '$each', '$find', '$create_html', '$setup_cmd_line_methods', '$scroll_to_bottom', '$setup_multi_line', '$setValue', '$call', '$sub', '$getValue']);
@@ -26275,9 +27319,9 @@ if (e == null) e = nil;
   })(self, null);
 };
 
-/* Generated by Opal 0.7.0.beta3 */
+/* Generated by Opal 0.7.1 */
 (function(Opal) {
-  Opal.dynamic_require_severity = "error";
+  Opal.dynamic_require_severity = "warning";
   var $a, $b, TMP_1, self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice;
 
   Opal.add_stubs(['$require', '$ready?', '$create']);
