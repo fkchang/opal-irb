@@ -28427,7 +28427,7 @@ Opal.modules["opal_irb_jqconsole"] = function(Opal) {
   Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $range = Opal.range, $gvars = Opal.gvars;
 
-  Opal.add_stubs(['$require', '$irb_link_for', '$console', '$append', '$find', '$call', '$new', '$on', '$hide', '$id', '$create', '$puts', '$meta_key', '$key_code', '$create_key_filter', '$visible?', '$show', '$all?', '$send', '$[]', '$==', '$ord', '$alert', '$attr_reader', '$setup_cmd_line_methods', '$setup_jqconsole', '$create_multiline_editor', '$redirect_console_dot_log', '$handler', '$setup_code_link_handling', '$grab_link_code', '$print_and_process_code', '$create_link_for_code', '$unescaped_write', '$Native', '$+', '$origin', '$pathname', '$hash', '$!', '$-', '$GetHistory', '$jqconsole', '$create_and_display_code_link', '$GetPromptText', '$add_to_redirect', '$lambda', '$write', '$<<', '$setValue', '$SetPromptText', '$_HandleEnter', '$sub', '$getValue', '$expose', '$RegisterShortcut', '$open_multiline_dialog', '$AbortPrompt', '$MoveToStart', '$MoveToEnd', '$_MoveLeft', '$_MoveRight', '$_HistoryNext', '$_HistoryPrevious', '$_Delete', '$Kill', '$irb_link_for_current_line', '$RegisterAltShortcut', '$each', '$parse', '$each_with_index', '$Write', '$join', '$process', '$message', '$Prompt', '$check_is_incomplete', '$backtrace', '$=~', '$first', '$log', '$inspect']);
+  Opal.add_stubs(['$require', '$irb_link_for', '$console', '$append', '$find', '$call', '$new', '$on', '$hide', '$id', '$create', '$create_key_filter', '$visible?', '$show', '$all?', '$send', '$[]', '$==', '$key_code', '$ord', '$alert', '$attr_reader', '$setup_cmd_line_methods', '$setup_jqconsole', '$create_multiline_editor', '$redirect_console_dot_log', '$handler', '$setup_code_link_handling', '$grab_link_code', '$print_and_process_code', '$create_link_for_code', '$unescaped_write', '$Native', '$+', '$origin', '$pathname', '$hash', '$!', '$-', '$GetHistory', '$jqconsole', '$create_and_display_code_link', '$GetPromptText', '$add_to_redirect', '$lambda', '$write', '$<<', '$setValue', '$SetPromptText', '$_HandleEnter', '$sub', '$getValue', '$expose', '$RegisterShortcut', '$open_multiline_dialog', '$AbortPrompt', '$MoveToStart', '$MoveToEnd', '$_MoveLeft', '$_MoveRight', '$_HistoryNext', '$_HistoryPrevious', '$_Delete', '$Kill', '$irb_link_for_current_line', '$RegisterAltShortcut', '$each', '$parse', '$each_with_index', '$Write', '$join', '$process', '$message', '$Prompt', '$check_is_incomplete', '$backtrace', '$=~', '$first', '$log', '$inspect']);
   self.$require("opal");
   self.$require("opal-jquery");
   self.$require("opal_irb_log_redirector");
@@ -28509,8 +28509,7 @@ Opal.modules["opal_irb_jqconsole"] = function(Opal) {
 
       return ($a = ($b = $scope.get('Element').$find("body")).$on, $a.$$p = (TMP_3 = function(evt){var self = TMP_3.$$s || this, $a, panel = nil;
 if (evt == null) evt = nil;
-      self.$puts("evt.meta_key " + (evt.$meta_key()) + " && evt.key_code == '>'.ord " + (evt.$key_code()));
-        if ((($a = self.$create_key_filter(keys_hash, evt)) !== nil && (!$a.$$is_boolean || $a == true))) {
+      if ((($a = self.$create_key_filter(keys_hash, evt)) !== nil && (!$a.$$is_boolean || $a == true))) {
           panel = $scope.get('Element').$id("" + ($scope.get('BOTTOM_PANEL_ID')));
           if ((($a = panel['$visible?']()) !== nil && (!$a.$$is_boolean || $a == true))) {
             return panel.$hide()
@@ -28519,7 +28518,7 @@ if (evt == null) evt = nil;
           };
           } else {
           return nil
-        };}, TMP_3.$$s = self, TMP_3), $a).call($b, "keypress");
+        }}, TMP_3.$$s = self, TMP_3), $a).call($b, "keypress");
     });
 
     Opal.defs(self, '$create_key_filter', function(keys_hash, evt) {
@@ -38978,6 +38977,3 @@ Opal.modules["browser"] = function(Opal) {
   $scope.get('OpalIrbJqconsole').$create_bottom_panel();
     return $scope.get('OpalIrbJqconsole').$add_open_panel_behavior("show-irb");}, TMP_1.$$s = self, TMP_1), $a).call($b);
 })(Opal);
-
-//# sourceMappingURL=app-embeddable.map
-;

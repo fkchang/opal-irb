@@ -53,7 +53,7 @@ HTML
   end
 
   def self.add_hot_key_panel_behavior(keys_hash)
-    Element.find("body").on(:keypress) { |evt|
+    Element.find("body").on(:keydown) { |evt|
       if create_key_filter(keys_hash, evt)
         panel = Element.id("#{BOTTOM_PANEL_ID}")
         if panel.visible?
@@ -64,9 +64,10 @@ HTML
       end
     }
   end
-
+  # set $DEBUG_KEY_FILTER = true somewhere in your app to see the keys for debugging
   def self.create_key_filter(keys_hash, evt)
-    keys_hash[:modifiers].all? { |modifier| evt.send("#{modifier}_key") } && evt.key_code == keys_hash[:key].ord
+    puts "evt.ctrl_key #{evt.ctrl_key} evt.meta_key #{evt.meta_key} evt.shift_key #{evt.shift_key} evt.key_code #{evt.key_code}_" if $DEBUG_KEY_FILTER
+    keys_hash[:modifiers].all? { |modifier| evt.send("#{modifier}_key") } && evt.key_code == keys_hash[:key].upcase.ord
   end
 
   def self.add_open_panel_behavior(link_id)
