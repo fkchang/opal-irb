@@ -1,6 +1,6 @@
 GIT
   remote: git://github.com/opal/opal-browser.git
-  revision: c909f1bfab40b354001feeafeefc2a2d2ed8f7b9
+  revision: dff179fd08b44d19b6558aa7c429e1cee4770487
   specs:
     opal-browser (0.2.0.beta1)
       opal
@@ -8,23 +8,23 @@ GIT
 
 GIT
   remote: git://github.com/opal/opal-jquery.git
-  revision: d7ababd48596ac4bbe2055d96121e7c761b32c4c
+  revision: 6d864fb0dfa0a5cd399f1a46bfa2e24fcb257768
   specs:
-    opal-jquery (0.3.0.beta1)
-      opal (~> 0.7.0.beta1)
+    opal-jquery (0.3.0)
+      opal (~> 0.7.0)
 
 GIT
   remote: git://github.com/opal/opal-rspec.git
-  revision: 88170baf691e1b080418448325cd5fadeebaf1ea
+  revision: ef2a7b0b969c06617ebbf3f17fc73d7af2363f94
   specs:
-    opal-rspec (0.4.0.beta3)
-      opal (~> 0.7.0.beta1)
+    opal-rspec (0.4.1)
+      opal (~> 0.7.0)
 
 GIT
   remote: git://github.com/opal/opal.git
-  revision: d086c27af82bd00780feca5bffb5ff7b7f25d1ed
+  revision: 8acef558986dbb4471c6060857c1693302d6293b
   specs:
-    opal (0.7.0.beta3)
+    opal (0.7.1)
       hike (~> 1.2)
       sourcemap (~> 0.1.0)
       sprockets (>= 2.2.3, < 4.0.0)
@@ -43,36 +43,45 @@ GEM
     celluloid (0.16.0)
       timers (~> 4.0.0)
     coderay (1.1.0)
-    ffi (1.9.6)
+    ffi (1.9.8)
     formatador (0.2.5)
-    guard (2.8.2)
+    guard (2.12.5)
       formatador (>= 0.2.4)
       listen (~> 2.7)
       lumberjack (~> 1.0)
+      nenv (~> 0.1)
+      notiffany (~> 0.0)
       pry (>= 0.9.12)
+      shellany (~> 0.0)
       thor (>= 0.18.1)
-    guard-process (1.0.6)
-      guard (>= 0.4.2)
+    guard-compat (1.2.1)
+    guard-process (1.2.1)
+      guard-compat (~> 1.2, >= 1.2.1)
       spoon (~> 0.0.1)
     hike (1.2.3)
     hitimes (1.2.2)
-    listen (2.8.0)
+    listen (2.9.0)
       celluloid (>= 0.15.2)
       rb-fsevent (>= 0.9.3)
       rb-inotify (>= 0.9)
     lumberjack (1.0.9)
     method_source (0.8.2)
-    multi_json (1.10.1)
+    multi_json (1.11.0)
+    nenv (0.2.0)
+    notiffany (0.0.6)
+      nenv (~> 0.1)
+      shellany (~> 0.0)
     paggio (0.2.4)
     pry (0.10.1)
       coderay (~> 1.1.0)
       method_source (~> 0.8.1)
       slop (~> 3.4)
-    rack (1.5.2)
-    rake (10.3.2)
+    rack (1.6.0)
+    rake (10.4.2)
     rb-fsevent (0.9.4)
     rb-inotify (0.9.5)
       ffi (>= 0.5.0)
+    shellany (0.0.1)
     slop (3.6.0)
     sourcemap (0.1.1)
     spoon (0.0.4)
