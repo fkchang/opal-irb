@@ -122,7 +122,7 @@ HTML
       # do this after everything initializes
       Timeout.new {
         print_and_process_code link_code
-        show_panel
+        self.class.show_panel
       }
     end
   end
