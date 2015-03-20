@@ -55,11 +55,10 @@ HTML
   def self.add_hot_key_panel_behavior(keys_hash)
     Element.find("body").on(:keydown) { |evt|
       if create_key_filter(keys_hash, evt)
-        panel = Element.id("#{BOTTOM_PANEL_ID}")
         if panel.visible?
-          panel.hide
+          hide_panel
         else
-          panel.show
+          show_panel
         end
       end
     }
@@ -72,13 +71,25 @@ HTML
 
   def self.add_open_panel_behavior(link_id)
     Element.id(link_id).on(:click) {
-      panel = Element.id("#{BOTTOM_PANEL_ID}")
-        if panel.visible?
-          alert "OpalIRB is already showing"
-        else
-          panel.show
-        end
+      if panel.visible?
+        alert "OpalIRB is already showing"
+      else
+        show_panel
+      end
     }
+  end
+
+  def self.panel
+    Element.id("#{BOTTOM_PANEL_ID}")
+  end
+
+  def self.show_panel
+    panel.show
+    Timeout.new { @jqconsole.Focus}
+  end
+
+  def self.hide_panel
+    panel.hide
   end
 
   attr_reader :irb
@@ -104,7 +115,10 @@ HTML
     link_code = @code_link_handler.grab_link_code
     if link_code
       # do this after everything initializes
-      Timeout.new { print_and_process_code link_code  }
+      Timeout.new {
+        print_and_process_code link_code
+        show_panel
+      }
     end
   end
 
