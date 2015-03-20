@@ -85,11 +85,16 @@ HTML
 
   def self.show_panel
     panel.show
-    Timeout.new { @jqconsole.Focus}
+    Timeout.new { console.focus}
   end
 
   def self.hide_panel
     panel.hide
+  end
+
+
+  def focus
+    @jqconsole.Focus
   end
 
   attr_reader :irb
