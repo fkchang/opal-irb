@@ -15,7 +15,11 @@ end
 
 class Timeout
   def initialize(time=0, &block)
-    `setTimeout(function(){#{block.call}}, time)`
+    @timeout = `setTimeout(#{block}, time)`
+  end
+
+  def clear
+    `clearTimeout(#{@timeout})`
   end
 end
 
