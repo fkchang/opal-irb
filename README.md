@@ -90,6 +90,10 @@ require 'lissio'
  *= require opal-irb/jqconsole
  */
 ```
+* include jquery UI dialog in application.js
+```js
+//= require jquery-ui/dialog
+```
 
 * include codemirror js/css, you can pull from CDN w/the below in your template (haml example below)
 ```haml
@@ -100,6 +104,8 @@ require 'lissio'
 
   * Example that creates a bottom panel, a button to bring it up
 ```ruby
+    require 'opal_irb_jqconsole'
+    
     # opal-browser code to add a button
     $document["#workarea"] << DOM do
       button.show_irb! "Show Irb"
