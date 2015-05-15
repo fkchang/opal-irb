@@ -3,9 +3,9 @@ class OpalIrb
   class CompletionEngine
     VARIABLE_DOT_COMPLETE = /(\s*(\w+)\.)$/
     METHOD_COMPLETE = /(\s*(\w+)\.(\w+))$/
-    CONSTANT = /\s*([A-Z]\w*)$/
+    CONSTANT = /(\s*([A-Z]\w*))$/
     METHOD_OR_VARIABLE = /(\s*([a-z]\w*))$/
-    GLOBAL = /\s*\$(\w*)$/
+    GLOBAL = /(\s*\$(\w*))$/
 
     # Used to store results and perform the correct actions on the console
     # 3 cases:
@@ -137,9 +137,6 @@ class OpalIrb
       name_val_pair = irb.irb_vars.find { |array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods.grep /^#{method_fragment}/
-                                                if methods.size == 1
-                                                  methods = ["#{target_name}.#{methods.first}"]
-        end
         return [whole.size + index - method_fragment.size, methods]
       end
       NO_MATCHES_PARAMS
@@ -147,8 +144,9 @@ class OpalIrb
 
     def self.constant_complete(text, irb)
       index = text =~ CONSTANT
-      fragment = $1
-      [index, Object.constants.grep( /^#{fragment}/)]
+      whole = $1
+      fragment = $2
+      [whole.size + index - fragment.size, Object.constants.grep( /^#{fragment}/)]
     end
 
     def self.method_or_variable_complete(text, irb)
@@ -162,10 +160,11 @@ class OpalIrb
 
     def self.global_complete(text, irb)
       index = text =~ GLOBAL
-      fragment = $1
+      whole = $1
+      fragment = $2
       debug_puts "looking for |#{fragment}| from |#{text}|"
       varnames = irb.irb_gvarnames.grep /^#{fragment}/
-      [index, varnames.map { |name| "$#{name}" }]
+      [whole.size + index - fragment.size - 1, varnames.map { |name| "$#{name}" }]
     end
 
     def self.debug_puts stuff
