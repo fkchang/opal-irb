@@ -2,6 +2,8 @@ require 'opal'
 require 'opal-jquery'
 require 'opal_irb_log_redirector'
 require 'opal_irb'
+require 'opal_irb/completion_engine'
+require 'opal_irb/completion_formatter'
 require 'jqconsole'
 
 # top level methods for irb cmd line
@@ -244,12 +246,44 @@ EDITOR
     print_and_process_code multi_line_value
   end
 
+  # show completions on hitting tab.  This modeled after irb.
+  # * If there are completions it will print the prompt, show the
+  # completions and reprint the prompt line.  Same as irb behavior,
+  # but these are the steps you need to take w/jq-console
+  # * If no completions it acts as jq-console tab
+  # @param text [String] text on the opal-irb command line
+  # @returns [Boolean] returns true if opal-irb is to actually tab - i.e. no completion found
+  # results.prompt_change(@jqconsole, 'jqconsole-old-prompt')
+  # results.write_results(@jqconsole)
+  # results.change_prompt(@jqconsole)
+  def tab_complete(text)
+    results = OpalIrb::CompletionEngine.complete(text, @irb)
+    # if results
+    #   if results.size > 1
+    #     @jqconsole.Write("#{CONSOLE_PROMPT}#{text}\n", "jqconsole-old-prompt")
+    #     @jqconsole.Write(OpalIrb::CompletionFormatter.format(results))
+    #     append_common_prefix_if_exists(text, results)
+    #   else
+    #     @jqconsole.SetPromptText(results.first)
+    #   end
+    #   false
+    # else
+    #   true
+    # end
+    results.set_old_prompt(@jqconsole, 'opal> ', 'jqconsole-old-prompt')
+    results.display_matches(@jqconsole)
+    results.update_prompt(@jqconsole)
+    results.insert_tab?
+  end
 
+
+  CONSOLE_PROMPT = 'opal> '
   attr_reader :jqconsole
   def setup_jqconsole(parent_element_id)
     Element.expose(:jqconsole)
 
-    @jqconsole = Native(Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\ntype help for assistance\n", 'opal> ')) # seamless jquery plugin removed
+    @jqconsole = Native(Element.find(parent_element_id).jqconsole("Welcome to Opal #{Opal::VERSION}\ntype help for assistance\n", CONSOLE_PROMPT)) # seamless jquery plugin removed
+    @jqconsole.RegisterTabHandler(lambda { |text| tab_complete(text)})
     @jqconsole.RegisterShortcut('M', lambda { open_multiline_dialog; handler})
     @jqconsole.RegisterShortcut('C', lambda { @jqconsole.AbortPrompt(); handler})
 
