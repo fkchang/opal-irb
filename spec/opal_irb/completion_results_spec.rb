@@ -24,12 +24,5 @@ describe OpalIrb::CompletionEngine::CompletionResults do
       expect(subject.common_prefix_if_exists('a', 0, ['alert', 'able'])).to eq 'a'
     end
 
-    it 'bug' do
-      expect(subject.common_prefix_if_exists('s.to', 2, ['to_enum', 'to_s', 'to_i'])).to eq 's.to_'
-    end
-
-    it 'bug 2' do
-      expect(subject.common_prefix_if_exists(' a', 2, ['alert', 'append'])).to eq ' a'
-    end
   end
 end

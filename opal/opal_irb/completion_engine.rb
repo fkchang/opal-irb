@@ -27,7 +27,7 @@ class OpalIrb
         # @insert_tab = matches.size > 0 ? false : true
         @insert_tab = false
 
-        puts "orig_text: |#{orig_text}| match_index: #{match_index} matches #{matches.inspect}"
+        CompletionEngine.debug_puts "orig_text: |#{orig_text}| match_index: #{match_index} matches #{matches.inspect}"
         if matches.size == 1
           @new_prompt_text =  match_index == 0 ? matches.first : "#{orig_text[0..match_index-1]}#{matches.first}"
         elsif matches.size > 1
@@ -49,7 +49,7 @@ class OpalIrb
           end
         }
         common = chars.join
-        puts "\torig_text: |#{orig_text}| common prefix: #{common} match_index: #{match_index}"
+        CompletionEngine.debug_puts "\torig_text: |#{orig_text}| common prefix: #{common} match_index: #{match_index}"
         match_index == 0 ? common : orig_text[0..match_index-1] + common
       end
 
@@ -168,7 +168,7 @@ class OpalIrb
     end
 
     def self.debug_puts stuff
-      puts stuff
+      # puts stuff
     end
   end
 
