@@ -1,0 +1,17 @@
+* Remove jquery dependency
+- [ ] Remove jquery-ui dialog
+- [ ] rewrite jq-console
+* Smalltalk inspired
+- [ ] create/proceed from nomethod error
+- [ ] create/proceed from undefined constant
+- [ ] method search (take in params and get result)
+
+* Lisp Machine inspired
+- [ ] right click edit of text
+- [ ] edit objects from command line
+
+* Other
+- [ ] . tab completion
+- [ ] irb var tab completion
+- [ ] constant tab completion
+- [ ] free standing method completion
