@@ -41,7 +41,10 @@ class OpalIrb
         first_word = working_copy.shift
         chars = []
         i = 0
-        first_word.each_char { |char|
+        # first_word.each_char { |char|
+        letters = [] #- break is broken on 0.8.0 beta for each_char
+        first_word.each_char { |char| letters << char }
+        letters.each { |char|
           if working_copy.all? { |str| str[i] == char }
             chars << char
             i += 1
@@ -122,10 +125,33 @@ class OpalIrb
       index = text =~ VARIABLE_DOT_COMPLETE # broken in 0.7, fixed in 0.7
       whole = $1
       target_name = $2
+      get_object_or_class_methods(whole, target_name, index, irb)
+    end
+
+    def self.get_object_or_class_methods(whole, target_name, index, irb)
+      case target_name
+      when /^[A-Z]/
+        get_class_methods(whole, target_name, index)
+      else
+        get_var_methods(whole, target_name, index, irb)
+      end
+    end
+
+    def self.get_class_methods(whole, target_name, index)
+      begin
+        klass = Kernel.const_get(target_name)
+        debug_puts "\t#{klass.inspect} #{klass.methods}"
+        [whole.size + index, klass.methods]
+      rescue
+        puts "\t RESCUE"
+        NO_MATCHES_PARAMS
+      end
+    end
+    def self.get_var_methods(whole, target_name, index, irb)
       name_val_pair = irb.irb_vars.find { |array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods
-        return [whole.size + index.size, methods]
+        return [whole.size + index, methods]
       end
       NO_MATCHES_PARAMS
     end
@@ -135,10 +161,48 @@ class OpalIrb
       whole = $1
       target_name = $2
       method_fragment = $3
+      get_matches_for_correct_type(whole, target_name, method_fragment, index, irb)
+    end
+
+    def self.get_matches_for_correct_type(whole, target_name, method_fragment, index, irb)
+      case target_name
+      when /^[A-Z]/
+        get_class_methods_by_fragment(whole, target_name, method_fragment, index)
+      when /^\$/
+        get_global_methods_by_fragment(whole, target_name, method_fragment, index, irb)
+      else
+        get_var_methods_by_fragment(whole, target_name, method_fragment, index, irb)
+      end
+    end
+
+    def self.get_class_methods_by_fragment(whole, target_name, method_fragment, index)
+      debug_puts "get_class_methods whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
+      begin
+        klass = Kernel.const_get(target_name)
+        debug_puts "\t#{klass.inspect} #{klass.methods}"
+        [whole.size + index - method_fragment.size, klass.methods.grep(/^#{method_fragment}/)]
+      rescue
+        puts "\t RESCUE"
+        NO_MATCHES_PARAMS
+      end
+    end
+
+    def self.get_global_methods_by_fragment(whole, target_name, method_fragment, index, irb)
+      debug_puts "get_global_methods whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
+      name_val_pair = irb.irb_gvars.find { |array| array[0] == target_name }
+      if name_val_pair
+        methods = name_val_pair[1].methods.grep /^#{method_fragment}/
+                                                return [whole.size + index - method_fragment.size, methods]
+      end
+      NO_MATCHES_PARAMS
+    end
+
+    def self.get_var_methods_by_fragment(whole, target_name, method_fragment, index, irb)
+      debug_puts "get_var_methods whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
       name_val_pair = irb.irb_vars.find { |array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods.grep /^#{method_fragment}/
-        return [whole.size + index - method_fragment.size, methods]
+                                                return [whole.size + index - method_fragment.size, methods]
       end
       NO_MATCHES_PARAMS
     end
