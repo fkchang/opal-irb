@@ -10,7 +10,7 @@ class OpalIrbLogRedirector
       var __slice = [].slice;
       args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
       console.orig_log(args);
-      Opal.OpalIrbLogRedirector.$puts(args+"\n");
+      Opal.OpalIrbLogRedirector.$puts(args);
     };
     |
 
