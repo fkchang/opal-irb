@@ -15868,7 +15868,7 @@ Opal.modules["opal_irb_log_redirector"] = function(Opal) {
       var __slice = [].slice;
       args = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
       console.orig_log(args);
-      Opal.OpalIrbLogRedirector.$puts(args+"\n");
+      Opal.OpalIrbLogRedirector.$puts(args);
     };
     
       };
@@ -26900,7 +26900,7 @@ Opal.modules["opal_irb/completion_engine"] = function(Opal) {
   Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $range = Opal.range, $gvars = Opal.gvars;
 
-  Opal.add_stubs(['$attr_reader', '$debug_puts', '$inspect', '$==', '$size', '$first', '$[]', '$-', '$>', '$common_prefix_if_exists', '$clone', '$shift', '$each_char', '$all?', '$<<', '$+', '$join', '$old_prompt?', '$Write', '$old_prompt', '$matches?', '$format', '$matches', '$new_prompt?', '$SetPromptText', '$new_prompt_text', '$===', '$global_complete', '$variable_dot_complete', '$method_complete', '$constant_complete', '$method_or_variable_complete', '$new', '$=~', '$find', '$irb_vars', '$methods', '$grep', '$constants', '$irb_varnames', '$irb_gvarnames', '$map']);
+  Opal.add_stubs(['$attr_reader', '$debug_puts', '$inspect', '$==', '$size', '$first', '$[]', '$-', '$>', '$common_prefix_if_exists', '$clone', '$shift', '$each_char', '$<<', '$each', '$all?', '$+', '$join', '$old_prompt?', '$Write', '$old_prompt', '$matches?', '$format', '$matches', '$new_prompt?', '$SetPromptText', '$new_prompt_text', '$===', '$global_complete', '$variable_dot_complete', '$method_complete', '$constant_complete', '$method_or_variable_complete', '$new', '$=~', '$get_object_or_class_methods', '$get_class_methods', '$get_var_methods', '$const_get', '$methods', '$puts', '$find', '$irb_vars', '$get_matches_for_correct_type', '$get_class_methods_by_fragment', '$get_global_methods_by_fragment', '$get_var_methods_by_fragment', '$grep', '$irb_gvars', '$constants', '$irb_varnames', '$irb_gvarnames', '$map']);
   return (function($base, $super) {
     function $OpalIrb(){};
     var self = $OpalIrb = $klass($base, $super, 'OpalIrb', $OpalIrb);
@@ -26953,22 +26953,26 @@ Opal.modules["opal_irb/completion_engine"] = function(Opal) {
         };
 
         def.$common_prefix_if_exists = function(orig_text, match_index, results) {
-          var $a, $b, TMP_1, self = this, working_copy = nil, first_word = nil, chars = nil, i = nil, common = nil;
+          var $a, $b, TMP_1, $c, TMP_2, self = this, working_copy = nil, first_word = nil, chars = nil, i = nil, letters = nil, common = nil;
 
           working_copy = results.$clone();
           first_word = working_copy.$shift();
           chars = [];
           i = 0;
-          ($a = ($b = first_word).$each_char, $a.$$p = (TMP_1 = function(char$){var self = TMP_1.$$s || this, $a, $b, $c, TMP_2;
+          letters = [];
+          ($a = ($b = first_word).$each_char, $a.$$p = (TMP_1 = function(char$){var self = TMP_1.$$s || this;
 if (char$ == null) char$ = nil;
-          if ((($a = ($b = ($c = working_copy)['$all?'], $b.$$p = (TMP_2 = function(str){var self = TMP_2.$$s || this;
+          return letters['$<<'](char$)}, TMP_1.$$s = self, TMP_1), $a).call($b);
+          ($a = ($c = letters).$each, $a.$$p = (TMP_2 = function(char$){var self = TMP_2.$$s || this, $a, $b, $c, TMP_3;
+if (char$ == null) char$ = nil;
+          if ((($a = ($b = ($c = working_copy)['$all?'], $b.$$p = (TMP_3 = function(str){var self = TMP_3.$$s || this;
 if (str == null) str = nil;
-            return str['$[]'](i)['$=='](char$)}, TMP_2.$$s = self, TMP_2), $b).call($c)) !== nil && (!$a.$$is_boolean || $a == true))) {
+            return str['$[]'](i)['$=='](char$)}, TMP_3.$$s = self, TMP_3), $b).call($c)) !== nil && (!$a.$$is_boolean || $a == true))) {
               chars['$<<'](char$);
               return i = i['$+'](1);
               } else {
               return ($breaker.$v = nil, $breaker)
-            }}, TMP_1.$$s = self, TMP_1), $a).call($b);
+            }}, TMP_2.$$s = self, TMP_2), $a).call($c);
           common = chars.$join();
           $scope.get('CompletionEngine').$debug_puts("\torig_text: |" + (orig_text) + "| common prefix: " + (common) + " match_index: " + (match_index));
           if (match_index['$=='](0)) {
@@ -27048,30 +27052,97 @@ if (str == null) str = nil;
       });
 
       Opal.defs(self, '$variable_dot_complete', function(text, irb) {
-        var $a, $b, TMP_3, self = this, index = nil, whole = nil, target_name = nil, name_val_pair = nil, methods = nil;
+        var $a, self = this, index = nil, whole = nil, target_name = nil;
 
         index = text['$=~']($scope.get('VARIABLE_DOT_COMPLETE'));
         whole = (($a = $gvars['~']) === nil ? nil : $a['$[]'](1));
         target_name = (($a = $gvars['~']) === nil ? nil : $a['$[]'](2));
-        name_val_pair = ($a = ($b = irb.$irb_vars()).$find, $a.$$p = (TMP_3 = function(array){var self = TMP_3.$$s || this;
+        return self.$get_object_or_class_methods(whole, target_name, index, irb);
+      });
+
+      Opal.defs(self, '$get_object_or_class_methods', function(whole, target_name, index, irb) {
+        var self = this, $case = nil;
+
+        return (function() {$case = target_name;if (/^[A-Z]/['$===']($case)) {return self.$get_class_methods(whole, target_name, index)}else {return self.$get_var_methods(whole, target_name, index, irb)}})();
+      });
+
+      Opal.defs(self, '$get_class_methods', function(whole, target_name, index) {
+        var self = this, klass = nil;
+
+        try {
+        klass = $scope.get('Kernel').$const_get(target_name);
+          self.$debug_puts("\t" + (klass.$inspect()) + " " + (klass.$methods()));
+          return [whole.$size()['$+'](index), klass.$methods()];
+        } catch ($err) {if (true) {
+          self.$puts("\t RESCUE");
+          return $scope.get('NO_MATCHES_PARAMS');
+          }else { throw $err; }
+        };
+      });
+
+      Opal.defs(self, '$get_var_methods', function(whole, target_name, index, irb) {
+        var $a, $b, TMP_4, self = this, name_val_pair = nil, methods = nil;
+
+        name_val_pair = ($a = ($b = irb.$irb_vars()).$find, $a.$$p = (TMP_4 = function(array){var self = TMP_4.$$s || this;
 if (array == null) array = nil;
-        return array['$[]'](0)['$=='](target_name)}, TMP_3.$$s = self, TMP_3), $a).call($b);
+        return array['$[]'](0)['$=='](target_name)}, TMP_4.$$s = self, TMP_4), $a).call($b);
         if (name_val_pair !== false && name_val_pair !== nil) {
           methods = name_val_pair['$[]'](1).$methods();
-          return [whole.$size()['$+'](index.$size()), methods];};
+          return [whole.$size()['$+'](index), methods];};
         return $scope.get('NO_MATCHES_PARAMS');
       });
 
       Opal.defs(self, '$method_complete', function(text, irb) {
-        var $a, $b, TMP_4, self = this, index = nil, whole = nil, target_name = nil, method_fragment = nil, name_val_pair = nil, methods = nil;
+        var $a, self = this, index = nil, whole = nil, target_name = nil, method_fragment = nil;
 
         index = text['$=~']($scope.get('METHOD_COMPLETE'));
         whole = (($a = $gvars['~']) === nil ? nil : $a['$[]'](1));
         target_name = (($a = $gvars['~']) === nil ? nil : $a['$[]'](2));
         method_fragment = (($a = $gvars['~']) === nil ? nil : $a['$[]'](3));
-        name_val_pair = ($a = ($b = irb.$irb_vars()).$find, $a.$$p = (TMP_4 = function(array){var self = TMP_4.$$s || this;
+        return self.$get_matches_for_correct_type(whole, target_name, method_fragment, index, irb);
+      });
+
+      Opal.defs(self, '$get_matches_for_correct_type', function(whole, target_name, method_fragment, index, irb) {
+        var self = this, $case = nil;
+
+        return (function() {$case = target_name;if (/^[A-Z]/['$===']($case)) {return self.$get_class_methods_by_fragment(whole, target_name, method_fragment, index)}else if (/^\$/['$===']($case)) {return self.$get_global_methods_by_fragment(whole, target_name, method_fragment, index, irb)}else {return self.$get_var_methods_by_fragment(whole, target_name, method_fragment, index, irb)}})();
+      });
+
+      Opal.defs(self, '$get_class_methods_by_fragment', function(whole, target_name, method_fragment, index) {
+        var self = this, klass = nil;
+
+        self.$debug_puts("get_class_methods whole: " + (whole) + ", target_name: " + (target_name) + ", method_fragment: " + (method_fragment) + ", index");
+        try {
+        klass = $scope.get('Kernel').$const_get(target_name);
+          self.$debug_puts("\t" + (klass.$inspect()) + " " + (klass.$methods()));
+          return [whole.$size()['$+'](index)['$-'](method_fragment.$size()), klass.$methods().$grep((new RegExp("^" + method_fragment)))];
+        } catch ($err) {if (true) {
+          self.$puts("\t RESCUE");
+          return $scope.get('NO_MATCHES_PARAMS');
+          }else { throw $err; }
+        };
+      });
+
+      Opal.defs(self, '$get_global_methods_by_fragment', function(whole, target_name, method_fragment, index, irb) {
+        var $a, $b, TMP_5, self = this, name_val_pair = nil, methods = nil;
+
+        self.$debug_puts("get_global_methods whole: " + (whole) + ", target_name: " + (target_name) + ", method_fragment: " + (method_fragment) + ", index");
+        name_val_pair = ($a = ($b = irb.$irb_gvars()).$find, $a.$$p = (TMP_5 = function(array){var self = TMP_5.$$s || this;
 if (array == null) array = nil;
-        return array['$[]'](0)['$=='](target_name)}, TMP_4.$$s = self, TMP_4), $a).call($b);
+        return array['$[]'](0)['$=='](target_name)}, TMP_5.$$s = self, TMP_5), $a).call($b);
+        if (name_val_pair !== false && name_val_pair !== nil) {
+          methods = name_val_pair['$[]'](1).$methods().$grep((new RegExp("^" + method_fragment)));
+          return [whole.$size()['$+'](index)['$-'](method_fragment.$size()), methods];};
+        return $scope.get('NO_MATCHES_PARAMS');
+      });
+
+      Opal.defs(self, '$get_var_methods_by_fragment', function(whole, target_name, method_fragment, index, irb) {
+        var $a, $b, TMP_6, self = this, name_val_pair = nil, methods = nil;
+
+        self.$debug_puts("get_var_methods whole: " + (whole) + ", target_name: " + (target_name) + ", method_fragment: " + (method_fragment) + ", index");
+        name_val_pair = ($a = ($b = irb.$irb_vars()).$find, $a.$$p = (TMP_6 = function(array){var self = TMP_6.$$s || this;
+if (array == null) array = nil;
+        return array['$[]'](0)['$=='](target_name)}, TMP_6.$$s = self, TMP_6), $a).call($b);
         if (name_val_pair !== false && name_val_pair !== nil) {
           methods = name_val_pair['$[]'](1).$methods().$grep((new RegExp("^" + method_fragment)));
           return [whole.$size()['$+'](index)['$-'](method_fragment.$size()), methods];};
@@ -27099,16 +27170,16 @@ if (array == null) array = nil;
       });
 
       Opal.defs(self, '$global_complete', function(text, irb) {
-        var $a, $b, TMP_5, self = this, index = nil, whole = nil, fragment = nil, varnames = nil;
+        var $a, $b, TMP_7, self = this, index = nil, whole = nil, fragment = nil, varnames = nil;
 
         index = text['$=~']($scope.get('GLOBAL'));
         whole = (($a = $gvars['~']) === nil ? nil : $a['$[]'](1));
         fragment = (($a = $gvars['~']) === nil ? nil : $a['$[]'](2));
         self.$debug_puts("looking for |" + (fragment) + "| from |" + (text) + "|");
         varnames = irb.$irb_gvarnames().$grep((new RegExp("^" + fragment)));
-        return [whole.$size()['$+'](index)['$-'](fragment.$size())['$-'](1), ($a = ($b = varnames).$map, $a.$$p = (TMP_5 = function(name){var self = TMP_5.$$s || this;
+        return [whole.$size()['$+'](index)['$-'](fragment.$size())['$-'](1), ($a = ($b = varnames).$map, $a.$$p = (TMP_7 = function(name){var self = TMP_7.$$s || this;
 if (name == null) name = nil;
-        return "$" + (name)}, TMP_5.$$s = self, TMP_5), $a).call($b)];
+        return "$" + (name)}, TMP_7.$$s = self, TMP_7), $a).call($b)];
       });
 
       return (Opal.defs(self, '$debug_puts', function(stuff) {
@@ -29324,6 +29395,7 @@ if (c == null) c = nil;
       try {
       self.$log("\n\n|" + (cmd) + "|");
         if (cmd !== false && cmd !== nil) {
+          $gvars.last_cmd = cmd;
           $gvars.irb_last_compiled = self.irb.$parse(cmd);
           self.$log($gvars.irb_last_compiled);
           value = eval($gvars.irb_last_compiled);
@@ -29333,6 +29405,7 @@ if (c == null) c = nil;
           return nil
         };
       } catch ($err) {if (Opal.rescue($err, [$scope.get('Exception')])) {e = $err;
+        $gvars.last_exception = e;
         if ((($a = e.$backtrace()) !== nil && (!$a.$$is_boolean || $a == true))) {
           output = ((("FOR:\n") + ($gvars.irb_last_compiled)) + "\n============\n")['$+'](e.$backtrace().$join("\n"));
           return output;
@@ -29340,7 +29413,7 @@ if (c == null) c = nil;
           output = e.toString();
           self.$log("\nReturning NO have backtrace |" + (output) + "|");
           return output;
-        }
+        };
         }else { throw $err; }
       };
     }, nil) && 'process';
