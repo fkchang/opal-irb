@@ -438,6 +438,7 @@ HELP
     begin
       log "\n\n|#{cmd}|"
       if cmd
+        $last_cmd = cmd
         $irb_last_compiled = @irb.parse cmd
         log $irb_last_compiled
         value = `eval(#{$irb_last_compiled})`
@@ -445,6 +446,7 @@ HELP
         Native($_).inspect      # coz native JS objects don't support inspect
       end
     rescue Exception => e
+      $last_exception = e
       # alert e.backtrace.join("\n")
       if e.backtrace
         output = "FOR:\n#{$irb_last_compiled}\n============\n" + e.backtrace.join("\n")
