@@ -26922,7 +26922,7 @@ Opal.modules["opal_irb"] = function(Opal) {
   Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars, $hash2 = Opal.hash2;
 
-  Opal.add_stubs(['$require', '$Native', '$each', '$[]', '$is_a?', '$<<', '$sort_by', '$name', '$uniq', '$attr_reader', '$compile', '$new']);
+  Opal.add_stubs(['$require', '$map', '$irb_vars', '$irb_gvars', '$Native', '$each', '$[]', '$is_a?', '$<<', '$sort_by', '$name', '$uniq', '$attr_reader', '$compile', '$new']);
   self.$require("opal");
   self.$require("opal/compiler");
   self.$require("object_extensions");
@@ -26944,13 +26944,41 @@ Opal.modules["opal_irb"] = function(Opal) {
        return irbVars;
     };
 
+    def.$irb_varnames = function() {
+      var $a, $b, TMP_1, self = this;
+
+      return ($a = ($b = self.$irb_vars()).$map, $a.$$p = (TMP_1 = function(varname, value){var self = TMP_1.$$s || this;
+if (varname == null) varname = nil;if (value == null) value = nil;
+      return varname}, TMP_1.$$s = self, TMP_1), $a).call($b);
+    };
+
+    def.$irb_gvars = function() {
+      var self = this;
+
+      gvars = [];
+       for(variable in Opal.gvars) {
+         if(Opal.gvars.hasOwnProperty(variable)) {
+            gvars.push([variable, Opal.gvars[variable]])
+         }
+       };
+       return gvars;
+    };
+
+    def.$irb_gvarnames = function() {
+      var $a, $b, TMP_2, self = this;
+
+      return ($a = ($b = self.$irb_gvars()).$map, $a.$$p = (TMP_2 = function(varname, value){var self = TMP_2.$$s || this;
+if (varname == null) varname = nil;if (value == null) value = nil;
+      return varname}, TMP_2.$$s = self, TMP_2), $a).call($b);
+    };
+
     def.$opal_classes = function() {
-      var $a, $b, TMP_1, $c, TMP_2, self = this, classes = nil;
+      var $a, $b, TMP_3, $c, TMP_4, self = this, classes = nil;
       if ($gvars.opal_js_object == null) $gvars.opal_js_object = nil;
 
       classes = [];
       $gvars.opal_js_object = self.$Native(Opal);
-      ($a = ($b = $gvars.opal_js_object).$each, $a.$$p = (TMP_1 = function(k){var self = TMP_1.$$s || this, $a, attr = nil;
+      ($a = ($b = $gvars.opal_js_object).$each, $a.$$p = (TMP_3 = function(k){var self = TMP_3.$$s || this, $a, attr = nil;
         if ($gvars.opal_js_object == null) $gvars.opal_js_object = nil;
 if (k == null) k = nil;
       attr = $gvars.opal_js_object['$[]'](k);
@@ -26958,10 +26986,24 @@ if (k == null) k = nil;
           return classes['$<<'](attr)
           } else {
           return nil
-        };}, TMP_1.$$s = self, TMP_1), $a).call($b);
-      return ($a = ($c = classes.$uniq()).$sort_by, $a.$$p = (TMP_2 = function(cls){var self = TMP_2.$$s || this;
+        };}, TMP_3.$$s = self, TMP_3), $a).call($b);
+      return ($a = ($c = classes.$uniq()).$sort_by, $a.$$p = (TMP_4 = function(cls){var self = TMP_4.$$s || this;
 if (cls == null) cls = nil;
-      return cls.$name()}, TMP_2.$$s = self, TMP_2), $a).call($c);
+      return cls.$name()}, TMP_4.$$s = self, TMP_4), $a).call($c);
+    };
+
+    def.$opal_constants = function() {
+      var $a, $b, TMP_5, self = this, constants = nil;
+      if ($gvars.opal_js_object == null) $gvars.opal_js_object = nil;
+
+      constants = [];
+      $gvars.opal_js_object = self.$Native(Opal);
+      ($a = ($b = $gvars.opal_js_object).$each, $a.$$p = (TMP_5 = function(k){var self = TMP_5.$$s || this, attr = nil;
+        if ($gvars.opal_js_object == null) $gvars.opal_js_object = nil;
+if (k == null) k = nil;
+      attr = $gvars.opal_js_object['$[]'](k);
+        return constants['$<<'](attr);}, TMP_5.$$s = self, TMP_5), $a).call($b);
+      return constants.$uniq();
     };
 
     self.$attr_reader("parser");
