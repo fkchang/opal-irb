@@ -270,7 +270,7 @@ EDITOR
     # else
     #   true
     # end
-    results.set_old_prompt(@jqconsole, 'opal> ', 'jqconsole-old-prompt')
+    results.set_old_prompt(@jqconsole, CONSOLE_PROMPT, 'jqconsole-old-prompt')
     results.display_matches(@jqconsole)
     results.update_prompt(@jqconsole)
     results.insert_tab?

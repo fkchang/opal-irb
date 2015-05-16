@@ -31,6 +31,7 @@ class OpalIrb
         if matches.size == 1
           @new_prompt_text =  match_index == 0 ? matches.first : "#{orig_text[0..match_index-1]}#{matches.first}"
         elsif matches.size > 1
+          @old_prompt = orig_text
           @new_prompt_text = common_prefix_if_exists(orig_text, match_index, matches)
         end
       end
@@ -74,7 +75,7 @@ class OpalIrb
       # @param jqconsole [Native] jq-console used by opal-irb
       # @param jqconsole [String] the old class
       def set_old_prompt(jqconsole, prompt, jqconsole_class)
-        jqconsole.Write(old_prompt) if old_prompt?
+        jqconsole.Write("#{prompt}#{old_prompt}\n", jqconsole_class) if old_prompt?
       end
       # Displays matches if there are any
       # @param jqconsole [Native] jq-console used by opal-irb
