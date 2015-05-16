@@ -15,7 +15,9 @@ Original https://github.com/larryng/coffeescript-repl based port http://fkchang.
 Features
 --------
 
-Video overview: http://www.youtube.com/watch?v=6hUwN5BdSHo
+Videos:
+* Overview, no sound http://www.youtube.com/watch?v=6hUwN5BdSHo
+* Demo of 1st cut of tab completion  https://youtu.be/mQTulgBm5Nk
 
 * Opal irb in your browser
 * Command history - up/down arrows, ctrl-n/ctrl-p
@@ -105,7 +107,7 @@ require 'lissio'
   * Example that creates a bottom panel, a button to bring it up
 ```ruby
     require 'opal_irb_jqconsole'
-    
+
     # opal-browser code to add a button
     $document["#workarea"] << DOM do
       button.show_irb! "Show Irb"
