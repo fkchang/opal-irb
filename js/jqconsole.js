@@ -301,6 +301,7 @@ Licensed under the MIT license
       this.history_active = false;
       this.shortcuts = {};
       this.altShortcuts = {};
+      this.tabHandler = null;
       this.$container = $('<div/>').appendTo(outer_container);
       this.$container.css({
         'top': 0,
@@ -462,6 +463,10 @@ Licensed under the MIT license
       })(this);
       this._LetterCaseHelper(key_code, removeShortcut);
       return void 0;
+    };
+
+    JQConsole.prototype.RegisterTabHandler = function(callback) {
+      return this.tabHandler = callback;
     };
 
     JQConsole.prototype.RegisterShortcut = function(key_code, callback) {
@@ -940,7 +945,7 @@ Licensed under the MIT license
             this._HandleEnter(false);
             break;
           case KEY_TAB:
-            this._Indent();
+            this._HandleTab();
             break;
           case KEY_DELETE:
             this._Delete(false);
@@ -1236,6 +1241,16 @@ Licensed under the MIT license
         $upper_line = this.$prompt_before.children().last().detach();
         this.$prompt_label.text($upper_line.children().first().text());
         return this.$prompt_left.text($upper_line.children().last().text());
+      }
+    };
+
+    JQConsole.prototype._HandleTab = function() {
+      if (this.tabHandler) {
+        if (this.tabHandler(this.$prompt_left.text())) {
+          return this._Indent();
+        }
+      } else {
+        return this._Indent();
       }
     };
 
