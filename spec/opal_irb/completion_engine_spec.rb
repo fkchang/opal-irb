@@ -148,4 +148,48 @@ describe OpalIrb::CompletionEngine do
     end
   end
 
+  context 'CONSTANT' do
+    it 'expands constants, and changes promt to most common prefix' do
+      text = 'ST'               # STDIN STDOUT STDERR is what's in opal
+      results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+      results.old_prompt.should == text
+      results.new_prompt_text.should == 'STD'
+      results.matches.size.should > 2
+      results.matches.include?('STDIN').should == true
+    end
+  end
+
+  context 'METHOD_OR_VARIABLE' do
+    it 'recognizes a method' do
+      text = 'ali'               # alias_method alias_native
+      results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+      results.old_prompt.should == text
+      results.new_prompt_text.should == 'alias_'
+      results.matches.size.should > 1
+      results.matches.include?('alias_method').should == true
+    end
+
+    it 'recognizes a variable, and completes the only respons' do
+      irb = OpalIrb.new
+      js = irb.parse('foo_var_bar = "2"')
+      `eval(#{js})`
+      text = 'foo_var_b'
+      results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+      results.old_prompt.should == nil
+      results.new_prompt_text.should == 'foo_var_bar'
+      results.matches.size.should == 1
+      results.matches.include?('foo_var_bar').should == true
+    end
+
+  end
+  context 'GLOBAL' do
+    it 'recognizes a global, and changes the prompt to most common prefix' do
+      text = '$st'               # alias_method alias_native
+      results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+      results.old_prompt.should == text
+      results.new_prompt_text.should == '$std'
+      results.matches.size.should > 2
+      results.matches.include?('$stderr').should == true
+    end
+  end
 end
