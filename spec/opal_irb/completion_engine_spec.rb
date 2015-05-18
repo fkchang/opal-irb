@@ -18,6 +18,14 @@ describe OpalIrb::CompletionEngine do
         expect(' ab.' =~ OpalIrb::CompletionEngine::VARIABLE_DOT_COMPLETE).to_not be_falsey
       end
 
+      it 'recognizes a global variable' do
+        expect(' $ab.' =~ OpalIrb::CompletionEngine::VARIABLE_DOT_COMPLETE).to_not be_falsey
+      end
+
+      it 'recognizes a class' do
+        expect(' Ab.' =~ OpalIrb::CompletionEngine::VARIABLE_DOT_COMPLETE).to_not be_falsey
+      end
+
     end
 
     context 'recognizes METHOD_COMPLETE' do
@@ -34,6 +42,12 @@ describe OpalIrb::CompletionEngine do
       end
       it 'recognizes spc 2 letter dot 2 letter' do
         expect(' ab.ab' =~ OpalIrb::CompletionEngine::METHOD_COMPLETE).to_not be_falsey
+      end
+      it 'recognizes global' do
+        expect('$global.ab' =~ OpalIrb::CompletionEngine::METHOD_COMPLETE).to_not be_falsey
+      end
+      it 'recognizes class' do
+        expect('Klass.ab' =~ OpalIrb::CompletionEngine::METHOD_COMPLETE).to_not be_falsey
       end
     end
 
@@ -67,7 +81,38 @@ describe OpalIrb::CompletionEngine do
       it 'recognizes spc 2 lowercase letter' do
         expect(' ab' =~ OpalIrb::CompletionEngine::METHOD_OR_VARIABLE).to_not be_falsey
       end
+
+
     end
 
   end
+
+  context '#complete' do
+    context 'VARIABLE_DOT_COMPLETE' do
+      it 'processes global dot' do
+        results = OpalIrb::CompletionEngine.complete('$window.', OpalIrb.new)
+        results.old_prompt.should == '$window.'
+        results.new_prompt_text.should == '$window.'
+        results.matches.size.should > 5
+      end
+      it 'processes variable dot' do
+        irb = OpalIrb.new
+        js = irb.parse('foo_var_bar = "2"')
+        `eval(#{js})`
+        results = OpalIrb::CompletionEngine.complete('foo_var_bar.', irb)
+        results.old_prompt.should == 'foo_var_bar.'
+        results.new_prompt_text.should == 'foo_var_bar.'
+        results.matches.size.should > 5
+        results.matches.include?('reverse').should == true
+      end
+      it 'processes constant dot' do
+        results = OpalIrb::CompletionEngine.complete('STDIN.', OpalIrb.new)
+        results.old_prompt.should == 'STDIN.'
+        results.new_prompt_text.should == 'STDIN.'
+        results.matches.size.should > 5
+        results.matches.include?('write').should == true
+      end
+    end
+  end
+
 end

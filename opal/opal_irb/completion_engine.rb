@@ -1,98 +1,14 @@
+$CE_DEBUG = false               # override to turn on debugging
+require_relative 'completion_results'
 class OpalIrb
   # CompletionEngine for tab completes
   class CompletionEngine
-    VARIABLE_DOT_COMPLETE = /(\s*(\w+)\.)$/
-    METHOD_COMPLETE = /(\s*(\w+)\.(\w+))$/
+    VARIABLE_DOT_COMPLETE = /(\s*([$]*\w+)\.)$/
+    METHOD_COMPLETE = /(\s*([$]*\w+)\.(\w+))$/
     CONSTANT = /(\s*([A-Z]\w*))$/
     METHOD_OR_VARIABLE = /(\s*([a-z]\w*))$/
     GLOBAL = /(\s*\$(\w*))$/
 
-    # Used to store results and perform the correct actions on the console
-    # 3 cases:
-    # * No match
-    #   * no change to prompt
-    #   * insert_tab ==  true
-    # * There is a single match
-    #   * change prompt to the single match
-    #   * insert_tab == false
-    # * There are multiple matches
-    #   * show the matches
-    #   * change prompt to the max common prefix
-    #   * insert_tab == false
-    class CompletionResults
-
-      attr_reader :matches, :old_prompt, :new_prompt_text
-      def initialize(orig_text, match_index, matches)
-        @matches = matches
-        # @insert_tab = matches.size > 0 ? false : true
-        @insert_tab = false
-
-        CompletionEngine.debug_puts "orig_text: |#{orig_text}| match_index: #{match_index} matches #{matches.inspect}"
-        if matches.size == 1
-          @new_prompt_text =  match_index == 0 ? matches.first : "#{orig_text[0..match_index-1]}#{matches.first}"
-        elsif matches.size > 1
-          @old_prompt = orig_text
-          @new_prompt_text = common_prefix_if_exists(orig_text, match_index, matches)
-        end
-      end
-
-      def common_prefix_if_exists(orig_text, match_index, results)
-        working_copy = results.clone
-        first_word = working_copy.shift
-        chars = []
-        i = 0
-        # first_word.each_char { |char|
-        letters = [] #- break is broken on 0.8.0 beta for each_char
-        first_word.each_char { |char| letters << char }
-        letters.each { |char|
-          if working_copy.all? { |str| str[i] == char }
-            chars << char
-            i += 1
-          else
-            break
-          end
-        }
-        common = chars.join
-        CompletionEngine.debug_puts "\torig_text: |#{orig_text}| common prefix: #{common} match_index: #{match_index}"
-        match_index == 0 ? common : orig_text[0..match_index-1] + common
-      end
-
-
-      def old_prompt?
-        @old_prompt
-      end
-
-      def matches?
-        @matches.size > 1
-      end
-
-      def new_prompt?
-        @new_prompt_text
-      end
-
-      # Tells the console whether or not to tab or not
-      def insert_tab?
-        @insert_tab
-      end
-      # writes an "old prompt" before showing matchings results, if there are matches
-      # @param jqconsole [Native] jq-console used by opal-irb
-      # @param jqconsole [String] the old class
-      def set_old_prompt(jqconsole, prompt, jqconsole_class)
-        jqconsole.Write("#{prompt}#{old_prompt}\n", jqconsole_class) if old_prompt?
-      end
-      # Displays matches if there are any
-      # @param jqconsole [Native] jq-console used by opal-irb
-      def display_matches(jqconsole)
-        jqconsole.Write(OpalIrb::CompletionFormatter.format(matches)) if matches?
-      end
-
-      # Updates the prompt to include the only match or most common prefix if there are any
-      # @param jqconsole [Native] jq-console used by opal-irb
-      def update_prompt(jqconsole)
-        jqconsole.SetPromptText(new_prompt_text) if new_prompt?
-      end
-
-    end
     NO_MATCHES_PARAMS = [nil, []]
     # Shows completions for text in opal-irb
     # @param text [String] the text to try to find completions for
@@ -132,6 +48,8 @@ class OpalIrb
       case target_name
       when /^[A-Z]/
         get_class_methods(whole, target_name, index)
+      when /^\$/
+        get_global_methods(whole, target_name, index, irb)
       else
         get_var_methods(whole, target_name, index, irb)
       end
@@ -147,6 +65,18 @@ class OpalIrb
         NO_MATCHES_PARAMS
       end
     end
+
+    def self.get_global_methods(whole, target_name, index, irb)
+      debug_puts "get_global_methods(#{whole}, #{target_name}, #{index})"
+      target_name = target_name[1..-1] # strip off leading $
+      name_val_pair = irb.irb_gvars.find { |array| array[0] == target_name }
+      if name_val_pair
+        methods = name_val_pair[1].methods
+        return [whole.size + index, methods]
+      end
+      NO_MATCHES_PARAMS
+    end
+
     def self.get_var_methods(whole, target_name, index, irb)
       name_val_pair = irb.irb_vars.find { |array| array[0] == target_name }
       if name_val_pair
@@ -165,6 +95,7 @@ class OpalIrb
     end
 
     def self.get_matches_for_correct_type(whole, target_name, method_fragment, index, irb)
+      debug_puts("get_matches_for_correct_type(#{whole}, #{target_name}, #{method_fragment}, #{index})")
       case target_name
       when /^[A-Z]/
         get_class_methods_by_fragment(whole, target_name, method_fragment, index)
@@ -176,7 +107,7 @@ class OpalIrb
     end
 
     def self.get_class_methods_by_fragment(whole, target_name, method_fragment, index)
-      debug_puts "get_class_methods whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
+      debug_puts "get_class_methods_by_fragment whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
       begin
         klass = Kernel.const_get(target_name)
         debug_puts "\t#{klass.inspect} #{klass.methods}"
@@ -188,7 +119,8 @@ class OpalIrb
     end
 
     def self.get_global_methods_by_fragment(whole, target_name, method_fragment, index, irb)
-      debug_puts "get_global_methods whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
+      debug_puts "get_global_methods_by_fragment whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
+      target_name = target_name[1..-1] # strip off leading $
       name_val_pair = irb.irb_gvars.find { |array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods.grep /^#{method_fragment}/
@@ -198,7 +130,7 @@ class OpalIrb
     end
 
     def self.get_var_methods_by_fragment(whole, target_name, method_fragment, index, irb)
-      debug_puts "get_var_methods whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
+      debug_puts "get_var_methods_by_fragment whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
       name_val_pair = irb.irb_vars.find { |array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods.grep /^#{method_fragment}/
@@ -233,7 +165,7 @@ class OpalIrb
     end
 
     def self.debug_puts stuff
-      # puts stuff
+      puts(stuff) if $CE_DEBUG  # completion_engine debug
     end
   end
 
