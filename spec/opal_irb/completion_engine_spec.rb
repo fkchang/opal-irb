@@ -90,28 +90,61 @@ describe OpalIrb::CompletionEngine do
   context '#complete' do
     context 'VARIABLE_DOT_COMPLETE' do
       it 'processes global dot' do
-        results = OpalIrb::CompletionEngine.complete('$window.', OpalIrb.new)
-        results.old_prompt.should == '$window.'
-        results.new_prompt_text.should == '$window.'
+        text = '$window.'
+        results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+        results.old_prompt.should == text
+        results.new_prompt_text.should == text
         results.matches.size.should > 5
       end
       it 'processes variable dot' do
         irb = OpalIrb.new
         js = irb.parse('foo_var_bar = "2"')
         `eval(#{js})`
-        results = OpalIrb::CompletionEngine.complete('foo_var_bar.', irb)
-        results.old_prompt.should == 'foo_var_bar.'
-        results.new_prompt_text.should == 'foo_var_bar.'
+        text = 'foo_var_bar.'
+        results = OpalIrb::CompletionEngine.complete(text, irb)
+        results.old_prompt.should == text
+        results.new_prompt_text.should == text
         results.matches.size.should > 5
         results.matches.include?('reverse').should == true
       end
       it 'processes constant dot' do
-        results = OpalIrb::CompletionEngine.complete('STDIN.', OpalIrb.new)
-        results.old_prompt.should == 'STDIN.'
-        results.new_prompt_text.should == 'STDIN.'
+        text = 'STDIN.'
+        results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+        results.old_prompt.should == text
+        results.new_prompt_text.should == text
         results.matches.size.should > 5
         results.matches.include?('write').should == true
       end
+    end
+  end
+
+  context 'METHOD_COMPLETE' do
+    it 'processes global dot' do
+      text = '$LOADED_FEATURES.'
+      results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+      results.old_prompt.should == text
+      results.new_prompt_text.should == text
+      results.matches.size.should > 1
+      results.matches.include?(:size).should == true
+    end
+    it 'processes variable dot' do
+      irb = OpalIrb.new
+      js = irb.parse('foo_var_bar = "2"')
+      `eval(#{js})`
+      text = 'foo_var_bar.st'
+      results = OpalIrb::CompletionEngine.complete(text, irb)
+      results.old_prompt.should == text
+      results.new_prompt_text.should == text
+      results.matches.size.should > 2
+      results.matches.include?('strip!').should == true
+    end
+    it 'processes constant dot' do
+      text = 'STDIN.w'
+      results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+      results.old_prompt.should == text
+      results.new_prompt_text.should == text
+      results.matches.size.should > 3
+      results.matches.include?('warn').should == true
     end
   end
 

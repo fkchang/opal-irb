@@ -41,10 +41,10 @@ class OpalIrb
       index = text =~ VARIABLE_DOT_COMPLETE # broken in 0.7, fixed in 0.7
       whole = $1
       target_name = $2
-      get_object_or_class_methods(whole, target_name, index, irb)
+      get_correct_methods_by_type(whole, target_name, index, irb)
     end
 
-    def self.get_object_or_class_methods(whole, target_name, index, irb)
+    def self.get_correct_methods_by_type(whole, target_name, index, irb)
       case target_name
       when /^[A-Z]/
         get_class_methods(whole, target_name, index)
