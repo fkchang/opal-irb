@@ -115,6 +115,15 @@ describe OpalIrb::CompletionEngine do
         results.matches.size.should > 5
         results.matches.include?('write').should == true
       end
+
+      it 'handles non existing global' do
+        text = '$no_such_global.'
+        results = OpalIrb::CompletionEngine.complete(text, OpalIrb.new)
+        results.old_prompt.should == nil
+        results.new_prompt_text.should == nil
+        results.matches.size.should == 0
+
+      end
     end
   end
 
