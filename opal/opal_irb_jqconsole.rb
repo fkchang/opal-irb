@@ -25,15 +25,15 @@ class Timeout
   end
 end
 
-module Kernel
-  # just like osx's say command, only tested on desktop safari and chrome on osx
-  def say msg
-    %x|
-      var msg = new SpeechSynthesisUtterance(#{msg});
-      window.speechSynthesis.speak(msg);
-    |
-  end
-end
+# module Kernel
+#   # just like osx's say command, only tested on desktop safari and chrome on osx
+#   def say msg
+#     %x|
+#       var msg = new SpeechSynthesisUtterance(#{msg});
+#       window.speechSynthesis.speak(msg);
+#     |
+#   end
+# end
 
 class OpalIrbJqconsole
   def self.console
@@ -338,12 +338,12 @@ EDITOR
                                     end
                                     $document.body << s
                                   end', # js_require "http://www.goodboydigital.com/runpixierun/js/pixi.js"
-                                 # TODO Kernel.alert is now returning undefined in opal, rm when fixed
-                                 # 'def alert stuff
-                                 #    Kernel.alert stuff
-                                 #    nil
-                                 # end',
-
+                                 'def say msg
+                                   %x|
+                                     var msg = new SpeechSynthesisUtterance(#{msg});
+                                     window.speechSynthesis.speak(msg);
+                                   |
+                                 end'
 
                                  ]
   def setup_cmd_line_methods
