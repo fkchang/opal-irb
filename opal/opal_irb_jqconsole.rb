@@ -394,6 +394,14 @@ EDITOR
     end
   end
 
+  def parse_error? check_error
+    # for Chrome errors
+    check_error.backtrace.first =~ /unexpected 'false/ || check_error.backtrace[2] =~ /unexpected 'false/ ||
+      # safari error
+      check_error.message =~/error occurred while compiling/
+  end
+
+
   def write *stuff
     @jqconsole.Write *stuff
   end
