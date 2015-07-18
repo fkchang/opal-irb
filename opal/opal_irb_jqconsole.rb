@@ -372,9 +372,9 @@ EDITOR
       false
     rescue Exception => e
       # make this a global so we can inspect this
-      $check_error = e.backtrace
+      $check_error = e
       # 1st attempt to return on bad code vs incomplete code
-      if $check_error.first =~ /unexpected 'false/
+      if parse_error? $check_error
         # TODO when rescue is fixed to return last evaluated value remove returns
         return 0
       else
