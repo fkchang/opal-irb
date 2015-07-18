@@ -25,6 +25,16 @@ class Timeout
   end
 end
 
+module Kernel
+  # just like osx's say command, only tested on desktop safari and chrome on osx
+  def say msg
+    %x|
+      var msg = new SpeechSynthesisUtterance(#{msg});
+      window.speechSynthesis.speak(msg);
+    |
+  end
+end
+
 class OpalIrbJqconsole
   def self.console
     @console
