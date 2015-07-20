@@ -235,7 +235,7 @@ EDITOR
     var range = options && options.range || RANGE;
     var cur = editor.getCursor(), curLine = editor.getLine(cur.line);
     var end = cur.ch, start = end;
-debugger
+// debugger
 while (start && word.test(curLine.charAt(start - 1))) --start;
   var curWord = start != end && curLine.slice(start, end);
   var token = editor.getTokenAt(editor.getCursor()).string;
