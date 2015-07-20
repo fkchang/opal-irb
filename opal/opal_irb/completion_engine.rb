@@ -15,28 +15,58 @@ class OpalIrb
     # @returns [CompletionResults]
 
     def self.complete(text, irb)
-      index, matches = case text
-      when GLOBAL
-        debug_puts 'GLOBAL'
-        global_complete(text, irb)
-      when VARIABLE_DOT_COMPLETE
-        debug_puts 'VARIABLE_DOT_COMPLETE'
-        variable_dot_complete(text, irb)
-      when METHOD_COMPLETE
-        debug_puts 'METHOD_COMPLETE'
-        method_complete(text, irb)
-      when CONSTANT
-        debug_puts 'CONSTANT'
-        constant_complete(text, irb)
-      when METHOD_OR_VARIABLE
-        debug_puts 'METHOD_OR_VARIABLE'
-        method_or_variable_complete(text, irb)
-      else
-        NO_MATCHES_PARAMS
-      end
+      index, matches = get_matches(text, irb)
       CompletionResults.new(text, index, matches)
     end
+    # Editor complete, intended to be called from CodeMirror or other
+    # javascript editor that does not have the ability to see into
+    # Opal objects w/o some work.  To use this, you must first
+    # set_irb() the irb you will be using
+    # @params text [String] the text to try to find completions for
+    # @returns [String[]] the matches
+    def self.editor_complete(text)
+      debug_puts "Getting matches for #{text}"
+      index, matches = get_matches(text, get_irb)
+      debug_puts "\tMatches  = #{matches.inspect}"
+      matches || []
+    end
 
+    # For use with CodeMirror autocompletion, or anything that needs persistent irb
+    # of interacts through javascript
+    # @param irb [OpalIrb] the irb engine to use, typically that of an OpalIrb condole
+    def self.set_irb irb
+      @irb = irb
+    end
+    # Called by self.editor_complete to get the irb that is set
+    def self.get_irb
+      if @irb
+        @irb
+      else
+        raise "You must set irb to use this funtion"
+      end
+    end
+    def self.get_matches(text, irb)
+      index, matches = case text
+                       when GLOBAL
+                         debug_puts 'GLOBAL'
+                         global_complete(text, irb)
+                       when VARIABLE_DOT_COMPLETE
+                         debug_puts 'VARIABLE_DOT_COMPLETE'
+                         variable_dot_complete(text, irb)
+                       when METHOD_COMPLETE
+                         debug_puts 'METHOD_COMPLETE'
+                         method_complete(text, irb)
+                       when CONSTANT
+                         debug_puts 'CONSTANT'
+                         constant_complete(text, irb)
+                       when METHOD_OR_VARIABLE
+                         debug_puts 'METHOD_OR_VARIABLE'
+                         method_or_variable_complete(text, irb)
+                       else
+                         NO_MATCHES_PARAMS
+                       end
+      [index, matches]
+    end
     def self.variable_dot_complete(text, irb)
       index = text =~ VARIABLE_DOT_COMPLETE # broken in 0.7, fixed in 0.7
       whole = $1

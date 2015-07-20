@@ -225,12 +225,43 @@ EDITOR
           setTimeout(function(){editor.refresh();}, 20);
       }
       |
+    # setup opal auto complete
+    OpalIrb::CompletionEngine.set_irb @irb
+    %x*
+  var WORD = /[\w$]+/, RANGE = 500;
+                CodeMirror.commands.autocomplete = function(cm) {
+                    CodeMirror.showHint(cm, function(editor, options) {
+    var word = options && options.word || WORD;
+    var range = options && options.range || RANGE;
+    var cur = editor.getCursor(), curLine = editor.getLine(cur.line);
+    var end = cur.ch, start = end;
+debugger
+while (start && word.test(curLine.charAt(start - 1))) --start;
+  var curWord = start != end && curLine.slice(start, end);
+  var token = editor.getTokenAt(editor.getCursor()).string;
+  console.orig_log('The receiver is');
+
+  if( token.string === '.') {
+    var receiver = editor.getTokenAt(CodeMirror.Pos(cur.line, start-1)).string;
+    console.orig_log(receiver);
+    // token = receiver + ".";
+  }
+  var anyList = CodeMirror.hint.anyword(editor, options);
+  var list =  Opal.OpalIrb.CompletionEngine.$editor_complete(token);
+  list = list.concat(anyList.list);
+  return {list: list, from: CodeMirror.Pos(cur.line, start), to: CodeMirror.Pos(cur.line, end)};
+}
+);
+                };
+
+   *
     @editor = %x|
       editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
               {mode: "ruby",
                   lineNumbers: true,
                   matchBrackets: true,
                   extraKeys: {
+                        "Ctrl-Space": "autocomplete",
                         "Ctrl-Enter": function(cm) { $(".ui-dialog-buttonset").find("button:eq(0)").trigger("click"); } // submit on ctrl-enter
                   },
                   keyMap: "emacs",
@@ -467,7 +498,7 @@ HELP
       $last_exception = e
       # alert e.backtrace.join("\n")
       if e.backtrace
-        output = "FOR:\n#{$irb_last_compiled}\n============\n" + e.backtrace.join("\n")
+        output = "FOR:\n#{$irb_last_compiled}\n============\n" + "#{e.message}\n" + e.backtrace.join("\n")
         # TODO remove return when bug is fixed in rescue block
         return output
         # FF doesn't have Error.toString() as the first line of Error.stack

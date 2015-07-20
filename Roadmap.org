@@ -12,6 +12,6 @@
 
 * Other
 - [ ] . tab completion
-- [ ] irb var tab completion
-- [ ] constant tab completion
-- [ ] free standing method completion
+- [X] irb var tab completion
+- [X] constant tab completion
+- [X] free standing method completion

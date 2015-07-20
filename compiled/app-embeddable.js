@@ -27028,7 +27028,7 @@ Opal.modules["opal_irb/completion_engine"] = function(Opal) {
   Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $gvars = Opal.gvars, $klass = Opal.klass, $range = Opal.range;
 
-  Opal.add_stubs(['$===', '$debug_puts', '$global_complete', '$variable_dot_complete', '$method_complete', '$constant_complete', '$method_or_variable_complete', '$new', '$=~', '$get_correct_methods_by_type', '$get_class_methods', '$get_global_methods', '$get_var_methods', '$const_get', '$inspect', '$methods', '$+', '$size', '$puts', '$[]', '$find', '$==', '$irb_gvars', '$irb_vars', '$get_matches_for_correct_type', '$get_class_methods_by_fragment', '$get_global_methods_by_fragment', '$get_var_methods_by_fragment', '$-', '$grep', '$constants', '$irb_varnames', '$irb_gvarnames', '$map']);
+  Opal.add_stubs(['$get_matches', '$new', '$debug_puts', '$get_irb', '$inspect', '$raise', '$===', '$global_complete', '$variable_dot_complete', '$method_complete', '$constant_complete', '$method_or_variable_complete', '$=~', '$get_correct_methods_by_type', '$get_class_methods', '$get_global_methods', '$get_var_methods', '$const_get', '$methods', '$+', '$size', '$puts', '$[]', '$find', '$==', '$irb_gvars', '$irb_vars', '$get_matches_for_correct_type', '$get_class_methods_by_fragment', '$get_global_methods_by_fragment', '$get_var_methods_by_fragment', '$-', '$grep', '$constants', '$irb_varnames', '$irb_gvarnames', '$map']);
   $gvars.CE_DEBUG = false;
   self.$require("opal_irb/completion_engine"+ '/../' + "completion_results");
   return (function($base, $super) {
@@ -27056,6 +27056,39 @@ Opal.modules["opal_irb/completion_engine"] = function(Opal) {
       Opal.cdecl($scope, 'NO_MATCHES_PARAMS', [nil, []]);
 
       Opal.defs(self, '$complete', function(text, irb) {
+        var $a, self = this, index = nil, matches = nil;
+
+        $a = Opal.to_ary(self.$get_matches(text, irb)), index = ($a[0] == null ? nil : $a[0]), matches = ($a[1] == null ? nil : $a[1]);
+        return $scope.get('CompletionResults').$new(text, index, matches);
+      });
+
+      Opal.defs(self, '$editor_complete', function(text) {
+        var $a, self = this, index = nil, matches = nil;
+
+        self.$debug_puts("Getting matches for " + (text));
+        $a = Opal.to_ary(self.$get_matches(text, self.$get_irb())), index = ($a[0] == null ? nil : $a[0]), matches = ($a[1] == null ? nil : $a[1]);
+        self.$debug_puts("\tMatches  = " + (matches.$inspect()));
+        return ((($a = matches) !== false && $a !== nil) ? $a : []);
+      });
+
+      Opal.defs(self, '$set_irb', function(irb) {
+        var self = this;
+
+        return self.irb = irb;
+      });
+
+      Opal.defs(self, '$get_irb', function() {
+        var $a, self = this;
+        if (self.irb == null) self.irb = nil;
+
+        if ((($a = self.irb) !== nil && (!$a.$$is_boolean || $a == true))) {
+          return self.irb
+          } else {
+          return self.$raise("You must set irb to use this funtion")
+        };
+      });
+
+      Opal.defs(self, '$get_matches', function(text, irb) {
         var $a, self = this, $case = nil, index = nil, matches = nil;
 
         $a = Opal.to_ary((function() {$case = text;if ($scope.get('GLOBAL')['$===']($case)) {self.$debug_puts("GLOBAL");
@@ -27064,7 +27097,7 @@ Opal.modules["opal_irb/completion_engine"] = function(Opal) {
         return self.$method_complete(text, irb);}else if ($scope.get('CONSTANT')['$===']($case)) {self.$debug_puts("CONSTANT");
         return self.$constant_complete(text, irb);}else if ($scope.get('METHOD_OR_VARIABLE')['$===']($case)) {self.$debug_puts("METHOD_OR_VARIABLE");
         return self.$method_or_variable_complete(text, irb);}else {return $scope.get('NO_MATCHES_PARAMS')}})()), index = ($a[0] == null ? nil : $a[0]), matches = ($a[1] == null ? nil : $a[1]);
-        return $scope.get('CompletionResults').$new(text, index, matches);
+        return [index, matches];
       });
 
       Opal.defs(self, '$variable_dot_complete', function(text, irb) {
@@ -28899,7 +28932,7 @@ Opal.modules["opal_irb_jqconsole"] = function(Opal) {
   Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars, $range = Opal.range;
 
-  Opal.add_stubs(['$require', '$irb_link_for', '$console', '$append', '$find', '$new', '$on', '$hide', '$id', '$create', '$create_key_filter', '$visible?', '$panel', '$hide_panel', '$show_panel', '$puts', '$ctrl_key', '$meta_key', '$shift_key', '$key_code', '$all?', '$send', '$[]', '$==', '$ord', '$upcase', '$alert', '$show', '$focus', '$Focus', '$attr_reader', '$setup_cmd_line_methods', '$setup_jqconsole', '$create_multiline_editor', '$redirect_console_dot_log', '$handler', '$setup_code_link_handling', '$grab_link_code', '$print_and_process_code', '$class', '$create_link_for_code', '$unescaped_write', '$Native', '$+', '$origin', '$pathname', '$hash', '$!', '$-', '$GetHistory', '$jqconsole', '$create_and_display_code_link', '$GetPromptText', '$add_to_redirect', '$lambda', '$write', '$<<', '$setValue', '$call', '$SetPromptText', '$_HandleEnter', '$sub', '$getValue', '$complete', '$set_old_prompt', '$display_matches', '$update_prompt', '$insert_tab?', '$expose', '$RegisterTabHandler', '$tab_complete', '$RegisterShortcut', '$open_multiline_dialog', '$AbortPrompt', '$MoveToStart', '$MoveToEnd', '$_MoveLeft', '$_MoveRight', '$_HistoryNext', '$_HistoryPrevious', '$_Delete', '$Kill', '$irb_link_for_current_line', '$RegisterAltShortcut', '$each', '$parse', '$each_with_index', '$Write', '$join', '$process', '$message', '$Prompt', '$check_is_incomplete', '$backtrace', '$=~', '$first', '$log', '$inspect']);
+  Opal.add_stubs(['$require', '$irb_link_for', '$console', '$append', '$find', '$new', '$on', '$hide', '$id', '$create', '$create_key_filter', '$visible?', '$panel', '$hide_panel', '$show_panel', '$puts', '$ctrl_key', '$meta_key', '$shift_key', '$key_code', '$all?', '$send', '$[]', '$==', '$ord', '$upcase', '$alert', '$show', '$focus', '$Focus', '$attr_reader', '$setup_cmd_line_methods', '$setup_jqconsole', '$create_multiline_editor', '$redirect_console_dot_log', '$handler', '$setup_code_link_handling', '$grab_link_code', '$print_and_process_code', '$class', '$create_link_for_code', '$unescaped_write', '$Native', '$+', '$origin', '$pathname', '$hash', '$!', '$-', '$GetHistory', '$jqconsole', '$create_and_display_code_link', '$GetPromptText', '$add_to_redirect', '$lambda', '$write', '$<<', '$set_irb', '$setValue', '$call', '$SetPromptText', '$_HandleEnter', '$sub', '$getValue', '$complete', '$set_old_prompt', '$display_matches', '$update_prompt', '$insert_tab?', '$expose', '$RegisterTabHandler', '$tab_complete', '$RegisterShortcut', '$open_multiline_dialog', '$AbortPrompt', '$MoveToStart', '$MoveToEnd', '$_MoveLeft', '$_MoveRight', '$_HistoryNext', '$_HistoryPrevious', '$_Delete', '$Kill', '$irb_link_for_current_line', '$RegisterAltShortcut', '$each', '$parse', '$each_with_index', '$Write', '$join', '$process', '$message', '$Prompt', '$check_is_incomplete', '$parse_error?', '$=~', '$first', '$backtrace', '$log', '$inspect']);
   self.$require("opal");
   self.$require("opal-jquery");
   self.$require("opal_irb_log_redirector");
@@ -28949,7 +28982,7 @@ Opal.modules["opal_irb_jqconsole"] = function(Opal) {
 
     var def = self.$$proto, $scope = self.$$scope;
 
-    def.jqconsole = def.code_link_handler = def.editor = def.open_editor_dialog_function = def.irb = nil;
+    def.jqconsole = def.code_link_handler = def.irb = def.editor = def.open_editor_dialog_function = nil;
     Opal.defs(self, '$console', function() {
       var self = this;
       if (self.console == null) self.console = nil;
@@ -29192,12 +29225,42 @@ if (args == null) args = nil;
           setTimeout(function(){editor.refresh();}, 20);
       }
       ;
+      (($scope.get('OpalIrb')).$$scope.get('CompletionEngine')).$set_irb(self.irb);
+      
+  var WORD = /[\w$]+/, RANGE = 500;
+                CodeMirror.commands.autocomplete = function(cm) {
+                    CodeMirror.showHint(cm, function(editor, options) {
+    var word = options && options.word || WORD;
+    var range = options && options.range || RANGE;
+    var cur = editor.getCursor(), curLine = editor.getLine(cur.line);
+    var end = cur.ch, start = end;
+debugger
+while (start && word.test(curLine.charAt(start - 1))) --start;
+  var curWord = start != end && curLine.slice(start, end);
+  var token = editor.getTokenAt(editor.getCursor()).string;
+  console.orig_log('The receiver is');
+
+  if( token.string === '.') {
+    var receiver = editor.getTokenAt(CodeMirror.Pos(cur.line, start-1)).string;
+    console.orig_log(receiver);
+    // token = receiver + ".";
+  }
+  var anyList = CodeMirror.hint.anyword(editor, options);
+  var list =  Opal.OpalIrb.CompletionEngine.$editor_complete(token);
+  list = list.concat(anyList.list);
+  return {list: list, from: CodeMirror.Pos(cur.line, start), to: CodeMirror.Pos(cur.line, end)};
+}
+);
+                };
+
+   
       self.editor = 
       editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
               {mode: "ruby",
                   lineNumbers: true,
                   matchBrackets: true,
                   extraKeys: {
+                        "Ctrl-Space": "autocomplete",
                         "Ctrl-Enter": function(cm) { $(".ui-dialog-buttonset").find("button:eq(0)").trigger("click"); } // submit on ctrl-enter
                   },
                   keyMap: "emacs",
@@ -29320,7 +29383,7 @@ if (text == null) text = nil;
         return self.$handler();}, TMP_23.$$s = self, TMP_23), $a).call($p));
     };
 
-    Opal.cdecl($scope, 'CMD_LINE_METHOD_DEFINITIONS', ["def help\n                                   OpalIrbJqconsole.help\n                                   nil\n                                 end", "def history\n                                   OpalIrbJqconsole.history\n                                   nil\n                                 end", "def js_require(js_file)\n                                    s = DOM do\n                                      script({ src: js_file})\n                                    end\n                                    $document.body << s\n                                  end"]);
+    Opal.cdecl($scope, 'CMD_LINE_METHOD_DEFINITIONS', ["def help\n                                   OpalIrbJqconsole.help\n                                   nil\n                                 end", "def history\n                                   OpalIrbJqconsole.history\n                                   nil\n                                 end", "def js_require(js_file)\n                                    s = DOM do\n                                      script({ src: js_file})\n                                    end\n                                    $document.body << s\n                                  end", "def say msg\n                                   %x|\n                                     var msg = new SpeechSynthesisUtterance(\#{msg});\n                                     window.speechSynthesis.speak(msg);\n                                   |\n                                 end"]);
 
     def.$setup_cmd_line_methods = function() {
       var $a, $b, TMP_24, self = this;
@@ -29369,14 +29432,20 @@ if (c == null) c = nil;
       self.irb.$parse(cmd);
         return false;
       } catch ($err) {if (Opal.rescue($err, [$scope.get('Exception')])) {e = $err;
-        $gvars.check_error = e.$backtrace();
-        if ((($a = $gvars.check_error.$first()['$=~'](/unexpected 'false/)) !== nil && (!$a.$$is_boolean || $a == true))) {
+        $gvars.check_error = e;
+        if ((($a = self['$parse_error?']($gvars.check_error)) !== nil && (!$a.$$is_boolean || $a == true))) {
           return 0
           } else {
           return false
         };
         }else { throw $err; }
       };
+    };
+
+    def['$parse_error?'] = function(check_error) {
+      var $a, $b, self = this;
+
+      return ((($a = ((($b = check_error.$backtrace().$first()['$=~'](/unexpected 'false/)) !== false && $b !== nil) ? $b : check_error.$backtrace()['$[]'](2)['$=~'](/unexpected 'false/))) !== false && $a !== nil) ? $a : check_error.$message()['$=~'](/error occurred while compiling/));
     };
 
     def.$write = function(stuff) {
@@ -29444,7 +29513,7 @@ if (c == null) c = nil;
       } catch ($err) {if (Opal.rescue($err, [$scope.get('Exception')])) {e = $err;
         $gvars.last_exception = e;
         if ((($a = e.$backtrace()) !== nil && (!$a.$$is_boolean || $a == true))) {
-          output = ((("FOR:\n") + ($gvars.irb_last_compiled)) + "\n============\n")['$+'](e.$backtrace().$join("\n"));
+          output = ((("FOR:\n") + ($gvars.irb_last_compiled)) + "\n============\n")['$+']("" + (e.$message()) + "\n")['$+'](e.$backtrace().$join("\n"));
           return output;
           } else {
           output = e.toString();
@@ -39504,3 +39573,6 @@ Opal.modules["browser"] = function(Opal) {
   $scope.get('OpalIrbJqconsole').$create_bottom_panel();
     return $scope.get('OpalIrbJqconsole').$add_open_panel_behavior("show-irb");}, TMP_1.$$s = self, TMP_1), $a).call($b);
 })(Opal);
+
+//# sourceMappingURL=app-embeddable.map
+;
