@@ -26926,6 +26926,28 @@ Opal.modules["opal_irb"] = function(Opal) {
   self.$require("opal");
   self.$require("opal/compiler");
   self.$require("object_extensions");
+  self.$require("opal-parser");
+  Opal.Object.$$proto.$require_js = function(url) {
+    var self = this;
+
+    
+    var script = document.createElement( 'script' );
+    script.type = 'text/javascript';
+    script.src = url;
+    document.body.appendChild(script);
+  
+  };
+  Opal.Object.$$proto.$require_js_sync = function(url) {
+    var self = this;
+
+    
+     var r = new XMLHttpRequest();
+     r.open("GET", url, false);
+     r.send('');
+     window.eval(r.responseText)
+  
+    return nil;
+  };
   return (function($base, $super) {
     function $OpalIrb(){};
     var self = $OpalIrb = $klass($base, $super, 'OpalIrb', $OpalIrb);

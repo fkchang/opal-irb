@@ -37011,6 +37011,28 @@ Opal.modules["opal_irb"] = function(Opal) {
   self.$require("opal");
   self.$require("opal/compiler");
   self.$require("object_extensions");
+  self.$require("opal-parser");
+  Opal.Object.$$proto.$require_js = function(url) {
+    var self = this;
+
+    
+    var script = document.createElement( 'script' );
+    script.type = 'text/javascript';
+    script.src = url;
+    document.body.appendChild(script);
+  
+  };
+  Opal.Object.$$proto.$require_js_sync = function(url) {
+    var self = this;
+
+    
+     var r = new XMLHttpRequest();
+     r.open("GET", url, false);
+     r.send('');
+     window.eval(r.responseText)
+  
+    return nil;
+  };
   return (function($base, $super) {
     function $OpalIrb(){};
     var self = $OpalIrb = $klass($base, $super, 'OpalIrb', $OpalIrb);
@@ -39138,7 +39160,7 @@ Opal.modules["opal_irb_jqconsole"] = function(Opal) {
   Opal.dynamic_require_severity = "warning";
   var self = Opal.top, $scope = Opal, nil = Opal.nil, $breaker = Opal.breaker, $slice = Opal.slice, $klass = Opal.klass, $gvars = Opal.gvars, $range = Opal.range;
 
-  Opal.add_stubs(['$require', '$irb_link_for', '$console', '$append', '$find', '$new', '$on', '$hide', '$id', '$create', '$create_key_filter', '$visible?', '$panel', '$hide_panel', '$show_panel', '$puts', '$ctrl_key', '$meta_key', '$shift_key', '$key_code', '$all?', '$send', '$[]', '$==', '$ord', '$upcase', '$alert', '$show', '$focus', '$Focus', '$attr_reader', '$setup_cmd_line_methods', '$setup_jqconsole', '$create_multiline_editor', '$redirect_console_dot_log', '$handler', '$setup_code_link_handling', '$grab_link_code', '$print_and_process_code', '$class', '$create_link_for_code', '$unescaped_write', '$Native', '$+', '$origin', '$pathname', '$hash', '$!', '$-', '$GetHistory', '$jqconsole', '$create_and_display_code_link', '$GetPromptText', '$add_to_redirect', '$lambda', '$write', '$<<', '$set_irb', '$setValue', '$call', '$SetPromptText', '$_HandleEnter', '$sub', '$getValue', '$complete', '$set_old_prompt', '$display_matches', '$update_prompt', '$insert_tab?', '$expose', '$RegisterTabHandler', '$tab_complete', '$RegisterShortcut', '$open_multiline_dialog', '$AbortPrompt', '$MoveToStart', '$MoveToEnd', '$_MoveLeft', '$_MoveRight', '$_HistoryNext', '$_HistoryPrevious', '$_Delete', '$Kill', '$irb_link_for_current_line', '$RegisterAltShortcut', '$each', '$parse', '$each_with_index', '$Write', '$join', '$process', '$message', '$Prompt', '$check_is_incomplete', '$parse_error?', '$=~', '$first', '$backtrace', '$log', '$inspect']);
+  Opal.add_stubs(['$require', '$irb_link_for', '$console', '$new', '$append', '$find', '$on', '$hide', '$id', '$create', '$create_key_filter', '$visible?', '$panel', '$hide_panel', '$show_panel', '$puts', '$ctrl_key', '$meta_key', '$shift_key', '$key_code', '$all?', '$send', '$[]', '$==', '$ord', '$upcase', '$alert', '$show', '$focus', '$Focus', '$attr_reader', '$setup_cmd_line_methods', '$setup_jqconsole', '$create_multiline_editor', '$redirect_console_dot_log', '$handler', '$setup_code_link_handling', '$grab_link_code', '$print_and_process_code', '$class', '$create_link_for_code', '$unescaped_write', '$Native', '$+', '$origin', '$pathname', '$hash', '$!', '$-', '$GetHistory', '$jqconsole', '$create_and_display_code_link', '$GetPromptText', '$add_to_redirect', '$lambda', '$write', '$<<', '$set_irb', '$setValue', '$call', '$SetPromptText', '$_HandleEnter', '$sub', '$getValue', '$complete', '$set_old_prompt', '$display_matches', '$update_prompt', '$insert_tab?', '$expose', '$RegisterTabHandler', '$tab_complete', '$RegisterShortcut', '$open_multiline_dialog', '$AbortPrompt', '$MoveToStart', '$MoveToEnd', '$_MoveLeft', '$_MoveRight', '$_HistoryNext', '$_HistoryPrevious', '$_Delete', '$Kill', '$irb_link_for_current_line', '$RegisterAltShortcut', '$each', '$parse', '$each_with_index', '$Write', '$join', '$process', '$message', '$Prompt', '$check_is_incomplete', '$parse_error?', '$=~', '$first', '$backtrace', '$log', '$inspect']);
   self.$require("opal");
   self.$require("opal-jquery");
   self.$require("opal_irb_log_redirector");
@@ -39153,11 +39175,6 @@ Opal.modules["opal_irb_jqconsole"] = function(Opal) {
       history_num = nil
     }
     return $scope.get('OpalIrbJqconsole').$console().$irb_link_for(history_num);
-  };
-  Opal.Object.$$proto.$require_js = function(js_filename) {
-    var self = this;
-
-    return $scope.get('Element').$find("head").$append("<script src='" + (js_filename) + "' type='text/javascript'></script>");
   };
   (function($base, $super) {
     function $Timeout(){};
@@ -39440,7 +39457,7 @@ if (args == null) args = nil;
     var range = options && options.range || RANGE;
     var cur = editor.getCursor(), curLine = editor.getLine(cur.line);
     var end = cur.ch, start = end;
-debugger
+// debugger
 while (start && word.test(curLine.charAt(start - 1))) --start;
   var curWord = start != end && curLine.slice(start, end);
   var token = editor.getTokenAt(editor.getCursor()).string;
@@ -39748,6 +39765,3 @@ if (c == null) c = nil;
 
   return $scope.get('OpalIrbJqconsole').$create("#console")}, TMP_1.$$s = self, TMP_1), $a).call($b);
 })(Opal);
-
-//# sourceMappingURL=app-jqconsole.map
-;
