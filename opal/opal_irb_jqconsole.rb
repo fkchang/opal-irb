@@ -11,8 +11,22 @@ def irb_link_for history_num=nil
   OpalIrbJqconsole.console.irb_link_for history_num
 end
 
+# 'require' a js_filename over the internet, asynchronously, so you'll
+# have to delay before using. Should probably remove opal-jquery
+# dependency and move to opal_irb,
 def require_js(js_filename)
   Element.find("head").append("<script src='#{js_filename}' type='text/javascript'></script>")
+end
+
+# 'require' a js_filename over the internet, synchronously, so you'll
+def require_js_sync(url)
+  %x|
+     var r = new XMLHttpRequest();
+     r.open("GET", url, false);
+     r.send('');
+     window.eval(r.responseText)
+  |
+  nil
 end
 
 class Timeout

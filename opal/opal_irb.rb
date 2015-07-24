@@ -1,6 +1,7 @@
 require 'opal'
 require 'opal/compiler'
 require 'object_extensions'
+require 'opal-parser'           # so I can have require_remote
 
 class OpalIrb
   def irb_vars
