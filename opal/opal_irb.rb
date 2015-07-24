@@ -3,6 +3,32 @@ require 'opal/compiler'
 require 'object_extensions'
 require 'opal-parser'           # so I can have require_remote
 
+# 'require' a javascript filename over the internet, asynchronously,
+# so you'll have to delay before using.  Should be fine if typed by hand
+# but if scripted add delay
+def require_js(url)
+  # used to use this, but don't want to depend on opal-jquery
+  # Element.find("head").append("<script src='#{js_filename}' type='text/javascript'></script>")
+  %x|
+    var script = document.createElement( 'script' );
+    script.type = 'text/javascript';
+    script.src = url;
+    document.body.appendChild(script);
+  |
+end
+
+# 'require' a javascrit filename over the internet, synchronously.
+# Chrome complains that this is deprecated, so it might go away
+def require_js_sync(url)
+  %x|
+     var r = new XMLHttpRequest();
+     r.open("GET", url, false);
+     r.send('');
+     window.eval(r.responseText)
+  |
+  nil
+end
+
 class OpalIrb
   def irb_vars
     %x|irbVars = [];
