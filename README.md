@@ -12,8 +12,9 @@ Embedded example http://fkchang.github.io/opal-irb/index-embeddable.html
 
 Original https://github.com/larryng/coffeescript-repl based port http://fkchang.github.io/opal-irb/index-homebrew.html
 
-Features
---------
+
+Instructional Media
+-------------------
 
 Videos:
 * Overview, no sound http://www.youtube.com/watch?v=6hUwN5BdSHo
@@ -21,6 +22,10 @@ Videos:
 
 Blogposts:
 * Thorough overview of features including embedded iframe examples of such http://funkworks.blogspot.com/2015/08/an-overview-of-opal-irbs-features.html
+
+
+Features
+--------
 
 * Opal irb in your browser
 * Command history - up/down arrows, ctrl-n/ctrl-p
