@@ -19,6 +19,9 @@ Videos:
 * Overview, no sound http://www.youtube.com/watch?v=6hUwN5BdSHo
 * Demo of 1st cut of tab completion  https://youtu.be/mQTulgBm5Nk
 
+Blogposts:
+* Thorough overview of features including embedded iframe examples of such http://funkworks.blogspot.com/2015/08/an-overview-of-opal-irbs-features.html
+
 * Opal irb in your browser
 * Command history - up/down arrows, ctrl-n/ctrl-p
 * Multiline support - ctrl-m to enter editor, ctrl-Enter to submit code
