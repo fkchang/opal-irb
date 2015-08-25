@@ -1,0 +1,677 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Overview of Opal-IRB features</title>
+<meta name="author" content="(Forrest Chang)"/>
+
+<link rel="stylesheet" href="http://cdn.jsdelivr.net/reveal.js/3.0.0/css/reveal.css"/>
+<link rel="stylesheet" href="http://cdn.jsdelivr.net/reveal.js/3.0.0/css/theme/moon.css" id="theme"/>
+
+<!-- If the query includes 'print-pdf', include the PDF print sheet -->
+<script>
+    if( window.location.search.match( /print-pdf/gi ) ) {
+        var link = document.createElement( 'link' );
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = 'http://cdn.jsdelivr.net/reveal.js/3.0.0/css/print/pdf.css';
+        document.getElementsByTagName( 'head' )[0].appendChild( link );
+    }
+</script>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+<section id="sec-title-slide">
+<h1>Overview of Opal-IRB features</h1>
+<h2>Forrest Chang</h2>
+<h2><a href="mailto:fkchang2000@yahoo.com">fkchang2000@yahoo.com</a></h2>
+<h2></h2>
+</section>
+<section>
+<section id="slide-sec-1">
+<h2 id="sec-1">Reason for the talk</h2>
+<ul target="&quot;_blank&quot;">
+<li class="fragment roll-in"><a href="https://github.com/fkchang/opal-irb/blob/master/README.md">opal-irb</a> has many features</li>
+<li class="fragment roll-in">Most don't know about them</li>
+<li class="fragment roll-in">Hence this talk</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-sec-2">
+<h2 id="sec-2">What is opal-irb?</h2>
+<ul>
+<li class="fragment roll-in"><a href="https://github.com/fkchang/opal-irb">https://github.com/fkchang/opal-irb</a></li>
+<li class="fragment roll-in">An in browser REPL (read eval print loop)</li>
+<li class="fragment roll-in">Aims to be the opal equivalent of Ruby's irb (interactive ruby), and pry</li>
+<li class="fragment roll-in">A tool in which you can play with Ruby any time you have access to a browser</li>
+
+</ul>
+
+
+</section>
+</section>
+<section>
+<section id="slide-sec-3">
+<h2 id="sec-3">3 Sections</h2>
+<ol>
+<li class="fragment roll-in">What opal-irb has in common with irb</li>
+<li class="fragment roll-in">How opal-irb differs from irb</li>
+<li class="fragment roll-in">Features unique to opal-irb</li>
+
+</ol>
+
+</section>
+</section>
+<section>
+<section id="slide-sec-4">
+<h2 id="sec-4">1) In Common with irb</h2>
+<div class="outline-text-2" id="text-4">
+</div></section>
+<section id="slide-sec-4-1">
+<h3 id="sec-4-1">Terminal Emulation (of sorts)</h3>
+<ul>
+<li class="fragment roll-in">irb - terminal formatting</li>
+<li class="fragment roll-in">opal-irb, via a jqconsole fork, supports some ANSI formatting code</li>
+
+</ul>
+
+<span class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)"><p>
+Example
+</p></span>
+<div class="org-src-container">
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)"><span style="color: #DCDCCC; font-weight: bold;">puts</span> <span style="color: #CC9393;">"\033[31mRed Text"</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-sec-4-1-1">
+<h4 id="sec-4-1-1">ANSI colors In browser</h4>
+<iframe width="100%" height="500" src="http://git.io/vmQVY" frameborder="0" allowfullscreen></iframe>
+
+</section>
+<section id="slide-sec-4-2">
+<h3 id="sec-4-2">History up down history</h3>
+<ul>
+<li class="fragment roll-in">Like irb, opal-irb stores a history of previous statements.</li>
+<li class="fragment roll-in">Navigate this history with the up/down arrows</li>
+<li class="fragment roll-in">or use the "GNU readline commands".</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-4-2-1">
+<h4 id="sec-4-2-1">GNU readline commands (emacs subset)</h4>
+<ul>
+<li class="fragment roll-in">A subset of the gnu readline manipulation is supported.</li>
+<li class="fragment roll-in">Will likely add more support over time.</li>
+<li class="fragment roll-in">The currently supported bindings are:</li>
+
+</ul>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+Up/Down Arrow and ctrl-p/ctrl-n: Navigate through history
+ctrl-a:                          Beginning of line
+ctrl-e:                          End of line
+ctrl-b:                          Back 1 character
+ctrl-f:                          Forward 1 character
+ctrl-d:                          Delete 1 character
+ctrl-k:                          Kill to the end of the line
+alt-b:                           Back 1 word
+alt-f:                           Forward 1 word
+alt-d:                           Delete 1 word
+</pre>
+
+</section>
+<section id="slide-sec-4-3">
+<h3 id="sec-4-3">Autocomplete</h3>
+<ul>
+<li class="fragment roll-in">A work-in-progress</li>
+<li class="fragment roll-in">Same tab completion model that irb does.  It looks like this:</li>
+
+</ul>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+opal&gt; S&lt;tab&gt;
+STDERR          STDIN           STDOUT          ScriptError     Set
+SignalException StandardError   StopIteration   String          StringIO
+StringScanner   Struct          Symbol          SyntaxError     SystemCallError
+SystemExit
+</pre>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+opal&gt; ST&lt;tab&gt;
+STDERR STDIN  STDOUT
+</pre>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+opal&gt; STDI&lt;tab&gt;
+</pre>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+opal&gt; STDIN
+</pre>
+
+</section>
+<section id="slide-sec-4-4">
+<h3 id="sec-4-4">Live Autocomplete demo</h3>
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-jq.html" frameborder="0" allowfullscreen></iframe>
+
+
+</section>
+<section id="slide-sec-4-5">
+<h3 id="sec-4-5">Multi Line Input</h3>
+<ul>
+<li class="fragment roll-in">You can type multiple lines until your entry is complete.</li>
+<li class="fragment roll-in">Incomplete lines shown with leading periods:</li>
+
+</ul>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+Welcome to Opal 0.7.1
+type help for assistance
+opal&gt; class Foo
+...   def bar
+...     :bar
+...     end
+...     end
+ =&gt; "bar"
+opal&gt;
+</pre>
+
+
+</section>
+</section>
+<section>
+<section id="slide-sec-5">
+<h2 id="sec-5">2) Different than irb</h2>
+<div class="outline-text-2" id="text-5">
+</div></section>
+<section id="slide-sec-5-1">
+<h3 id="sec-5-1">Last value returned - irb</h3>
+<p>
+In irb the last value returned is stored in _ variable:
+</p>
+
+<pre  class="example">
+2.2.1 :001 &gt; 2 * 3
+ =&gt; 6
+2.2.1 :002 &gt; puts _
+6
+ =&gt; nil
+2.2.1 :003 &gt;
+</pre>
+
+</section>
+<section id="slide-sec-5-2">
+<h3 id="sec-5-2">Opal-irb</h3>
+<ul>
+<li class="fragment roll-in">Last value is stored as $_.</li>
+<li class="fragment roll-in">Departs due to technical reasons</li>
+<li class="fragment roll-in">Would like to make it the same</li>
+
+</ul>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+opal&gt; 2 * 3
+ =&gt; 6
+opal&gt; puts $_
+6
+ =&gt; nil
+opal&gt;
+</pre>
+
+</section>
+<section id="slide-sec-5-3">
+<h3 id="sec-5-3">Help command</h3>
+<div class="outline-text-3" id="text-5-3">
+</div></section>
+<section id="slide-sec-5-3-1">
+<h4 id="sec-5-3-1">irb</h4>
+<p>
+Help in irb allows you to lookup documentation for methods via ri and rdoc docs.
+</p>
+
+<pre  class="example">
+2.0.0-p247 :001 &gt; help
+
+Enter the method name you want to look up.
+You can use tab to autocomplete.
+Enter a blank line to exit.
+
+&gt;&gt;
+</pre>
+
+</section>
+<section id="slide-sec-5-3-2">
+<h4 id="sec-5-3-2">Opal-irb</h4>
+<ul>
+<li class="fragment roll-in">Opal-irb's help shows how to operate opal-irb.</li>
+<li class="fragment roll-in">Help for method lookup to be done in a different fashion.</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-5-3-3">
+<h4 id="sec-5-3-3">Current help command output</h4>
+<pre  class="example">
+opal&gt; help
+help:                            This text
+$_                               last value returned is stored in this global
+history:                         Shows history
+irb_link_for history_num:        Create a link for the code in the history
+ctrl-c:                          Abort prompt
+ctrl-m:                          Pop up multi-line editor
+ctrl-Enter:                      Submit code in multi-line editor
+ctrl-l:                          Creates a link with the code you have on the current line/lines
+
+EDITOR FUNCTIONALITY
+Up/Down Arrow and ctrl-p/ctrl-n: Navigate through history
+ctrl-a:                          Beginning of line
+ctrl-e:                          End of line
+ctrl-b:                          Back 1 character
+ctrl-f:                          Forward 1 character
+ctrl-d:                          Delete 1 character
+ctrl-k:                          Kill to the end of the line
+alt-b:                           Back 1 word
+alt-f:                           Forward 1 word
+alt-d:                           Delete 1 word
+ =&gt; nil
+</pre>
+
+</section>
+</section>
+<section>
+<section id="slide-sec-6">
+<h2 id="sec-6">3) Beyond irb</h2>
+<p>
+There are number of things that opal-irb does that irb does not:
+</p>
+
+
+</section>
+<section id="slide-sec-6-1">
+<h3 id="sec-6-1">"Live gist", create a link w/code</h3>
+<ul>
+<li class="fragment roll-in">Create a link with  <code>ctl-l</code> (<code>l</code> for <code>link</code>),</li>
+<li class="fragment roll-in">Link will be displayed above the line in question.</li>
+<li class="fragment roll-in">Scroll through history, hit <code>ctl-l</code> to give history for that line</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-6-1-1">
+<h4 id="sec-6-1-1">Live gist</h4>
+<ul>
+<li class="fragment roll-in">Like a gist, it's shareable bit of code.</li>
+<li class="fragment roll-in">Unlike a gist, it's "live code"</li>
+<li class="fragment roll-in">Live gist can be shared in any real app that has opal-irb embedded.</li>
+<li class="fragment roll-in">Already used this in a production codebase to duplicate a bug condition for a coworker to debug.</li>
+<li class="fragment roll-in">All embedded opal-irb's on this prensentation are all done via "live gist."</li>
+
+</ul>
+<ul>
+<li class="fragment roll-in">For example, the red text printing example eariler</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-6-2">
+<h3 id="sec-6-2">Enhanced History</h3>
+<div class="outline-text-3" id="text-6-2">
+</div></section>
+<section id="slide-sec-6-2-1">
+<h4 id="sec-6-2-1">History Command (like shells have, bash, etc.)</h4>
+<ul>
+<li class="fragment roll-in">You can type <code>history</code> at the prompt to get a listing of your history.</li>
+<li class="fragment roll-in">Shows listing of the code you've typed in including line numbers.</li>
+
+</ul>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+opal&gt; history
+1: class Foo
+  def bar
+    :bar
+  end
+end
+2: f = Foo.new
+3: f.bar
+4: history
+ =&gt; nil
+opal&gt;
+</pre>
+
+</section>
+<section id="slide-sec-6-2-2">
+<h4 id="sec-6-2-2">Link for History</h4>
+<ul>
+<li class="fragment roll-in">Alternate to navigating through history and typing <code>ctrl-l</code></li>
+<li class="fragment roll-in">Use <code>irb_link_for</code> command with the history number</li>
+<li class="fragment roll-in">Different from <code>jsbin</code>, <code>jsfiddle</code>, etc.</li>
+
+</ul>
+<ul>
+<li class="fragment roll-in">Experiment and have several  "live gists"</li>
+<li class="fragment roll-in">Matches repl-based experimentation.</li>
+
+</ul>
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">
+irb_link_for &lt;history_num&gt;
+</pre>
+
+
+</section>
+<section id="slide-sec-6-3">
+<h3 id="sec-6-3">Multiline edit</h3>
+<ul>
+<li class="fragment roll-in">irb's multi-line edit can be cumbersome if you make a mistake</li>
+<li class="fragment roll-in">I've made many</li>
+<li class="fragment roll-in">Need to <code>ctrl-c</code> and start over</li>
+<li class="fragment roll-in">opal-irb has multi-line editor support.</li>
+<li class="fragment roll-in">Invoke with <code>ctrl-m</code> (m for the multi-line editor)</li>
+
+</ul>
+<ul>
+<li class="fragment roll-in">Pops up editor window will pop up with the code on the prompt.</li>
+<li class="fragment roll-in">Has syntax highlighting</li>
+<li class="fragment roll-in">Auto indenting</li>
+<li class="fragment roll-in">WIP autocomplete functionality</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-6-3-1">
+<h4 id="sec-6-3-1">More tips</h4>
+<ul>
+<li class="fragment roll-in">Editor can be used with all code in the history</li>
+<li class="fragment roll-in">Navigate to the desired code in your history and hit <code>ctl-m</code>.</li>
+<li class="fragment roll-in">Run the code by hitting the  run it button, or the <code>ctrl-Enter</code> short cut.</li>
+<li class="fragment roll-in">Close the window with either the close icon, or hit escape.</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-6-3-2">
+<h4 id="sec-6-3-2">Live demo of Multiline edit</h4>
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-jq.html" frameborder="0" allowfullscreen></iframe>
+
+
+</section>
+<section id="slide-sec-6-4">
+<h3 id="sec-6-4">Requiring code at run time</h3>
+<ul>
+<li class="fragment roll-in"><b>opal-irb</b> intended  to be able to explore things at run-time</li>
+<li class="fragment roll-in">2 commands to support this</li>
+
+</ul>
+
+
+</section>
+<section id="slide-sec-6-4-1">
+<h4 id="sec-6-4-1">require_remote</h4>
+<ul>
+<li class="fragment roll-in">Part of <b>opal-parser</b></li>
+<li class="fragment roll-in"><code>require_remote</code> allows you require a remote ruby file.</li>
+
+</ul>
+
+<div class="org-src-container">
+
+<pre  class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)">require_remote &lt;url_to_ruby_file&gt;<span style="color: #CC9393;">"</span>
+</pre>
+</div>
+
+<span class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)"><p>
+As an example, I'll require the raw form of this gist, which prints
+out "require_remote is cool" 10 times.
+</p></span>
+
+<script src="https://gist.github.com/fkchang/c52173c276976a9ccede.js"></script>
+
+</section>
+<section id="slide-sec-6-4-2">
+<h4 id="sec-6-4-2">require_remote In browser</h4>
+<iframe width="100%" height="500" src="http://git.io/vOmoR" frameborder="0" allowfullscreen></iframe>
+
+</section>
+<section id="slide-sec-6-4-3">
+<h4 id="sec-6-4-3">require_js (asynchronous require)</h4>
+<ul>
+<li class="fragment roll-in">require_js requires javascript with a URL.</li>
+<li class="fragment roll-in">Asynchronous</li>
+
+</ul>
+<ul>
+<li class="fragment roll-in">Ok when typed in by hand, is usually fine, the file</li>
+<li class="fragment roll-in">If not hand typed, say via live-gist, you'll need to put some sort of delay.</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-6-4-4">
+<h4 id="sec-6-4-4">A Raphael.js based example.</h4>
+<ul>
+<li class="fragment roll-in">does a <code>require_js</code> of the raphael.js lib</li>
+<li class="fragment roll-in">Adds a reanimate button (via Opal-browser's DOM DSL)</li>
+<li class="fragment roll-in">delays via a <code>Timeout</code> and creates an animation and bind reanimation
+code to the reanimate button</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-6-4-5">
+<h4 id="sec-6-4-5">require_js Raphael.js example</h4>
+<iframe width="100%" height="500" src="http://git.io/vOm1c" frameborder="0" allowfullscreen></iframe>
+
+
+</section>
+<section id="slide-sec-6-4-6">
+<h4 id="sec-6-4-6">require_js_sync (synchronous require)</h4>
+<ul>
+<li class="fragment roll-in">Synchronous calls are atypical in javascript</li>
+<li class="fragment roll-in">Chrome says this is deprecated</li>
+<li class="fragment roll-in">Still might be useful</li>
+
+</ul>
+
+<span class="fragment (roll-in roll-in roll-in roll-in roll-in roll-in)"><p>
+Same raphael example, but without the delay
+</p></span>
+
+</section>
+<section id="slide-sec-6-4-7">
+<h4 id="sec-6-4-7">require_js_sync Raphael.js</h4>
+<iframe width="100%" height="500" src="http://git.io/vOmDg" frameborder="0" allowfullscreen></iframe>
+
+</section>
+<section id="slide-sec-6-5">
+<h3 id="sec-6-5">Say, say, say, what you want&#x2026;</h3>
+<ul>
+<li class="fragment roll-in">I use the <code>say</code> command in OSX a lot</li>
+<li class="fragment roll-in">Lets me know when a long running process is done</li>
+<li class="fragment roll-in">Implemented for opal-irb, may make a standalone gem</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-6-5-1">
+<h4 id="sec-6-5-1">say example in the browser</h4>
+<iframe width="100%" height="500" src="http://git.io/vYveZ" frameborder="0" allowfullscreen></iframe>
+
+
+</section>
+</section>
+<section>
+<section id="slide-sec-7">
+<h2 id="sec-7">Examples</h2>
+<ul>
+<li class="fragment roll-in">There are several example opal-irb pages referenced from the README on <a href="https://github.com/fkchang/opal-irb">https://github.com/fkchang/opal-irb</a>. They are:</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-7-1">
+<h3 id="sec-7-1">Homebrew console example</h3>
+<ul target="&quot;_blank&quot;">
+<li class="fragment roll-in">My 1st attempt, port of a <a href="https://github.com/larryng/coffeescript-repl">coffescript repl</a> with hand written terminal code</li>
+<li class="fragment roll-in">not as full features as the jq-console example</li>
+
+</ul>
+
+</section>
+<section id="slide-sec-7-2">
+<h3 id="sec-7-2">Homebrew console live</h3>
+<p>
+<a href="http://fkchang.github.io/opal-irb/index-homebrew.html" target="&quot;_blank&quot;">http://fkchang.github.io/opal-irb/index-homebrew.html</a>
+</p>
+
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-homebrew.html" frameborder="0" allowfullscreen></iframe>
+
+</section>
+<section id="slide-sec-7-3">
+<h3 id="sec-7-3">jq-console Example</h3>
+<ul>
+<li class="fragment roll-in">This uses (a fork of) <code>jq-console</code>, for improved console support.</li>
+<li class="fragment roll-in">Most development has been on a <code>jq-console</code> based <b>opal-irb</b></li>
+<li class="fragment roll-in">I might revisit a <code>jq-console</code> port  to remove the <b>jquery</b> dependency in <b>opal-irb</b></li>
+
+</ul>
+
+</section>
+<section id="slide-sec-7-4">
+<h3 id="sec-7-4">jq-console Live</h3>
+<p>
+<a href="http://fkchang.github.io/opal-irb/index-jq.html" target="&quot;_blank&quot;">http://fkchang.github.io/opal-irb/index-jq.html</a>
+</p>
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-jq.html" frameborder="0" allowfullscreen></iframe>
+
+
+</section>
+<section id="slide-sec-7-5">
+<h3 id="sec-7-5">Embedded console example</h3>
+<ul>
+<li class="fragment roll-in">How opal-irb might be embedded in an app</li>
+<li class="fragment roll-in">Has some nominal DOM elements for maniuplation</li>
+<li class="fragment roll-in">Button to show opal-irb</li>
+<li class="fragment roll-in"><b>Opal-irb</b> supports 2 ways to display a hidden opal-irb:</li>
+
+</ul>
+<ul>
+<li class="fragment roll-in">hot key</li>
+<li class="fragment roll-in">click event on a DOM element</li>
+
+</ul>
+<ul target="&quot;_blank&quot;">
+<li class="fragment roll-in">Both are documented in the <a href="https://github.com/fkchang/opal-irb/blob/master/README.md">README</a></li>
+
+</ul>
+
+</section>
+<section id="slide-sec-7-6">
+<h3 id="sec-7-6">Embedded Console live</h3>
+<p>
+embedded iframe does not render right in safari, use chrome
+</p>
+<p>
+<a href="http://fkchang.github.io/opal-irb/index-embeddable.html" target="&quot;_blank&quot;">http://fkchang.github.io/opal-irb/index-embeddable.html</a>
+</p>
+<iframe width="100%" height="500" onload='setTimeout(function() {this.height = 550;}, 100);' src="http://fkchang.github.io/opal-irb/index-embeddable.html" frameborder="0" allowfullscreen></iframe>
+
+
+</section>
+<section id="slide-sec-7-7">
+<h3 id="sec-7-7">Embedded in the opal-playground</h3>
+<ul>
+<li class="fragment roll-in"><b>Opal-irb</b> has been embedded into my fork of the <b>opal-playground</b>.</li>
+<li class="fragment roll-in"><b>Opal-irb</b> is available in the RESULTS section by hitting the blue "Show Irb" button.</li>
+<li class="fragment roll-in">Sometimes repl is what you need</li>
+
+</ul>
+</section>
+<section id="slide-sec-7-8">
+<h3 id="sec-7-8">Opal-Playground live</h3>
+<p>
+<a href="http://fkchang.github.io/opal-playground/" target="&quot;_blank&quot;">http://fkchang.github.io/opal-playground/</a>
+</p>
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-playground/" frameborder="0" allowfullscreen></iframe>
+
+</section>
+<section id="slide-sec-7-9">
+<h3 id="sec-7-9">Videos and more</h3>
+<ul target="&quot;_blank&quot;">
+<li class="fragment roll-in">Many features demonstrated in part of <a href="https://www.youtube.com/watch?feature=player_detailpage&v=GH9FAfKG-qY#t=1838">RubyConf 2013 talk "Opal - A New Hope"</a>;</li>
+<li class="fragment roll-in"><a href="//www.youtube.com/watch?v%3DmQTulgBm5Nk">Video</a> for the in progress auto complete in the console.</li>
+
+</ul>
+<ul target="&quot;_blank&quot;">
+<li class="fragment roll-in">Video <a href="https://www.youtube.com/watch?feature=player_detailpage&v=GH9FAfKG-qY#t=2099">preview</a>  of a prototype of opal-inspector 2 years back</li>
+
+</ul>
+<ul>
+<li class="fragment roll-in">Showing features previously only supported in Smalltalk and Lisp machines.</li>
+
+</ul>
+<ul>
+<li class="fragment roll-in">Intend on beefing it up</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-sec-8">
+<h2 id="sec-8">Done for now</h2>
+<p>
+Thanks!
+</p>
+</section>
+</section>
+</div>
+</div>
+
+<script src="http://cdn.jsdelivr.net/reveal.js/3.0.0/lib/js/head.min.js"></script>
+<script src="http://cdn.jsdelivr.net/reveal.js/3.0.0/js/reveal.js"></script>
+
+<script>
+// Full list of configuration options available here:
+// https://github.com/hakimel/reveal.js#configuration
+Reveal.initialize({
+
+controls: true,
+progress: true,
+history: false,
+center: true,
+slideNumber: true,
+rollingLinks: false,
+keyboard: true,
+overview: true,
+
+theme: Reveal.getQueryHash().theme, // available themes are in /css/theme
+transition: Reveal.getQueryHash().transition || 'default', // default/cube/page/concave/zoom/linear/fade/none
+transitionSpeed: 'default',
+multiplex: {
+    secret: '', // null if client
+    id: '', // id, obtained from socket.io server
+    url: '' // Location of socket.io server
+},
+
+// Optional libraries used to extend on reveal.js
+dependencies: [
+ { src: 'http://cdn.jsdelivr.net/reveal.js/3.0.0/lib/js/classList.js', condition: function() { return !document.body.classList; } },
+ { src: 'http://cdn.jsdelivr.net/reveal.js/3.0.0/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+ { src: 'http://cdn.jsdelivr.net/reveal.js/3.0.0/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+ { src: 'http://cdn.jsdelivr.net/reveal.js/3.0.0/plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+ { src: 'http://cdn.jsdelivr.net/reveal.js/3.0.0/plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+ { src: 'http://cdn.jsdelivr.net/reveal.js/3.0.0/plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
+]
+});
+</script>
+</body>
+</html>

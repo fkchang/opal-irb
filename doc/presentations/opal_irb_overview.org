@@ -1,0 +1,447 @@
+#+Title: Overview of Opal-IRB features
+#+Author: Forrest Chang
+#+Email: fkchang2000@yahoo.com
+#+REVEAL_ROOT: http://cdn.jsdelivr.net/reveal.js/3.0.0/
+#+OPTIONS: num:nil toc:nil
+* Reason for the talk
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+ATTR_HTML: :target "_blank"
+- [[https://github.com/fkchang/opal-irb/blob/master/README.md][opal-irb]] has many features
+- Most don't know about them
+- Hence this talk
+
+* What is opal-irb?
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- https://github.com/fkchang/opal-irb
+- An in browser REPL (read eval print loop)
+- Aims to be the opal equivalent of Ruby's irb (interactive ruby), and pry
+- A tool in which you can play with Ruby any time you have access to a browser
+
+
+* 3 Sections
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+1. What opal-irb has in common with irb
+2. How opal-irb differs from irb
+3. Features unique to opal-irb
+
+* 1) In Common with irb
+
+** Terminal Emulation (of sorts)
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- irb - terminal formatting
+- opal-irb, via a jqconsole fork, supports some ANSI formatting code
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+Example
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC ruby
+puts "\033[31mRed Text"
+#+END_SRC
+
+*** ANSI colors In browser
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://git.io/vmQVY" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+** History up down history
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Like irb, opal-irb stores a history of previous statements.
+- Navigate this history with the up/down arrows
+- or use the "GNU readline commands".
+
+*** GNU readline commands (emacs subset)
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- A subset of the gnu readline manipulation is supported.
+- Will likely add more support over time.
+- The currently supported bindings are:
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+Up/Down Arrow and ctrl-p/ctrl-n: Navigate through history
+ctrl-a:                          Beginning of line
+ctrl-e:                          End of line
+ctrl-b:                          Back 1 character
+ctrl-f:                          Forward 1 character
+ctrl-d:                          Delete 1 character
+ctrl-k:                          Kill to the end of the line
+alt-b:                           Back 1 word
+alt-f:                           Forward 1 word
+alt-d:                           Delete 1 word
+#+END_SRC
+
+** Autocomplete
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- A work-in-progress
+- Same tab completion model that irb does.  It looks like this:
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+opal> S<tab>
+STDERR          STDIN           STDOUT          ScriptError     Set
+SignalException StandardError   StopIteration   String          StringIO
+StringScanner   Struct          Symbol          SyntaxError     SystemCallError
+SystemExit
+#+END_SRC
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+opal> ST<tab>
+STDERR STDIN  STDOUT
+#+END_SRC
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+opal> STDI<tab>
+#+END_SRC
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+opal> STDIN
+#+END_SRC
+
+** Live Autocomplete demo
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-jq.html" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+
+** Multi Line Input
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- You can type multiple lines until your entry is complete.
+- Incomplete lines shown with leading periods:
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+Welcome to Opal 0.7.1
+type help for assistance
+opal> class Foo
+...   def bar
+...     :bar
+...     end
+...     end
+ => "bar"
+opal>
+
+#+END_SRC
+
+
+* 2) Different than irb
+
+** Last value returned - irb
+In irb the last value returned is stored in _ variable:
+
+#+BEGIN_SRC
+2.2.1 :001 > 2 * 3
+ => 6
+2.2.1 :002 > puts _
+6
+ => nil
+2.2.1 :003 >
+#+END_SRC
+
+** Opal-irb
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Last value is stored as $_.
+- Departs due to technical reasons
+- Would like to make it the same
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+opal> 2 * 3
+ => 6
+opal> puts $_
+6
+ => nil
+opal>
+#+END_SRC
+
+** Help command
+
+*** irb
+
+Help in irb allows you to lookup documentation for methods via ri and rdoc docs.
+
+#+BEGIN_SRC
+2.0.0-p247 :001 > help
+
+Enter the method name you want to look up.
+You can use tab to autocomplete.
+Enter a blank line to exit.
+
+>>
+#+END_SRC
+
+*** Opal-irb
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Opal-irb's help shows how to operate opal-irb.
+- Help for method lookup to be done in a different fashion.
+
+*** Current help command output
+#+BEGIN_SRC
+opal> help
+help:                            This text
+$_                               last value returned is stored in this global
+history:                         Shows history
+irb_link_for history_num:        Create a link for the code in the history
+ctrl-c:                          Abort prompt
+ctrl-m:                          Pop up multi-line editor
+ctrl-Enter:                      Submit code in multi-line editor
+ctrl-l:                          Creates a link with the code you have on the current line/lines
+
+EDITOR FUNCTIONALITY
+Up/Down Arrow and ctrl-p/ctrl-n: Navigate through history
+ctrl-a:                          Beginning of line
+ctrl-e:                          End of line
+ctrl-b:                          Back 1 character
+ctrl-f:                          Forward 1 character
+ctrl-d:                          Delete 1 character
+ctrl-k:                          Kill to the end of the line
+alt-b:                           Back 1 word
+alt-f:                           Forward 1 word
+alt-d:                           Delete 1 word
+ => nil
+
+#+END_SRC
+
+* 3) Beyond irb
+
+There are number of things that opal-irb does that irb does not:
+
+
+** "Live gist", create a link w/code
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Create a link with  =ctl-l= (=l= for =link=),
+- Link will be displayed above the line in question.
+- Scroll through history, hit =ctl-l= to give history for that line
+
+*** Live gist
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Like a gist, it's shareable bit of code.
+- Unlike a gist, it's "live code"
+- Live gist can be shared in any real app that has opal-irb embedded.
+- Already used this in a production codebase to duplicate a bug condition for a coworker to debug.
+- All embedded opal-irb's on this prensentation are all done via "live gist."
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+  - For example, the red text printing example eariler
+
+** Enhanced History
+*** History Command (like shells have, bash, etc.)
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- You can type =history= at the prompt to get a listing of your history.
+- Shows listing of the code you've typed in including line numbers.
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+opal> history
+1: class Foo
+  def bar
+    :bar
+  end
+end
+2: f = Foo.new
+3: f.bar
+4: history
+ => nil
+opal>
+#+END_SRC
+
+*** Link for History
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Alternate to navigating through history and typing =ctrl-l=
+- Use =irb_link_for= command with the history number
+- Different from =jsbin=, =jsfiddle=, etc.
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+  - Experiment and have several  "live gists"
+  - Matches repl-based experimentation.
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC
+irb_link_for <history_num>
+#+END_SRC
+
+
+** Multiline edit
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in roll-in roll-in roll-in roll-in)
+- irb's multi-line edit can be cumbersome if you make a mistake
+- I've made many
+- Need to =ctrl-c= and start over
+- opal-irb has multi-line editor support.
+- Invoke with =ctrl-m= (m for the multi-line editor)
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+  - Pops up editor window will pop up with the code on the prompt.
+  - Has syntax highlighting
+  - Auto indenting
+  - WIP autocomplete functionality
+
+*** More tips
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Editor can be used with all code in the history
+- Navigate to the desired code in your history and hit =ctl-m=.
+- Run the code by hitting the  run it button, or the =ctrl-Enter= short cut.
+- Close the window with either the close icon, or hit escape.
+
+*** Live demo of Multiline edit
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-jq.html" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+
+** Requiring code at run time
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- *opal-irb* intended  to be able to explore things at run-time
+- 2 commands to support this
+
+
+*** require_remote
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Part of *opal-parser*
+- =require_remote= allows you require a remote ruby file.
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_SRC ruby
+require_remote <url_to_ruby_file>"
+#+END_SRC
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+As an example, I'll require the raw form of this gist, which prints
+out "require_remote is cool" 10 times.
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+BEGIN_HTML
+<script src="https://gist.github.com/fkchang/c52173c276976a9ccede.js"></script>
+#+END_HTML
+
+*** require_remote In browser
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://git.io/vOmoR" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+*** require_js (asynchronous require)
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- require_js requires javascript with a URL.
+- Asynchronous
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+   - Ok when typed in by hand, is usually fine, the file
+   - If not hand typed, say via live-gist, you'll need to put some sort of delay.
+
+*** A Raphael.js based example.
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- does a =require_js= of the raphael.js lib
+- Adds a reanimate button (via Opal-browser's DOM DSL)
+- delays via a =Timeout= and creates an animation and bind reanimation
+  code to the reanimate button
+
+*** require_js Raphael.js example
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://git.io/vOm1c" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+
+*** require_js_sync (synchronous require)
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Synchronous calls are atypical in javascript
+- Chrome says this is deprecated
+- Still might be useful
+
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+Same raphael example, but without the delay
+
+*** require_js_sync Raphael.js
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://git.io/vOmDg" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+** Say, say, say, what you want...
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- I use the =say= command in OSX a lot
+- Lets me know when a long running process is done
+- Implemented for opal-irb, may make a standalone gem
+
+*** say example in the browser
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://git.io/vYveZ" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+
+* Examples
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- There are several example opal-irb pages referenced from the README on https://github.com/fkchang/opal-irb. They are:
+
+** Homebrew console example
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+ATTR_HTML: :target "_blank"
+- My 1st attempt, port of a [[https://github.com/larryng/coffeescript-repl][coffescript repl]] with hand written terminal code
+- not as full features as the jq-console example
+
+** Homebrew console live
+#+ATTR_HTML: :target "_blank"
+http://fkchang.github.io/opal-irb/index-homebrew.html
+
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-homebrew.html" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+** jq-console Example
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- This uses (a fork of) =jq-console=, for improved console support.
+- Most development has been on a =jq-console= based *opal-irb*
+- I might revisit a =jq-console= port  to remove the *jquery* dependency in *opal-irb*
+
+** jq-console Live
+#+ATTR_HTML: :target "_blank"
+http://fkchang.github.io/opal-irb/index-jq.html
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-irb/index-jq.html" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+
+** Embedded console example
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- How opal-irb might be embedded in an app
+- Has some nominal DOM elements for maniuplation
+- Button to show opal-irb
+- *Opal-irb* supports 2 ways to display a hidden opal-irb:
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+  - hot key
+  - click event on a DOM element
+#+ATTR_HTML: :target "_blank"
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+  - Both are documented in the [[https://github.com/fkchang/opal-irb/blob/master/README.md][README]]
+
+** Embedded Console live
+embedded iframe does not render right in safari, use chrome
+#+ATTR_HTML: :target "_blank"
+http://fkchang.github.io/opal-irb/index-embeddable.html
+#+BEGIN_HTML
+<iframe width="100%" height="500" onload='setTimeout(function() {this.height = 550;}, 100);' src="http://fkchang.github.io/opal-irb/index-embeddable.html" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+
+** Embedded in the opal-playground
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- *Opal-irb* has been embedded into my fork of the *opal-playground*.
+- *Opal-irb* is available in the RESULTS section by hitting the blue "Show Irb" button.
+- Sometimes repl is what you need
+** Opal-Playground live
+#+ATTR_HTML: :target "_blank"
+http://fkchang.github.io/opal-playground/
+#+BEGIN_HTML
+<iframe width="100%" height="500" src="http://fkchang.github.io/opal-playground/" frameborder="0" allowfullscreen></iframe>
+#+END_HTML
+
+** Videos and more
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+#+ATTR_HTML: :target "_blank"
+- Many features demonstrated in part of [[https://www.youtube.com/watch?feature%3Dplayer_detailpage&v%3DGH9FAfKG-qY#t%3D1838][RubyConf 2013 talk "Opal - A New Hope"]];
+- [[Https://www.youtube.com/watch?v%3DmQTulgBm5Nk][Video]] for the in progress auto complete in the console.
+#+ATTR_HTML: :target "_blank"
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Video [[https://www.youtube.com/watch?feature%3Dplayer_detailpage&v%3DGH9FAfKG-qY#t%3D2099][preview]]  of a prototype of opal-inspector 2 years back
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+  - Showing features previously only supported in Smalltalk and Lisp machines.
+#+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
+- Intend on beefing it up
+
+* Done for now
+Thanks!
