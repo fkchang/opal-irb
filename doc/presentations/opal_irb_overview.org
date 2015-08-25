@@ -8,7 +8,8 @@
 #+ATTR_HTML: :target "_blank"
 - [[https://github.com/fkchang/opal-irb/blob/master/README.md][opal-irb]] has many features
 - Most don't know about them
-- Hence this talk
+- Hence this talk (based on http://funkworks.blogspot.com/2015/08/an-overview-of-opal-irbs-features.html)
+
 
 * What is opal-irb?
 #+ATTR_REVEAL: :frag (roll-in roll-in roll-in roll-in roll-in roll-in)
