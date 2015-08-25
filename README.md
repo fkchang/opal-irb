@@ -23,6 +23,9 @@ Videos:
 Blogposts:
 * Thorough overview of features including embedded iframe examples of such http://funkworks.blogspot.com/2015/08/an-overview-of-opal-irbs-features.html
 
+Presentations:
+* Overview of features based on above blogpost (reveal.js exported by org-mode doc in doc/presentations directory)
+http://fkchang.github.io/opal-irb/doc/presentations/opal_irb_overview.html
 
 Features
 --------
