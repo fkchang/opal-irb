@@ -6,14 +6,14 @@ Gem::Specification.new do |s|
   s.version      = OpalIrb::VERSION
   s.author       = 'Forrest Chang'
   s.email        = 'fkc_email-ruby@yahoo.com.com'
-  s.homepage     = 'http://opalrb.org'
-  s.summary      = 'Irb for Opal'
-  s.description  = 'Irb for Opal'
+  s.homepage     = 'https://github.com/fkchang/opal-irb'
+  s.summary      = 'Irb and more for Opal'
+  s.description  = 'Irb and more for Opal'
 
   s.files          = `git ls-files`.split("\n")
   s.require_paths  = ['lib']
 
-  s.add_dependency 'opal'
+  s.add_dependency 'opal', '~> 0.7.0'
   s.add_dependency 'opal-jquery'
 
   s.add_development_dependency 'rake'

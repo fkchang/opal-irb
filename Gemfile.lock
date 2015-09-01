@@ -33,8 +33,8 @@ GIT
 PATH
   remote: .
   specs:
-    opal-irb (0.1.0)
-      opal
+    opal-irb (0.7.0)
+      opal (~> 0.7.0)
       opal-jquery
 
 GEM

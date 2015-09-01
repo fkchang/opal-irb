@@ -1,4 +1,4 @@
-# require 'bundler/setup'
+require 'bundler/gem_tasks'
 require 'bundler'
 Bundler.require
 
@@ -60,5 +60,6 @@ end
 
 desc "build all the example apps and view them"
 task :build_all => [:build_homebrew_console, :build_jqconsole, :build_embeddable]
-task :build => :build_embeddable
+desc "shortcut for build embeddable, cuz I'm lazy"
+task :build_e => :build_embeddable
 #task :default => :build_jqconsole

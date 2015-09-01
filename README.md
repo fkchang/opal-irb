@@ -90,7 +90,7 @@ require 'lissio'
 * profit!
 
 ### Rails
-
+* setup Rails app for opal use via https://github.com/opal/opal-rails
 * add to Gemfile opal-irb, jquery-ui-rails (for multi editor)
 ```ruby
     gem 'opal-irb', github: 'fkchang/opal-irb', require: 'opal-irb-rails'
@@ -149,8 +149,12 @@ Dependencies
 * opal-jquery (would like to do away with this, don't need it)
   * jquery (cuz of the above)
   * jquery-ui dialog - for the code dial
-* opal-browser (so you can use it from opal-irb)
 * code mirror - for code editing
+* opal-browser (so you can use it from opal-irb) OPTIONAL, it's used in the examples but it can be deployed without opal-browser, esp. since Rails defaults to using jquery and opal-browser and opal-jquery have a lot of overlap, and some small conflicts
+
+Version Scheme
+--------------
+While in my mind there are a lot of things that keep opal-irb at not yet suitable to be a gem/ 0.1.0 version number, I frequently have to change code to support the latest minor release for Opal, so I think I need to adopt a scheme that tracks such.  So the 1st gem release will be 0.7.0, to indicate compatibility with 0.7.* versions of opal, followed fairly quickly with a 0.8.0 release to match 0.8.0 the current version (at time of writing) of opal.
 
 Roadmap
 -------
