@@ -5,20 +5,10 @@ require 'opal_irb'
 require 'opal_irb/completion_engine'
 require 'opal_irb/completion_formatter'
 require 'jqconsole'
-
+require 'timeout'
 # top level methods for irb cmd line
 def irb_link_for history_num=nil
   OpalIrbJqconsole.console.irb_link_for history_num
-end
-
-class Timeout
-  def initialize(time=0, &block)
-    @timeout = `setTimeout(#{block}, time)`
-  end
-
-  def clear
-    `clearTimeout(#{@timeout})`
-  end
 end
 
 # module Kernel
@@ -373,7 +363,8 @@ EDITOR
                                      var msg = new SpeechSynthesisUtterance(#{msg});
                                      window.speechSynthesis.speak(msg);
                                    |
-                                 end'
+                                 end',
+                                 '_ = nil'
 
                                  ]
   def setup_cmd_line_methods

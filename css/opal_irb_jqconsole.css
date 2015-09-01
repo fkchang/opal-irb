@@ -1,10 +1,3 @@
-html, body {
-  background-color: #333;
-  color: white;
-  font-family: monospace;
-  margin: 0;
-  padding: 0;
-}
 #opal-irb-console-bottom-panel {
   width: 100%;
   position: fixed;
@@ -69,7 +62,7 @@ span.boxclose, a.boxclose{
   font-weight: bold;
   display: inline-block;
   line-height: 0px;
-  padding: 11px 3px;       
+  padding: 11px 3px;
 }
 #opal-irb-console-topbar {
   background-color: #AAA;
