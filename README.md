@@ -93,6 +93,9 @@ require 'lissio'
 * setup Rails app for opal use via https://github.com/opal/opal-rails
 * add to Gemfile opal-irb, jquery-ui-rails (for multi editor)
 ```ruby
+    # gem 'opal-irb', '0.7.0' for Opal 0.7.*
+    # gem 'opal-irb', '0.8.*' for Opal 0.8.*
+    # For latest do below
     gem 'opal-irb', github: 'fkchang/opal-irb', require: 'opal-irb-rails'
     gem 'jquery-ui-rails'
 ```
@@ -104,8 +107,13 @@ require 'lissio'
  */
 ```
 * include jquery UI dialog in application.js
+  * for Opal 0.7.0 if you have kept application.js vs converting to application.js.rb
 ```js
 //= require jquery-ui/dialog
+```
+  * for Opal 0.8.0, you must create application.js.rb or else you are forced to load the opal modules by hand
+```ruby
+require 'jquery-ui/dialog'
 ```
 
 * include codemirror js/css, you can pull from CDN w/the below in your template (haml example below)
@@ -160,11 +168,11 @@ Roadmap
 -------
 * Figure out how to keep variables -- DONE 6/10/2013, thx @adambeynon
 * have it automatically know when a complete ruby expression is there instead of multi line mode like irb -- CLOSE ENOUGH 6/21/2013 via jqconsole
-* Make a gem - DONE 6/23/2013 1st for use in opal-inspector
+* Make a gem - DONE 6/23/2013 1st for use in opal-inspector, made into a bonafide gem 9/1/15
 * Hook into smalltalk style object browser for opal that I plan to write - STARTED
 * Some demos to show how convenient it can be - DONE 7/19/2013 - you tube video overview
 * Add more irb/pry functionality
-  * tab completion
+  * tab completion - DONE
   * cd ls
   * show source via source maps and opal-inspector
 * Make embeddable in any app STARTED 7/30/2013, made embeddable into lisso 2/4/2014
