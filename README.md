@@ -1,5 +1,6 @@
 opal-irb
 =========
+[![Gem Version](https://badge.fury.io/rb/opal-irb.svg)](http://badge.fury.io/rb/opal-irb)
 
 irb (interactive ruby) for Opal (Ruby running on javascript).  This is
 interactive console (REPL) on a webpage. Good for testing Opal/ruby
