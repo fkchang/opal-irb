@@ -1,6 +1,4 @@
-* Remove jquery dependency
-- [ ] Remove jquery-ui dialog
-- [ ] rewrite jq-console
+* Visual Object Editor
 * Smalltalk inspired
 - [ ] create/proceed from nomethod error
 - [ ] create/proceed from undefined constant
@@ -9,6 +7,10 @@
 * Lisp Machine inspired
 - [ ] right click edit of text
 - [ ] edit objects from command line
+
+* Remove jquery dependency
+- [ ] Remove jquery-ui dialog
+- [ ] rewrite jq-console
 
 * Other
 - [ ] . tab completion
