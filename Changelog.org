@@ -1,0 +1,5 @@
+* 0.8.0
+- conversion to opal 0.8 (the current version)
+- update docs
+* 0.7.0
+- 1st numbered gem release using same major/minor numbers to match the corresponding Opal versions
