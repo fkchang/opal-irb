@@ -53,7 +53,10 @@ Embedding into lissio app, as made by lissio new
 
 * add to Gemfile opal-irb
 ```ruby
-    gem 'opal-irb', github: 'fkchang/opal-irb'
+# gem 'opal-irb', '0.7.0' for Opal 0.7.*
+# gem 'opal-irb', '0.8.*' for Opal 0.8.*
+# For latest do below
+gem 'opal-irb', github: 'fkchang/opal-irb'
 ```
 * invoke app to require opal-jquery and opal-irb
 ```bash
