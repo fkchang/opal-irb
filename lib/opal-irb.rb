@@ -34,11 +34,12 @@ module OpalIrbUtils
    }.join("\n")
   end
 
-  def self.include_code_mirror
-    '<link rel="stylesheet" href="//codemirror.net/lib/codemirror.css"/>' +
-   require_scripts( [ "//codemirror.net/lib/codemirror.js",
-                     "//codemirror.net/keymap/emacs.js",
-                     "//codemirror.net/mode/ruby/ruby.js"])
+  def self.include_code_mirror(https=nil)
+    prefix = https ? 'https:' : ''
+    %|<link rel="stylesheet" href="#{prefix}//codemirror.net/lib/codemirror.css"/>| +
+   require_scripts( [ "#{prefix}//codemirror.net/lib/codemirror.js",
+                      "#{prefix}//codemirror.net/keymap/emacs.js",
+                      "#{prefix}//codemirror.net/mode/ruby/ruby.js"])
  end
 
 end
