@@ -35,11 +35,13 @@ module OpalIrbUtils
   end
 
   def self.include_code_mirror(https=nil)
+
     prefix = https ? 'https:' : ''
-    %|<link rel="stylesheet" href="#{prefix}//codemirror.net/lib/codemirror.css"/>| +
-   require_scripts( [ "#{prefix}//codemirror.net/lib/codemirror.js",
-                      "#{prefix}//codemirror.net/keymap/emacs.js",
-                      "#{prefix}//codemirror.net/mode/ruby/ruby.js"])
+    cdn = 'cdnjs.cloudflare.com/ajax/libs/codemirror/5.7.0'
+    %|<link rel="stylesheet" href="#{prefix}//#{cdn}/codemirror.css"/>| +
+   require_scripts( [ "#{prefix}//#{cdn}/codemirror.js",
+                      "#{prefix}//#{cdn}/keymap/emacs.js",
+                      "#{prefix}//#{cdn}/mode/ruby/ruby.js"])
  end
 
 end
