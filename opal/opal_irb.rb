@@ -6,15 +6,43 @@ require 'opal-parser'           # so I can have require_remote
 # 'require' a javascript filename over the internet, asynchronously,
 # so you'll have to delay before using.  Should be fine if typed by hand
 # but if scripted add delay
-def require_js(url)
+def require_js(*urls, &block)
   # used to use this, but don't want to depend on opal-jquery
   # Element.find("head").append("<script src='#{js_filename}' type='text/javascript'></script>")
-  %x|
-    var script = document.createElement( 'script' );
-    script.type = 'text/javascript';
-    script.src = url;
-    document.body.appendChild(script);
-  |
+  promises = []
+
+  opts = urls.last.is_a?(Hash) ? urls.pop : {}
+
+  clear_promises = lambda do
+    promises.each do |promise|
+      promise.resolve(false) unless promise.resolved?
+    end
+  end
+
+  `setTimeout(#{clear_promises}, #{opts[:timeout]} * 1000)` if opts[:timeout]
+
+  urls.each do |url|
+    promise = Promise.new
+    promises << promise
+    loaded = lambda do
+      promise.resolve(true)
+    end
+    %x|
+      var script = document.createElement( 'script' );
+      script.type = 'text/javascript';
+      script.src = url;
+      script.onload = #{loaded};
+      document.body.appendChild(script);
+    |
+  end
+
+  Promise.new.tap do |promise|
+    Promise.when(*promises).then do |results|
+      block.call results if block
+      promise.resolve results
+    end
+  end
+
 end
 
 # 'require' a javascrit filename over the internet, synchronously.
