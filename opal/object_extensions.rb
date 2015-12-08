@@ -10,11 +10,3 @@ class Object
   end
 
 end
-
-# test class
-class Foo
-  def initialize
-    @a = "a"
-    @b = "b"
-  end
-end

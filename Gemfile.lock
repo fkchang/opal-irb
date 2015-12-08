@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    opal-irb (0.8.0)
+    opal-irb (0.8.1)
       opal (~> 0.8.0)
       opal-jquery (~> 0.4.0)
 
