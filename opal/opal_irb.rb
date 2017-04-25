@@ -1,7 +1,7 @@
 require 'opal'
 require 'opal/compiler'
 require 'object_extensions'
-require 'opal-parser'           # so I can have require_remote
+require 'opal-parser' # so I can have require_remote
 
 # 'require' a javascript filename over the internet, asynchronously,
 # so you'll have to delay before using.  Should be fine if typed by hand
@@ -21,7 +21,7 @@ def require_js(*urls, &block)
 
   `setTimeout(#{clear_promises}, #{opts[:timeout]} * 1000)` if opts[:timeout]
 
-  urls.each do |url|
+  urls.each do |_url|
     promise = Promise.new
     promises << promise
     loaded = lambda do
@@ -38,16 +38,15 @@ def require_js(*urls, &block)
 
   Promise.new.tap do |promise|
     Promise.when(*promises).then do |results|
-      block.call results if block
+      yield results if block
       promise.resolve results
     end
   end
-
 end
 
 # 'require' a javascrit filename over the internet, synchronously.
 # Chrome complains that this is deprecated, so it might go away
-def require_js_sync(url)
+def require_js_sync(_url)
   %x|
      var r = new XMLHttpRequest();
      r.open("GET", url, false);
@@ -69,7 +68,7 @@ class OpalIrb
   end
 
   def irb_varnames
-    irb_vars.map { |varname, value| varname }
+    irb_vars.map {|varname, _value| varname }
   end
 
   def irb_gvars
@@ -83,28 +82,27 @@ class OpalIrb
   end
 
   def irb_gvarnames
-    irb_gvars.map { |varname, value| varname }
+    irb_gvars.map {|varname, _value| varname }
   end
 
   def opal_classes
     classes = []
-    $opal_js_object = Native(`Opal`)    # have to make this global right now coz not seen in the each closure w/current opal
+    $opal_js_object = Native(`Opal`) # have to make this global right now coz not seen in the each closure w/current opal
     $opal_js_object.each {|k|
       attr = $opal_js_object[k]
       classes << attr if attr.is_a?(Class)
     }
-    classes.uniq.sort_by { |cls| cls.name } # coz some Opal classes are the same, i.e. module == class, base, Kernel = Object
+    classes.uniq.sort_by(&:name) # coz some Opal classes are the same, i.e. module == class, base, Kernel = Object
   end
 
   def opal_constants
     constants = []
-    $opal_js_object = Native(`Opal`)    # have to make this global right now coz not seen in the each closure w/current opal
+    $opal_js_object = Native(`Opal`) # have to make this global right now coz not seen in the each closure w/current opal
     $opal_js_object.each {|k|
       attr = $opal_js_object[k]
       constants << attr
     }
     constants.uniq
-
   end
 
   attr_reader :parser
@@ -112,5 +110,4 @@ class OpalIrb
   def parse(cmd)
     Opal::Compiler.new(cmd, irb: true).compile
   end
-
 end

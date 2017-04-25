@@ -1,5 +1,5 @@
 class Timeout
-  def initialize(time=0, &block)
+  def initialize(_time=0, &block)
     @timeout = `setTimeout(#{block}, time)`
   end
 
