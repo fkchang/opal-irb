@@ -15,18 +15,16 @@ class OpalIrbLogRedirector
     |
 
     end
-
-
   end
-  def self.add_to_redirect redirector
+
+  def self.add_to_redirect(redirector)
     initialize_if_necessary
     @redirectors << redirector
   end
 
-  def self.puts stuff
+  def self.puts(stuff)
     @redirectors.each {|redirector|
       redirector.call(stuff)
     }
-
   end
 end

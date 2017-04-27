@@ -1,4 +1,4 @@
-$CE_DEBUG = false               # override to turn on debugging
+$CE_DEBUG = false # override to turn on debugging
 require_relative 'completion_results'
 class OpalIrb
   # CompletionEngine for tab completes
@@ -9,7 +9,7 @@ class OpalIrb
     METHOD_OR_VARIABLE = /(\s*([a-z]\w*))$/
     GLOBAL = /(\s*\$(\w*))$/
 
-    NO_MATCHES_PARAMS = [nil, []]
+    NO_MATCHES_PARAMS = [nil, []].freeze
     # Shows completions for text in opal-irb
     # @param text [String] the text to try to find completions for
     # @returns [CompletionResults]
@@ -18,6 +18,7 @@ class OpalIrb
       index, matches = get_matches(text, irb)
       CompletionResults.new(text, index, matches)
     end
+
     # Editor complete, intended to be called from CodeMirror or other
     # javascript editor that does not have the ability to see into
     # Opal objects w/o some work.  To use this, you must first
@@ -34,17 +35,19 @@ class OpalIrb
     # For use with CodeMirror autocompletion, or anything that needs persistent irb
     # of interacts through javascript
     # @param irb [OpalIrb] the irb engine to use, typically that of an OpalIrb condole
-    def self.set_irb irb
+    def self.set_irb(irb)
       @irb = irb
     end
+
     # Called by self.editor_complete to get the irb that is set
     def self.get_irb
       if @irb
         @irb
       else
-        raise "You must set irb to use this funtion"
+        fail 'You must set irb to use this funtion'
       end
     end
+
     def self.get_matches(text, irb)
       index, matches = case text
                        when GLOBAL
@@ -67,6 +70,7 @@ class OpalIrb
                        end
       [index, matches]
     end
+
     def self.variable_dot_complete(text, irb)
       index = text =~ VARIABLE_DOT_COMPLETE # broken in 0.7, fixed in 0.7
       whole = $1
@@ -99,7 +103,7 @@ class OpalIrb
     def self.get_global_methods(whole, target_name, index, irb)
       debug_puts "get_global_methods(#{whole}, #{target_name}, #{index})"
       target_name = target_name[1..-1] # strip off leading $
-      name_val_pair = irb.irb_gvars.find { |array| array[0] == target_name }
+      name_val_pair = irb.irb_gvars.find {|array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods
         return [whole.size + index, methods]
@@ -108,7 +112,7 @@ class OpalIrb
     end
 
     def self.get_var_methods(whole, target_name, index, irb)
-      name_val_pair = irb.irb_vars.find { |array| array[0] == target_name }
+      name_val_pair = irb.irb_vars.find {|array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods
         return [whole.size + index, methods]
@@ -151,29 +155,29 @@ class OpalIrb
     def self.get_global_methods_by_fragment(whole, target_name, method_fragment, index, irb)
       debug_puts "get_global_methods_by_fragment whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
       target_name = target_name[1..-1] # strip off leading $
-      name_val_pair = irb.irb_gvars.find { |array| array[0] == target_name }
+      name_val_pair = irb.irb_gvars.find {|array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods.grep /^#{method_fragment}/
-                                                return [whole.size + index - method_fragment.size, methods]
+        return [whole.size + index - method_fragment.size, methods]
       end
       NO_MATCHES_PARAMS
     end
 
     def self.get_var_methods_by_fragment(whole, target_name, method_fragment, index, irb)
       debug_puts "get_var_methods_by_fragment whole: #{whole}, target_name: #{target_name}, method_fragment: #{method_fragment}, index"
-      name_val_pair = irb.irb_vars.find { |array| array[0] == target_name }
+      name_val_pair = irb.irb_vars.find {|array| array[0] == target_name }
       if name_val_pair
         methods = name_val_pair[1].methods.grep /^#{method_fragment}/
-                                                return [whole.size + index - method_fragment.size, methods]
+        return [whole.size + index - method_fragment.size, methods]
       end
       NO_MATCHES_PARAMS
     end
 
-    def self.constant_complete(text, irb)
+    def self.constant_complete(text, _irb)
       index = text =~ CONSTANT
       whole = $1
       fragment = $2
-      [whole.size + index - fragment.size, Object.constants.grep( /^#{fragment}/)]
+      [whole.size + index - fragment.size, Object.constants.grep(/^#{fragment}/)]
     end
 
     def self.method_or_variable_complete(text, irb)
@@ -191,12 +195,11 @@ class OpalIrb
       fragment = $2
       debug_puts "looking for |#{fragment}| from |#{text}|"
       varnames = irb.irb_gvarnames.grep /^#{fragment}/
-      [whole.size + index - fragment.size - 1, varnames.map { |name| "$#{name}" }]
+      [whole.size + index - fragment.size - 1, varnames.map {|name| "$#{name}" }]
     end
 
-    def self.debug_puts stuff
-      puts(stuff) if $CE_DEBUG  # completion_engine debug
+    def self.debug_puts(stuff)
+      puts(stuff) if $CE_DEBUG # completion_engine debug
     end
   end
-
 end

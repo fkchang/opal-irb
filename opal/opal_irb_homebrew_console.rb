@@ -1,9 +1,8 @@
 require 'opal'
-require "opal-jquery"
-require "opal_irb"
+require 'opal-jquery'
+require 'opal_irb'
 
 class OpalIRBHomebrewConsole
-
   def reset_settings
     `localStorage.clear()`
   end
@@ -12,7 +11,7 @@ class OpalIRBHomebrewConsole
     `localStorage.settings = JSON.stringify( #{@settings.map})`
   end
 
-  def resize_input(e)
+  def resize_input(_e)
     width = @inputdiv.width() - @inputl.width()
     content = @input.value()
     # content.gsub /\n/, '<br/>'
@@ -24,7 +23,7 @@ class OpalIRBHomebrewConsole
   end
 
   def scroll_to_bottom
-    `window.scrollTo( 0, #@prompt[0].offsetTop)`
+    `window.scrollTo( 0, #{@prompt}[0].offsetTop)`
   end
 
   DEFAULT_SETTINGS = {
@@ -32,16 +31,16 @@ class OpalIRBHomebrewConsole
     max_lines: 500,
     max_depth: 2,
     show_hidden: false,
-    colorize: true,
-  }
+    colorize: true
+  }.freeze
 
   def escape_html(s)
-    s.gsub(/&/,'&amp;').gsub(/</,'&lt;').gsub(/>/,'&gt;');
+    s.gsub(/&/, '&amp;').gsub(/</, '&lt;').gsub(/>/, '&gt;')
   end
 
   attr_reader :settings
 
-  def initialize (output, input, prompt, inputdiv, inputl, inputr, inputcopy, settings={})
+  def initialize(output, input, prompt, inputdiv, inputl, inputr, inputcopy, _settings={})
     @output, @input, @prompt, @inputdiv, @inputl, @inputr, @inputcopy =
       output, input, prompt, inputdiv, inputl, inputr, inputcopy
     @history = []
@@ -66,9 +65,7 @@ class OpalIRBHomebrewConsole
 
     initialize_window
     print_header
-
   end
-
 
   def print(args)
     s = args
@@ -88,20 +85,19 @@ class OpalIRBHomebrewConsole
     }.inspect
   end
 
-
   def add_to_history(s)
     @history.unshift s
     @historyi = -1
   end
 
   def add_to_saved(s)
-    @saved +=  s[0...-1] == '\\' ? s[0...-1] : s
+    @saved += s[0...-1] == '\\' ? s[0...-1] : s
     @saved += "\n"
     add_to_history s
   end
 
   def clear
-    @output.html = ""
+    @output.html = ''
     nil
   end
 
@@ -119,17 +115,17 @@ class OpalIRBHomebrewConsole
       output = `nodeutil.inspect( value, #{@settings[:show_hidden]}, #{@settings[:max_depth]}, #{@settings[:colorize]})`
       # output = value
     rescue Exception => e
-      if e.backtrace
-        output = "FOR:\n#{compiled}\n============\n" + e.backtrace.join("\n")
+      output = if e.backtrace
+                 "FOR:\n#{compiled}\n============\n" + e.backtrace.join("\n")
 
-        # FF doesn't have Error.toString() as the first line of Error.stack
-        # while Chrome does.
-        # if output.split("\n")[0] != `e.toString()`
-        #   output = "#{`e.toString()`}\n#{`e.stack`}"
-        # end
-      else
-        output = `e.toString()`
-      end
+               # FF doesn't have Error.toString() as the first line of Error.stack
+               # while Chrome does.
+               # if output.split("\n")[0] != `e.toString()`
+               #   output = "#{`e.toString()`}\n#{`e.stack`}"
+               # end
+               else
+                 `e.toString()`
+               end
     end
     @saved = ''
     print output
@@ -138,35 +134,35 @@ class OpalIRBHomebrewConsole
   # help
   def help
     text = [
-            " ",
-            "<strong>Features</strong>",
-            "<strong>========</strong>",
-            "+ <strong>Esc</strong> enters multiline mode.",
-            "+ <strong>Up/Down arrow and ctrl-p/ctrl-n</strong> flips through line history.",
-            # "+ <strong>#{@settings[:last_variable]}</strong> stores the last returned value.",
-            "+ Access the internals of this console through <strong>$irb</strong>.",
-            "+ <strong>clear</strong> clears this console.",
-            "+ <strong>history</strong> shows line history.",
-            " ",
-            "<strong>@Settings</strong>",
-            "<strong>========</strong>",
-            "You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:",
-            " ",
-            # "+ <strong>last_variable</strong> (#{@settings[:last_variable]}): variable name in which last returned value is stored",
-            "+ <strong>max_lines</strong> (#{@settings[:max_lines]}): max line count of this console",
-            "+ <strong>max_depth</strong> (#{@settings[:max_depth]}): max_depth in which to inspect outputted object",
-            "+ <strong>show_hidden</strong> (#{@settings[:show_hidden]}): flag to output hidden (not enumerable) properties of objects",
-            "+ <strong>colorize</strong> (#{@settings[:colorize]}): flag to colorize output (set to false if IRB is slow)",
-            " ",
-            # "<strong>$irb.save_settings()</strong> will save settings to localStorage.",
-            # "<strong>$irb.reset_settings()</strong> will reset settings to default.",
-            " "
-           ].join("\n")
+      ' ',
+      '<strong>Features</strong>',
+      '<strong>========</strong>',
+      '+ <strong>Esc</strong> enters multiline mode.',
+      '+ <strong>Up/Down arrow and ctrl-p/ctrl-n</strong> flips through line history.',
+      # "+ <strong>#{@settings[:last_variable]}</strong> stores the last returned value.",
+      '+ Access the internals of this console through <strong>$irb</strong>.',
+      '+ <strong>clear</strong> clears this console.',
+      '+ <strong>history</strong> shows line history.',
+      ' ',
+      '<strong>@Settings</strong>',
+      '<strong>========</strong>',
+      'You can modify the behavior of this IRB by altering <strong>$irb.@settings</strong>:',
+      ' ',
+      # "+ <strong>last_variable</strong> (#{@settings[:last_variable]}): variable name in which last returned value is stored",
+      "+ <strong>max_lines</strong> (#{@settings[:max_lines]}): max line count of this console",
+      "+ <strong>max_depth</strong> (#{@settings[:max_depth]}): max_depth in which to inspect outputted object",
+      "+ <strong>show_hidden</strong> (#{@settings[:show_hidden]}): flag to output hidden (not enumerable) properties of objects",
+      "+ <strong>colorize</strong> (#{@settings[:colorize]}): flag to colorize output (set to false if IRB is slow)",
+      ' ',
+      # "<strong>$irb.save_settings()</strong> will save settings to localStorage.",
+      # "<strong>$irb.reset_settings()</strong> will reset settings to default.",
+      ' '
+    ].join("\n")
     print text
   end
 
   # only outputs to console log, use for debugging
-  def log thing
+  def log(thing)
     `console.orig_log(#{thing})`
   end
 
@@ -189,9 +185,7 @@ class OpalIRBHomebrewConsole
 
       if input
         add_to_saved input
-        if input[0...-1] != '\\' and not @multiline
-          process_saved()
-        end
+        process_saved() if input[0...-1] != '\\' and not @multiline
       end
     when 27                   # escape
       e.prevent_default
@@ -214,21 +208,19 @@ class OpalIRBHomebrewConsole
       end
 
     end
-
   end
 
   def show_previous_history
-    if @historyi < @history.length-1
+    if @historyi < @history.length - 1
       @historyi += 1
-      @input.value =  @history[@historyi]
+      @input.value = @history[@historyi]
     end
-
   end
 
   def show_next_history
     if @historyi > 0
       @historyi += -1
-      @input.value =  @history[@historyi]
+      @input.value = @history[@historyi]
     end
   end
 
@@ -238,44 +230,42 @@ class OpalIRBHomebrewConsole
   end
 
   CMD_LINE_METHOD_DEFINITIONS = [
-                                 'def help
-                                   $irb.help
-                                   nil
-                                 end',
+    'def help
+      $irb.help
+      nil
+    end',
 
-                                 'def clear
-                                   $irb.clear
-                                   nil
-                                 end',
+    'def clear
+      $irb.clear
+      nil
+    end',
 
-                                 'def history
-                                   $irb.history
-                                   nil
-                                 end'
-                                ]
+    'def history
+      $irb.history
+      nil
+    end'
+  ].freeze
   def setup_cmd_line_methods
     CMD_LINE_METHOD_DEFINITIONS.each {|method_defn|
       compiled = @irb.parse method_defn
       `eval(compiled)`
     }
-
-
   end
 
   def print_header
     print [
-           "# Opal v#{Opal::VERSION} IRB", #"# Opal v#{OPAL_VERSION} IRB",
-           "# <a href=\"https://github.com/fkchang/opal-irb\" target=\"_blank\">https://github.com/fkchang/opal-irb</a>",
-           "# inspired by <a href=\"https://github.com/larryng/coffeescript-repl\" target=\"_blank\">https://github.com/larryng/coffeescript-repl</a>",
-           "#",
-           "# <strong>help</strong> for features and tips.",
-           " "
-          ].join("\n")
+      "# Opal v#{Opal::VERSION} IRB", # "# Opal v#{OPAL_VERSION} IRB",
+      '# <a href="https://github.com/fkchang/opal-irb" target="_blank">https://github.com/fkchang/opal-irb</a>',
+      '# inspired by <a href="https://github.com/larryng/coffeescript-repl" target="_blank">https://github.com/larryng/coffeescript-repl</a>',
+      '#',
+      '# <strong>help</strong> for features and tips.',
+      ' '
+    ].join("\n")
   end
 
   def self.create_html(parent_container_id)
     parent = Element.find(parent_container_id)
-    parent.html =  '      <div id="outputdiv">
+    parent.html = '      <div id="outputdiv">
         <pre id="output"></pre>
       </div>
       <div id="inputdiv">
@@ -288,7 +278,6 @@ class OpalIRBHomebrewConsole
         </div>
 '
     # puts parent.html
-
   end
 
   def self.create(container_id)
@@ -302,7 +291,7 @@ class OpalIRBHomebrewConsole
     inputcopy = Element.find('#inputcopy')
 
     # instantiate our IRB and expose irb as $irb
-    irb =  OpalIRBHomebrewConsole.new( output, input, prompt, inputdiv, inputl, inputr,
+    irb = OpalIRBHomebrewConsole.new(output, input, prompt, inputdiv, inputl, inputr,
                         inputcopy)
     irb.setup_cmd_line_methods
     # bind other handlers
@@ -320,7 +309,7 @@ class OpalIRBHomebrewConsole
       irb.resize_input e
     end
 
-    Element.find('html').on :click do |e|
+    Element.find('html').on :click do |_e|
       # if e.clientY > input[0].offsetTop
       input.focus()
       # end
@@ -338,30 +327,29 @@ class OpalIRBHomebrewConsole
     $irb = irb
 
     irb.setup_multi_line
-
   end
 
   def setup_multi_line
-    myself = self               # hate that I have to do this, didn't have to do it before
-     %x|
-    $( ".dialog" ).dialog({
-                            autoOpen: false,
-                            show: "blind",
-                            hide: "explode",
-                            modal: true,
-                            width: "500px",
-                            title: "Multi Line Edit",
-                            buttons: {
-                              "Run it":  function() {
-                                $( this ).dialog( "close" );
-                                #{myself}.$process_multiline();
-                              },
-                              "Cancel":  function() {
-                                $( this ).dialog( "close" );
-                           },
-                        }
-          });
-      |
+    myself = self # hate that I have to do this, didn't have to do it before
+    %x|
+   $( ".dialog" ).dialog({
+                           autoOpen: false,
+                           show: "blind",
+                           hide: "explode",
+                           modal: true,
+                           width: "500px",
+                           title: "Multi Line Edit",
+                           buttons: {
+                             "Run it":  function() {
+                               $( this ).dialog( "close" );
+                               #{myself}.$process_multiline();
+                             },
+                             "Cancel":  function() {
+                               $( this ).dialog( "close" );
+                          },
+                       }
+         });
+     |
 
     @open_editor_dialog_function = %x|function() {
           $( ".dialog" ).dialog( "open" );
@@ -378,7 +366,6 @@ class OpalIRBHomebrewConsole
               });
 
    |
-
   end
 
   def open_multiline_dialog
@@ -386,13 +373,11 @@ class OpalIRBHomebrewConsole
     @open_editor_dialog_function.call
   end
 
-
   def process_multiline
-    multi_line_value = @editor.getValue.sub(/(\n)+$/, "")
+    multi_line_value = @editor.getValue.sub(/(\n)+$/, '')
     add_to_saved multi_line_value
     print multi_line_value
     process_saved
-    @input.value = ""
+    @input.value = ''
   end
-
 end
