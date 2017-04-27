@@ -21,7 +21,7 @@ def require_js(*urls, &block)
 
   `setTimeout(#{clear_promises}, #{opts[:timeout]} * 1000)` if opts[:timeout]
 
-  urls.each do |_url|
+  urls.each do |url|
     promise = Promise.new
     promises << promise
     loaded = lambda do
@@ -38,7 +38,7 @@ def require_js(*urls, &block)
 
   Promise.new.tap do |promise|
     Promise.when(*promises).then do |results|
-      yield results if block
+      block.call(results) if block
       promise.resolve results
     end
   end
@@ -46,7 +46,7 @@ end
 
 # 'require' a javascrit filename over the internet, synchronously.
 # Chrome complains that this is deprecated, so it might go away
-def require_js_sync(_url)
+def require_js_sync(url)
   %x|
      var r = new XMLHttpRequest();
      r.open("GET", url, false);

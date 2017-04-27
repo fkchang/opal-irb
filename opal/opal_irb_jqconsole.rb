@@ -193,13 +193,13 @@ EDITOR
                       },
                    }
      });
- |
+    |
 
     @open_editor_dialog_function = %x|function() {
           $( ".dialog" ).dialog( "open" );
           setTimeout(function(){editor.refresh();}, 20);
       }
-      |
+    |
     # setup opal auto complete
     OpalIrb::CompletionEngine.set_irb @irb
     %x*
@@ -228,7 +228,7 @@ EDITOR
        }
        );
      };
-   *
+    *
     @editor = %x|
       editor = CodeMirror.fromTextArea(document.getElementById("multi_line_input"),
               { mode: "ruby",
@@ -246,7 +246,7 @@ EDITOR
                   theme: "default"
               });
 
-   |
+    |
     @editor = Native(@editor) # seamless bridging removed
   end
 
@@ -382,18 +382,20 @@ EDITOR
   end
 
   def check_is_incomplete(cmd)
-    @irb.parse cmd
-    false
-  rescue Exception => e
-    # make this a global so we can inspect this
-    $check_error = e
-    # 1st attempt to return on bad code vs incomplete code
-    if parse_error? $check_error
-      # TODO: when rescue is fixed to return last evaluated value remove returns
-      return 0
-    else
-      # see above to-do
-      return false
+    begin
+      @irb.parse cmd
+      false
+    rescue Exception => e
+      # make this a global so we can inspect this
+      $check_error = e
+      # 1st attempt to return on bad code vs incomplete code
+      if parse_error? $check_error
+        # TODO: when rescue is fixed to return last evaluated value remove returns
+        return 0
+      else
+        # see above to-do
+        return false
+      end
     end
   end
 
@@ -401,7 +403,7 @@ EDITOR
     # for Chrome errors
     check_error.backtrace.first =~ /unexpected 'false/ || check_error.backtrace[2] =~ /unexpected 'false/ ||
       # safari error
-      check_error.message =~ /error occurred while compiling/
+    check_error.message =~ /error occurred while compiling/
   end
 
   def write(*stuff)
@@ -453,32 +455,34 @@ HELP
   end
 
   def process(cmd)
-    log "\n\n|#{cmd}|"
-    if cmd
-      $last_cmd = cmd
-      $irb_last_compiled = @irb.parse cmd
-      log $irb_last_compiled
-      value = `eval(#{$irb_last_compiled})`
-      $_ = value
-      Native($_).inspect # coz native JS objects don't support inspect
-    end
-  rescue Exception => e
-    $last_exception = e
-    # alert e.backtrace.join("\n")
-    if e.backtrace
-      output = "FOR:\n#{$irb_last_compiled}\n============\n" + "#{e.message}\n" + e.backtrace.join("\n")
-      # TODO: remove return when bug is fixed in rescue block
-      return output
-      # FF doesn't have Error.toString() as the first line of Error.stack
-      # while Chrome does.
-      # if output.split("\n")[0] != `e.toString()`
-      #   output = "#{`e.toString()`}\n#{`e.stack`}"
-      # end
-    else
-      output = `e.toString()`
-      log "\nReturning NO have backtrace |#{output}|"
-      # TODO: remove return when bug is fixed in rescue block
-      return output
+    begin
+      log "\n\n|#{cmd}|"
+      if cmd
+        $last_cmd = cmd
+        $irb_last_compiled = @irb.parse cmd
+        log $irb_last_compiled
+        value = `eval(#{$irb_last_compiled})`
+        $_ = value
+        Native($_).inspect # coz native JS objects don't support inspect
+      end
+    rescue Exception => e
+      $last_exception = e
+      # alert e.backtrace.join("\n")
+      if e.backtrace
+        output = "FOR:\n#{$irb_last_compiled}\n============\n" + "#{e.message}\n" + e.backtrace.join("\n")
+        # TODO: remove return when bug is fixed in rescue block
+        return output
+        # FF doesn't have Error.toString() as the first line of Error.stack
+        # while Chrome does.
+        # if output.split("\n")[0] != `e.toString()`
+        #   output = "#{`e.toString()`}\n#{`e.stack`}"
+        # end
+      else
+        output = `e.toString()`
+        log "\nReturning NO have backtrace |#{output}|"
+        # TODO: remove return when bug is fixed in rescue block
+        return output
+      end
     end
   end
 end

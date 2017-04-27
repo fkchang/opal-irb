@@ -90,12 +90,14 @@ class OpalIrb
     end
 
     def self.get_class_methods(whole, target_name, index)
-      klass = Kernel.const_get(target_name)
-      debug_puts "\t#{klass.inspect} #{klass.methods}"
-      [whole.size + index, klass.methods]
-    rescue
-      puts "\t RESCUE"
-      NO_MATCHES_PARAMS
+      begin
+        klass = Kernel.const_get(target_name)
+        debug_puts "\t#{klass.inspect} #{klass.methods}"
+        [whole.size + index, klass.methods]
+      rescue
+        puts "\t RESCUE"
+        NO_MATCHES_PARAMS
+      end
     end
 
     def self.get_global_methods(whole, target_name, index, irb)
