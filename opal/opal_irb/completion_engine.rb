@@ -9,7 +9,7 @@ class OpalIrb
     METHOD_OR_VARIABLE = /(\s*([a-z]\w*))$/
     GLOBAL = /(\s*\$(\w*))$/
 
-    NO_MATCHES_PARAMS = [nil, []]
+    NO_MATCHES_PARAMS = [nil, []].freeze
     # Shows completions for text in opal-irb
     # @param text [String] the text to try to find completions for
     # @returns [CompletionResults]

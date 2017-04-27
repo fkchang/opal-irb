@@ -31,7 +31,7 @@ class OpalIrbJqconsole
     @console = OpalIrbJqconsole.new(parent_element_id)
   end
 
-  BOTTOM_PANEL_ID = 'opal-irb-console-bottom-panel'
+  BOTTOM_PANEL_ID = 'opal-irb-console-bottom-panel'.freeze
   # create a bottom panel
   def self.create_bottom_panel(hidden=false)
     parent_element_id = 'opal-irb-console'
@@ -295,7 +295,7 @@ EDITOR
     results.insert_tab?
   end
 
-  CONSOLE_PROMPT = 'opal> '
+  CONSOLE_PROMPT = 'opal> '.freeze
   attr_reader :jqconsole
   def setup_jqconsole(parent_element_id)
     Element.expose(:jqconsole)
@@ -353,7 +353,7 @@ EDITOR
     end',
     '_ = nil'
 
-  ]
+  ].freeze
   def setup_cmd_line_methods
     CMD_LINE_METHOD_DEFINITIONS.each {|method_definition|
       compiled = @irb.parse method_definition
@@ -403,7 +403,7 @@ EDITOR
     # for Chrome errors
     check_error.backtrace.first =~ /unexpected 'false/ || check_error.backtrace[2] =~ /unexpected 'false/ ||
       # safari error
-    check_error.message =~ /error occurred while compiling/
+      check_error.message =~ /error occurred while compiling/
   end
 
   def write(*stuff)

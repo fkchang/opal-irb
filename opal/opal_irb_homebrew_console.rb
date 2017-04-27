@@ -32,7 +32,7 @@ class OpalIRBHomebrewConsole
     max_depth: 2,
     show_hidden: false,
     colorize: true
-  }
+  }.freeze
 
   def escape_html(s)
     s.gsub(/&/, '&amp;').gsub(/</, '&lt;').gsub(/>/, '&gt;')
@@ -244,7 +244,7 @@ class OpalIRBHomebrewConsole
       $irb.history
       nil
     end'
-  ]
+  ].freeze
   def setup_cmd_line_methods
     CMD_LINE_METHOD_DEFINITIONS.each {|method_defn|
       compiled = @irb.parse method_defn
