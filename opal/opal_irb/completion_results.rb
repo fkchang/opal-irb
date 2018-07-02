@@ -30,25 +30,26 @@ class OpalIrb
 
       def common_prefix_if_exists(orig_text, match_index, results)
         working_copy = results.clone
-        first_word = working_copy.shift
-        chars = []
-        i = 0
-        # first_word.each_char { |char|
-        letters = [] #- break is broken on 0.8.0 beta for each_char
-        first_word.each_char { |char| letters << char }
-        letters.each { |char|
-          if working_copy.all? { |str| str[i] == char }
-            chars << char
-            i += 1
-          else
-            break
-          end
-        }
+        chars = common_chars_in_prefix(working_copy)
         common = chars.join
         CompletionEngine.debug_puts "\torig_text: |#{orig_text}| common prefix: #{common} match_index: #{match_index}"
         match_index == 0 ? common : orig_text[0..match_index-1] + common
       end
 
+      def common_chars_in_prefix(words)
+        first_word = words.shift
+        chars = []
+        i = 0
+        first_word.each_char { |char|
+          if words.all? { |str| str[i] == char }
+            chars << char
+            i += 1
+          else
+            return chars
+          end
+        }
+        chars
+      end
 
       def old_prompt?
         @old_prompt

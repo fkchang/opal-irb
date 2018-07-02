@@ -5,8 +5,8 @@ gemspec
 # gem 'opal-jquery', :git => "git://github.com/opal/opal-jquery.git"
 # gem 'opal-browser', :git => "git://github.com/opal/opal-browser.git"
 # gem 'opal-rspec', :git => "git://github.com/opal/opal-rspec.git"
-gem 'opal', '~> 0.8.0'
-gem 'opal-jquery', '~> 0.4.0'
+gem 'opal', '~> 0.10.6'
+gem 'opal-jquery', '~> 0.4.2'
 gem 'opal-browser'
 gem 'opal-rspec'
 
