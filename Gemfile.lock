@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    opal-irb (0.8.1)
+    opal-irb (0.10.0)
       opal (~> 0.10.6)
       opal-jquery (~> 0.4.2)
 
@@ -85,4 +85,4 @@ DEPENDENCIES
   terminal-notifier
 
 BUNDLED WITH
-   1.16.1
+   1.16.2
