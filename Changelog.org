@@ -1,3 +1,6 @@
+* 0.10.0
+- updated for Opal 0.10.6 support thanks to @takahashim
+- fix to completion code
 * 0.8.0
 - conversion to opal 0.8 (the current version)
 - update docs
