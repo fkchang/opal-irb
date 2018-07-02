@@ -90,8 +90,11 @@ class OpalIrb
     classes = []
     $opal_js_object = Native(`Opal`)    # have to make this global right now coz not seen in the each closure w/current opal
     $opal_js_object.each {|k|
-      attr = $opal_js_object[k]
-      classes << attr if attr.is_a?(Class)
+      begin
+        attr = $opal_js_object[k]       # sometimes "NoMethodError: undefined method `is_a?' for BasicObject" happened
+        classes << attr if attr.is_a?(Class)
+      rescue => _e
+      end
     }
     classes.uniq.sort_by { |cls| cls.name } # coz some Opal classes are the same, i.e. module == class, base, Kernel = Object
   end
