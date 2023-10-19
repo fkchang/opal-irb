@@ -7,92 +7,92 @@
 
     <style>
 
-      a {
-        color: #fff;
-        text-decoration: none;
-      }
+     a {
+         color: #fff;
+         text-decoration: none;
+     }
 
-      a:hover {
-        text-decoration: underline;
-      }
+     a:hover {
+         text-decoration: underline;
+     }
 
-      pre {
-        margin: 0;
-        padding: 0;
-        font: inherit;
-      }
+     pre {
+         margin: 0;
+         padding: 0;
+         font: inherit;
+     }
 
-      body {
-        background-color: #9b111e;
-        color: #fff;
-        font-size: 14px;
-        font-family: DejaVu Sans Mono, monospace;
-      }
+     body {
+         background-color: #9b111e;
+         color: #fff;
+         font-size: 14px;
+         font-family: DejaVu Sans Mono, monospace;
+     }
 
-      #container {
-        width: 100%;
-        height: 100%;
-        font: inherit;
-      }
+     #container {
+         width: 100%;
+         height: 100%;
+         font: inherit;
+     }
 
-      #output {
-        word-wrap: break-word;
-      }
+     #output {
+         word-wrap: break-word;
+     }
 
-      #inputdiv {
-        width: 100%;
-      }
+     #inputdiv {
+         width: 100%;
+     }
 
-      #inputl {
-        display: inline;
-        float: left;
-      }
+     #inputl {
+         display: inline;
+         float: left;
+     }
 
-      #inputr {
-        display: inline;
-        float: left;
-      }
+     #inputr {
+         display: inline;
+         float: left;
+     }
 
-      #input {
-        border: none;
-        outline: none;
-        background-color: #9b111e;
-        color: #fff;
-        font: inherit;
-        margin: 0;
-        padding: 0;
-        resize: none;
-        position: absolute;
-        overflow: hidden;
-      }
+     #input {
+         border: none;
+         outline: none;
+         background-color: #9b111e;
+         color: #fff;
+         font: inherit;
+         margin: 0;
+         padding: 0;
+         resize: none;
+         position: absolute;
+         overflow: hidden;
+     }
 
-      #inputcopy {
-        display: none;
-        white-space: pre-wrap;
-        min-height: 2em;
-        padding: 0;
-        margin: 0;
-        word-wrap: break-word;
-      }
+     #inputcopy {
+         display: none;
+         white-space: pre-wrap;
+         min-height: 2em;
+         padding: 0;
+         margin: 0;
+         word-wrap: break-word;
+     }
 
-      .s_special { color: #4ff }
+     .s_special { color: #4ff }
 
-      .s_number { color: #ff4 }
+     .s_number { color: #ff4 }
 
-      .s_boolean { color: #ff4 }
+     .s_boolean { color: #ff4 }
 
-      .s_undefined { color: #999 }
+     .s_undefined { color: #999 }
 
-      .s_null { font-weight: bold }
+     .s_null { font-weight: bold }
 
-      .s_string { color: #4f4 }
+     .s_string { color: #4f4 }
 
-      .s_date { color: #f4f }
+     .s_date { color: #f4f }
 
-      .s_regexp { color: #f44 }
+     .s_regexp { color: #f44 }
 
     </style>
-   <link rel="stylesheet" href="http://codemirror.net/lib/codemirror.css"/>
+    <link rel="stylesheet" href="http://codemirror.net/5/lib/codemirror.css"/>
    <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
   </head>
   <body>
@@ -102,9 +102,9 @@
       <textarea name="multi_line_input" id="multi_line_input"></textarea>
     </div>
 
-    <script src="http://codemirror.net/lib/codemirror.js"></script>
-    <script type="text/javascript" src="http://codemirror.net/keymap/emacs.js"></script>
-    <script src="http://codemirror.net/mode/ruby/ruby.js"></script>
+    <script src="http://codemirror.net/5/lib/codemirror.js"></script>
+    <script type="text/javascript" src="http://codemirror.net/5/keymap/emacs.js"></script>
+    <script src="http://codemirror.net/5/mode/ruby/ruby.js"></script>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" ></script>
     <script src="js/nodeutil.js"></script>
     <script src="compiled/application.js"></script>
